@@ -1,15 +1,20 @@
 import json
-from ..decision.engine import DecisionEngine
-from ..vision.inference import VisionInference
+import cv2, time, GameState
+from decision.behavior_tree import BehaviorTree
 
-def replay_offline(replay_dir: str) -> None:
-    with open(f"{replay_dir}/log.json", 'r') as f:
-        logs = [json.loads(line) for line in f]
-    vision = VisionInference(gpu=False)
-    decision = DecisionEngine()
-    for entry in logs:
-        if entry['type'] == "state":
-            rois: dict[str, tuple[int, int, int, int]] = {}
-            detections = vision.process(None, rois)
-            actions = decision.evaluate(entry['data'])
-            print(f"Replay acción: {actions}")
+class Replay:
+    def save_roi(self, roi_name: str, crop: cv2.Mat, gamestate: GameState, action: str):
+        ts = time.time()
+        cv2.imwrite(f'logs/rois/{ts}_{roi_name}.png', crop)
+        with open(f'logs/replay/{ts}.json', 'w') as f:
+            json.dump({'gamestate': vars(gamestate), 'action': action}, f)
+
+    def offline_replay(self, log_dir: str):
+        bt = BehaviorTree()
+        for file in sorted(os.listdir(log_dir)):
+            if file.endswith('.json'):
+                with open(os.path.join(log_dir, file), 'r') as f:
+                    data = json.load(f)
+                gs = GameState(**data['gamestate'])
+                decision = bt.tick(gs)
+                print(f"Replay: {decision}")

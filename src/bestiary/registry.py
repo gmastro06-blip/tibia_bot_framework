@@ -1,15 +1,15 @@
-import json
 from typing import List, Dict
-from bs4 import BeautifulSoup  # Para HTML input
+import json
+import requests
+from bs4 import BeautifulSoup
 
-def build_creature_registry(input_path: str, output_path: str = "data/creatures_registry.json"):
-    if input_path.endswith(".html"):
-        with open(input_path, 'r') as f:
-            soup = BeautifulSoup(f, 'html.parser')
-        names = [tag.text.strip().lower() for tag in soup.find_all("name_tag")]  # Asumir tags
-    else:
-        with open(input_path, 'r') as f:
-            names = json.load(f)['names']
-    registry = {name: {"key": name.replace(" ", "_"), "hp": 0, "exp": 0} for name in names}  # Placeholder
-    with open(output_path, 'w') as f:
-        json.dump(registry, f)
+class BestiaryRegistry:
+    def build(self, source: str = 'https://ejemplo-catalogo-tibia.com') -> None:
+        html = requests.get(source).text if source.startswith('http') else open(source).read()
+        soup = BeautifulSoup(html, 'html.parser')
+        creatures = []
+        for entry in soup.find_all('div', class_='creature'):
+            name = entry.text.strip()
+            creatures.append({'name_key': name.lower().replace(' ', '_'), 'name': name})
+        with open('data/creatures_registry.json', 'w') as f:
+            json.dump(creatures, f)

@@ -1,67 +1,50 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Tuple
+import rapidfuzz
+from rapidfuzz.process import extractOne
+from rapidfuzz.fuzz import WRatio, token_set_ratio
 import json
-from rapidfuzz import fuzz
 
 class BestiaryMatcher:
-    def __init__(self, registry_path: str = "data/creatures_registry.json"):
-        full_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), registry_path)
-        self.registry: Dict[str, Dict[str, Any]] = {}
-        if os.path.exists(full_path):
-            with open(full_path, 'r', encoding='utf-8') as f:
-                self.registry = json.load(f)
-            print(f"Bestiario cargado: {len(self.registry)} criaturas.")
-        else:
-            print(f"Advertencia: Registry no encontrado en {full_path}. Matching desactivado (unknown mobs).")
-        
-        self.buckets: Dict[Tuple[str, int], List[str]] = {}
-        for key in self.registry:
-            l = len(key)
-            first = key[0] if key else ""
-            for tol in range(-3, 4):
-                bucket_key = (first, l + tol)
-                if bucket_key not in self.buckets:
-                    self.buckets[bucket_key] = []
-                self.buckets[bucket_key].append(key)
-        self.corrections = self._load_corrections()
+    def __init__(self):
+        with open('data/creatures_registry.json', 'r') as f:
+            self.registry: List[Dict] = json.load(f)
+        self.buckets: Dict[str, List[Dict]] = self.index()
+        self.corrections = self.load_corrections()
 
-    def _load_corrections(self) -> Dict[str, str]:
-        corr_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data/ocr_corrections.json")
-        if os.path.exists(corr_path):
-            with open(corr_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {"0rc": "orc", "dr4g0n": "dragon", "rn4st3r": "master", "cycl0ps": "cyclops"}  # Default
+    def load_corrections(self) -> Dict:
+        with open('data/ocr_corrections.json', 'r') as f:
+            return json.load(f)
+
+    def index(self) -> Dict:
+        buckets = {}
+        for c in self.registry:
+            first = c['name_key'][0]
+            len_b = len(c['name_key'])
+            key = f"{first}_{len_b-3}-{len_b+3}"
+            buckets.setdefault(key, []).append(c)
+        return buckets
 
     def normalize_ocr(self, text: str) -> str:
-        if not text:
-            return ""
         text = text.casefold().strip().replace("'", "").replace("-", " ")
         for wrong, right in self.corrections.items():
             text = text.replace(wrong, right)
+        text = text.replace('0', 'o').replace('1', 'i') if len(text) > 3 else text
         return text
 
-    def match(self, ocr_text: str) -> Optional[str]:
-        if not self.registry:
-            return None
+    def match(self, ocr_text: str) -> Tuple[Optional[str], float]:
         norm = self.normalize_ocr(ocr_text)
-        if not norm:
-            return None
-        candidates: List[str] = []
-        l = len(norm)
-        first = norm[0] if norm else ""
-        for tol in range(-3, 4):
-            bucket_key = (first, l + tol)
-            candidates.extend(self.buckets.get(bucket_key, []))
-        if not candidates:
-            return None
-        scores = [(key, fuzz.WRatio(norm, key)) for key in set(candidates)]
-        scores.sort(key=lambda x: x[1], reverse=True)
-        top_score = scores[0][1]
-        if top_score >= 92:
-            return scores[0][0]
-        elif top_score >= 85 and (len(scores) == 1 or top_score - scores[1][1] > 5):
-            return scores[0][0]
-        return None
+        candidates = self.get_candidates(norm)
+        best = extractOne(norm, [c['name_key'] for c in candidates], scorer=WRatio)
+        if best[1] >= 92:
+            return best[0], best[1]
+        elif 85 <= best[1] < 92:
+            top2 = extractOne(norm, [c['name_key'] for c in candidates], scorer=token_set_ratio, score_cutoff=85)
+            if abs(best[1] - top2[1]) > 5:
+                return best[0], best[1]
+        return None, 0
+
+    def get_candidates(self, norm: str) -> List[Dict]:
+        first = norm[0]
+        len_n = len(norm)
+        key = f"{first}_{len_n-3}-{len_n+3}"
+        return self.buckets.get(key, [])

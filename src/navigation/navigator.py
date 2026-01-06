@@ -2,46 +2,57 @@ from typing import List, Tuple
 import heapq
 import cv2
 import numpy as np
+import random
 
 class Navigator:
-    def __init__(self, grid_size: Tuple[int, int] = (50, 50)):
+    def __init__(self, grid_size: Tuple[int, int]):
         self.grid_size = grid_size
 
     def a_star(self, start: Tuple[int, int], goal: Tuple[int, int], cost_map: np.ndarray) -> List[Tuple[int, int]]:
-        def heuristic(a: Tuple[int, int], b: Tuple[int, int]) -> int:
-            return abs(a[0] - b[0]) + abs(a[1] - b[1])
-        open_set = [(0, start)]
-        came_from: dict[Tuple[int, int], Tuple[int, int]] = {}
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+        came_from = {}
         g_score = {start: 0}
-        f_score = {start: heuristic(start, goal)}
+        f_score = {start: self.heuristic(start, goal)}
         while open_set:
             _, current = heapq.heappop(open_set)
             if current == goal:
-                path = []
-                while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                return path[::-1]
-            for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
-                neighbor = (current[0] + dx, current[1] + dy)
-                if 0 <= neighbor[0] < self.grid_size[0] and 0 <= neighbor[1] < self.grid_size[1]:
-                    tent_g = g_score[current] + cost_map[neighbor]
-                    if tent_g < g_score.get(neighbor, float('inf')):
-                        came_from[neighbor] = current
-                        g_score[neighbor] = tent_g
-                        f_score[neighbor] = tent_g + heuristic(neighbor, goal)
-                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                return self.reconstruct_path(came_from, current)
+            for neighbor in self.get_neighbors(current):
+                tentative_g = g_score[current] + cost_map[neighbor]
+                if tentative_g < g_score.get(neighbor, float('inf')):
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + self.heuristic(neighbor, goal)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
         return []
 
-    def replan(self, current_pos: Tuple[int, int], waypoint: Tuple[int, int], minimap_crop: np.ndarray | None) -> List[Tuple[int, int]]:
-        cost_map = np.ones(self.grid_size)
-        return self.a_star(current_pos, waypoint, cost_map)
+    def heuristic(self, a: Tuple, b: Tuple) -> float:
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-    def detect_stuck(self, pos_history: List[Tuple[int, int]], threshold: int = 5) -> bool:
-        if len(pos_history) < threshold:
+    def get_neighbors(self, pos: Tuple) -> List[Tuple]:
+        dirs = [(-1,0), (1,0), (0,-1), (0,1)]
+        neighbors = []
+        for dx, dy in dirs:
+            nx, ny = pos[0] + dx, pos[1] + dy
+            if 0 <= nx < self.grid_size[0] and 0 <= ny < self.grid_size[1]:
+                neighbors.append((nx, ny))
+        return neighbors
+
+    def reconstruct_path(self, came_from: Dict, current: Tuple) -> List[Tuple]:
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        return path[::-1]
+
+    def detect_stuck(self, history_pos: List[Tuple], waypoint: Tuple, ticks: int) -> bool:
+        if len(history_pos) < 10:
             return False
-        dists = [np.linalg.norm(np.array(pos_history[i]) - np.array(pos_history[i+1])) for i in range(threshold-1)]
-        return sum(dists) < 1
+        dists = [np.linalg.norm(np.array(history_pos[i]) - np.array(waypoint)) for i in range(-10,0)]
+        if all(d > dists[0] - 5 for d in dists) and ticks > 20:
+            return True
+        return False
 
-    def recover_stuck(self, current_path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
-        return current_path[:-2] + [(current_path[-1][0]+1, current_path[-1][1])]
+    def recovery(self, current: Tuple) -> Tuple:
+        return (current[0] + random.randint(-5,5), current[1] + random.randint(-5,5))

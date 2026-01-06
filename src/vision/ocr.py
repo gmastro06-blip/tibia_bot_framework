@@ -1,22 +1,40 @@
-from typing import Tuple, Optional
-import cv2
+from typing import List, str, Optional
 import easyocr
-import numpy as np
+import cv2
+import re
+import onnxruntime as ort  # Para hook CRNN
 
-def robust_ocr_digits(crop: np.ndarray, reader: easyocr.Reader) -> Optional[Tuple[int, int]]:
-    if crop.size == 0:
-        return None
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-    upscale = cv2.resize(thresh, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
-    dilate = cv2.dilate(upscale, np.ones((9,9), np.uint8), iterations=2)
-    results = reader.readtext(dilate, allowlist='0123456789/', paragraph=False)
-    for _, text, conf in results:
-        if conf > 0.05 and '/' in text and text.replace('/', '').isdigit():
-            parts = text.split('/')
-            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                cur = int(parts[0])
-                max_val = int(parts[1])
-                if 0 <= cur <= max_val:
-                    return cur, max_val
-    return None
+class OCR:
+    def __init__(self, crnn_model_path: Optional[str] = None):
+        self.reader = easyocr.Reader(['en'], gpu=True)
+        self.crnn_sess = ort.InferenceSession(crnn_model_path, providers=['CUDAExecutionProvider']) if crnn_model_path else None
+
+    def preprocess(self, img: cv2.Mat) -> cv2.Mat:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+        upscale = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        denoise = cv2.fastNlMeansDenoising(upscale, h=10)
+        dilate = cv2.dilate(denoise, np.ones((3,3), np.uint8), iterations=1)
+        return dilate
+
+    def read(self, img: cv2.Mat, whitelist: str = '0123456789/') -> str:
+        pre = self.preprocess(img)
+        result = self.reader.readtext(pre, allowlist=whitelist, detail=0)
+        text = ''.join(result).strip()
+        return re.sub(r'[^0-9/]', '', text)
+
+    def read_digits_crnn(self, img: cv2.Mat) -> str:
+        if self.crnn_sess is None:
+            return ""
+        pre = self.preprocess(img)
+        input = cv2.resize(pre, (100, 32)).astype(np.float32)[np.newaxis, np.newaxis, ...] / 255.0
+        output = self.crnn_sess.run(None, {'input': input})[0]
+        # Decode CTC output a dígitos + /
+        preds = np.argmax(output, axis=2)
+        text = ''
+        prev = -1
+        for p in preds[0]:
+            if p != prev and p > 0:
+                text += '0123456789/'[p-1]
+            prev = p
+        return text

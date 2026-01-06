@@ -1,32 +1,32 @@
-from typing import Callable, Any, Dict
-from queue import PriorityQueue
-import time
+from typing import List, Callable
 import pyautogui
+from collections import deque
+import time
 
 class ActionExecutor:
-    def __init__(self, max_retries: int = 3, cooldown_ms: int = 500):
-        self.queue: PriorityQueue[tuple[int, Any, Callable]] = PriorityQueue()  # Anotación
-        self.last_action_time = 0
-        self.cooldown = cooldown_ms / 1000
+    def __init__(self):
+        self.queue: deque = deque()
+        self.cooldowns: Dict[str, float] = {}
 
-    def queue_action(self, action: Any, confirm_callback: Callable[[str, Dict[str, Any]], bool], priority: int = 0) -> None:  # Dict hint
-        self.queue.put((priority, action, confirm_callback))
+    def add_action(self, action: Callable, confirm_signals: List[Callable], timeout: float = 2.0, retries: int = 3):
+        self.queue.append((action, confirm_signals, timeout, retries))
 
-    def process_queue(self) -> None:
-        while not self.queue.empty():
-            if time.time() - self.last_action_time < self.cooldown:
-                time.sleep(self.cooldown - (time.time() - self.last_action_time))
-            prio, action, confirm = self.queue.get()
-            self._execute(action)
-            for retry in range(3):
-                if confirm("type", {"expected": "change"}):  # Visión confirm
-                    break
-                time.sleep(0.5)
-            else:
-                # Fallback retreat
-                pass
-            self.last_action_time = time.time()
-
-    def _execute(self, action: Any) -> None:
-        # e.g., if action == "move_up": pyautogui.press("up")
-        pass
+    def execute(self, gamestate: GameState):
+        if not self.queue:
+            return
+        act, signals, timeout, retries = self.queue[0]
+        if time.time() < self.cooldowns.get(act.__name__, 0):
+            return
+        act()
+        self.cooldowns[act.__name__] = time.time() + 0.5
+        start = time.time()
+        old_gs = gamestate
+        while time.time() - start < timeout:
+            new_gs = ...  # Obtener nuevo state
+            if all(sig(old_gs, new_gs) for sig in signals):  # e.g., lambda old, new: new.hp_cur > old.hp_cur
+                self.queue.popleft()
+                return
+        if retries > 0:
+            self.queue[0] = (act, signals, timeout, retries-1)
+        else:
+            self.queue.popleft()

@@ -1,18 +1,16 @@
-from typing import Dict
+from typing import Dict, Any
 import lupa
 import jsonschema
 import json
+import time
 
 class ScriptEngine:
     def __init__(self):
         self.lua = lupa.LuaRuntime()
-        self.schemas: Dict = self._load_schemas()
+        self.schemas: Dict = self.load_schemas()
 
-    def _load_schemas(self) -> Dict:
-        return {
-            'route': {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}}
-            # Agrega más
-        }
+    def load_schemas(self) -> Dict:
+        return {'route': {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}}}
 
     def validate_json(self, file: str, schema_key: str) -> Dict:
         with open(file, 'r') as f:
@@ -20,9 +18,15 @@ class ScriptEngine:
         jsonschema.validate(data, self.schemas[schema_key])
         return data
 
-    def load_script(self, script: str = "scripts/hunt_cave.lua") -> None:
-        safe_env = self.lua.table(move_to=print, wait=print)  # API segura
+    def exec_lua(self, script: str, api: Dict) -> Any:
+        safe_env = self.lua.table(**api)
+        self.lua.globals()['os'] = None
+        start = time.time()
         try:
-            self.lua.execute(script, environment=safe_env)
-        except lupa.LuaError as e:
-            print(f"Lua error: {e}")
+            func = self.lua.eval(script)
+            result = func()
+            if time.time() - start > 0.1:
+                raise TimeoutError("Lua timeout")
+            return result
+        except lupa.LuaError:
+            return None
