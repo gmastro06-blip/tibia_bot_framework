@@ -1,7 +1,4 @@
 {
   "orc": {"hp": 150},
-  "dragon": {"hp": 5000},
-  "rat": {"hp": 20},
-  "troll": {"hp": 50},
-  "cyclops": {"hp": 300}
+  "dragon": {"hp": 5000}
 }

@@ -72,7 +72,7 @@ def main() -> NoReturn:
             try:
                 frame = capture.capture()
                 if frame is None:
-                    time.sleep(0.005)
+                    time.sleep(0.01)
                     continue
 
                 if frame_queue.full():
