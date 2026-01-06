@@ -1,0 +1,4 @@
+{
+  "priorities": ["gold", "potions", "equipment"],
+  "ignore": ["bones"]
+}

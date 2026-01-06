@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "tibia-bot-framework"
+version = "0.1.0"
+description = "Framework para bot de Tibia-like"
+authors = ["TuNombre <tuemail@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+opencv-python = "*"
+mss = "*"
+pyautogui = "*"
+easyocr = "*"
+rapidfuzz = "*"
+py-trees = "*"
+jsonschema = "*"
+imagehash = "*"
+keyboard = "*"
+numpy = "*"
+scipy = "*"
+tensorrt = "*"
+dxcam = "^0.0.5"
+psutil = "^7.2.1"
+gputil = "^1.4.0"
+onnxruntime-gpu = "^1.23.2"
+lupa = "^2.6"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+flake8 = "*"
+opencv-stubs = "^0.1.1"
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu130"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

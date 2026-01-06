@@ -1,0 +1,7 @@
+thresholds:
+  reliable: 92
+  probable: 85
+  ambiguous_delta: 5  # Si top1 - top2 < delta -> ambiguous
+indexing:
+  len_tolerance: 3
+  first_letter: true

@@ -1,0 +1,13 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual envs
+.venv/
+**/.venv/
+
+# Logs / runtime artifacts
+*.log
+tibia_bot_framework/data/replays/

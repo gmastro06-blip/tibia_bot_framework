@@ -1,0 +1,10 @@
+{
+  "targeting": {
+    "ignore": ["rat", "cave rat"],
+    "priority": ["dragon", "demon"]
+  },
+  "panic": {
+    "hp_threshold": 30,
+    "retreat_waypoint": [100, 200]
+  }
+}
