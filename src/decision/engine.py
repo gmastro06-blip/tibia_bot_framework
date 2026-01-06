@@ -1,4 +1,4 @@
-# src/decision/engine.py - Versión completa corregida (copia y reemplaza el archivo)
+# src/decision/engine.py - Versión corregida completa (copia y reemplaza el archivo)
 
 import sys
 import os
@@ -6,8 +6,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import py_trees
 from typing import List, Any
-from ..scripting.engine import ScriptEngine
-from ..gamestate.models import GameState
+from scripting.engine import ScriptEngine  # Sin relative ..
+from gamestate.models import GameState
 
 # Nodos placeholder (implementa lógica real después)
 class HealNode(py_trees.behaviour.Behaviour):
@@ -40,18 +40,16 @@ class MoveToNode(py_trees.behaviour.Behaviour):
 class DecisionEngine:
     def __init__(self):
         self.script_engine = ScriptEngine()
-        # Fix: agrega memory=False (selector sin memory, replan cada tick)
         self.root = py_trees.composites.Selector(name="Root", memory=False)
         self.root.add_children([
-            HealNode(),      # Prioridad alta
+            HealNode(),
             AttackNode(),
             MoveToNode(),
         ])
         self.tree = py_trees.trees.BehaviourTree(self.root)
 
     def evaluate(self, state: GameState) -> List[Any]:
-        self.script_engine.load_script()  # Carga si needed
+        self.script_engine.load_script()
         self.tree.tick()
         actions: List[Any] = []  # Recopila de nodos si implementas blackboard/actions
-        # Placeholder: prints de nodos para test
         return actions

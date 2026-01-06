@@ -1,7 +1,8 @@
-# src/gamestate/builder.py - Versión completa corregida (copia y reemplaza el archivo)
+# src/gamestate/builder.py - Versión corregida completa (copia y reemplaza el archivo)
 
 import sys
 import os
+# Hack para imports locales
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from typing import Dict, List, Any, Optional
@@ -9,7 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import time
 from .models import GameState, Entity
-from ..bestiary.matcher import BestiaryMatcher
+from bestiary.matcher import BestiaryMatcher  # Sin relative ..
 
 @dataclass
 class GameStateBuilder:
@@ -36,12 +37,10 @@ class GameStateBuilder:
                 hp_current = int(cur_ocr)
                 max_hp = int(max_ocr)
 
-        # Fallback low bar si top falla (positional default, no keyword después)
         hp_bar_ratio = detections.get('hp_bar_ratio', 0.0)
         if hp_current == 0:
             hp_current = int(hp_bar_ratio * max_hp)
 
-        # MP similar (positional default)
         mp_ocr = detections.get('mp_top', (0, 100))[0]
         if mp_ocr > 0:
             mp_current = int(mp_ocr)
@@ -49,7 +48,6 @@ class GameStateBuilder:
             mp_bar_ratio = detections.get('mp_bar_ratio', 0.0)
             mp_current = int(mp_bar_ratio * 100)
 
-        # Smoothing temporal (median de history)
         hp_values = []
         for d in self.history:
             ocr = d.get('hp_top')
@@ -63,14 +61,12 @@ class GameStateBuilder:
             median_hp = int(np.median(hp_values))
             hp_current = median_hp
 
-        # EMA para suavizado
         if self.ema_hp is None:
             self.ema_hp = float(hp_current)
         else:
             self.ema_hp = self.ema_alpha * hp_current + (1 - self.ema_alpha) * self.ema_hp
         hp_current = int(round(self.ema_hp))
 
-        # Entidades battlelist
         entities: List[Entity] = []
         battlelist = detections.get('battlelist', [])
         for row in battlelist:
