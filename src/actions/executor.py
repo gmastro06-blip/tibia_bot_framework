@@ -30,3 +30,6 @@ class ActionExecutor:
             self.queue[0] = (act, signals, timeout, retries-1)
         else:
             self.queue.popleft()
+    # Código anterior + 2 señales
+    if all(sig(old, new) for sig in signals[:2]):
+        pass

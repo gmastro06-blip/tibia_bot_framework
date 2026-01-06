@@ -30,3 +30,5 @@ class ScriptEngine:
             return result
         except lupa.LuaError:
             return None
+        # Código anterior + schemas for all JSON
+    self.schemas['targeting'] = {"type": "object", "properties": {"priorities": {"type": "array"}}}

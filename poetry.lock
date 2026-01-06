@@ -6157,6 +6157,27 @@ tests = ["autopep8", "isort", "llnl-hatchet", "numpy", "pytest", "pytest-forked"
 tutorials = ["matplotlib", "pandas", "tabulate"]
 
 [[package]]
+name = "typed-d3dshot"
+version = "1.0.1"
+description = "Extremely Fast, Robust, and Typed, Screen Capture on Windows with the Desktop Duplication API"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "typed_d3dshot-1.0.1-py3-none-any.whl", hash = "sha256:775cbb476535d98fb0bdc99b21d247af44957608a38bd1f6b5de7da74a2a991f"},
+    {file = "typed_d3dshot-1.0.1.tar.gz", hash = "sha256:7cf3fb6304bfde82d9a279c16fd5798100e035f3ac9f53b82a9bec718d84bb29"},
+]
+
+[package.dependencies]
+comtypes = ">=1.1.7"
+
+[package.extras]
+dev = ["mypy (==1.11.*)", "pyright (==1.1.384)", "ruff (>=0.6.9,<0.7.0)"]
+numpy = ["numpy (>=1.21.0)"]
+pil = ["pillow (>=9.1.0)"]
+torch = ["torch (>=2.0.0)", "typed-D3DShot[numpy]"]
+
+[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
@@ -6171,4 +6192,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15"
-content-hash = "df33f30508fd8a416ca8d22dfe621729b4ad1765e35653633581278eb1f923c0"
+content-hash = "fdf3d31bbde99188841709769faf31a1a8421decaad913e9b31b300b3346248c"

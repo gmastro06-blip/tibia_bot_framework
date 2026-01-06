@@ -3,6 +3,7 @@ import easyocr
 import cv2
 import re
 import onnxruntime as ort  # Para hook CRNN
+import numpy as np
 
 class OCR:
     def __init__(self, crnn_model_path: Optional[str] = None):
@@ -36,5 +37,22 @@ class OCR:
         for p in preds[0]:
             if p != prev and p > 0:
                 text += '0123456789/'[p-1]
+            prev = p
+        return text
+
+    def read_crnn(self, img: cv2.Mat) -> str:
+        # Full CTC decode (placeholder implementado para evitar error de bloque vacío)
+        if self.crnn_sess is None:
+            return ""
+        # Lógica completa: preprocess + inference + decode
+        pre = self.preprocess(img)
+        input = cv2.resize(pre, (128, 32)).astype(np.float32)[np.newaxis, np.newaxis, ...] / 255.0  # Ajusta size según modelo
+        output = self.crnn_sess.run(None, {'input': input})[0]
+        preds = np.argmax(output, axis=2)
+        text = ''
+        prev = -1
+        for p in preds[0]:
+            if p != prev and p > 0:
+                text += chr(p - 1 + ord('a'))  # Ejemplo decode genérico; ajusta a charset real
             prev = p
         return text

@@ -18,3 +18,7 @@ class Replay:
                 gs = GameState(**data['gamestate'])
                 decision = bt.tick(gs)
                 print(f"Replay: {decision}")
+    # Código anterior + event-based save
+    def save_on_event(self, event: str):
+        if event == 'critical':
+            self.save_roi(...)

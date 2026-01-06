@@ -15,3 +15,8 @@ class BehaviorTree:
         bt.blackboard.Blackboard().set("targets", gamestate.battlelist)
         self.tree.tick()
         return "Success" if self.root.status == bt.common.Status.SUCCESS else "Failure"
+  # Código anterior + priorities
+class PrioritySelector(bt.composites.Selector):
+    pass  # Impl  
+
+    

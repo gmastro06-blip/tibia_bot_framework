@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import d3dshot
 from typing import Tuple, Optional, Dict
 import d3dshot
 import cv2
@@ -5,6 +9,7 @@ import win32gui
 import time
 import psutil  # Para uso CPU
 import nvidia_smi  # Para GPU, pip install nvidia-ml-py3
+import numpy as np
 
 class DXGICapture:
     def __init__(self, window_title: str):
