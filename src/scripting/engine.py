@@ -10,17 +10,39 @@ class ScriptEngine:
         self.schemas: Dict = self.load_schemas()
 
     def load_schemas(self) -> Dict:
-        return {'route': {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "number"}, "y": {"type": "number"}}}}}
+        schemas = {
+            "route": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                    },
+                    "required": ["x", "y"],
+                    "additionalProperties": False,
+                },
+            },
+            "targeting": {
+                "type": "object",
+                "properties": {
+                    "priorities": {"type": "array"},
+                },
+                "required": ["priorities"],
+                "additionalProperties": True,
+            },
+        }
+        return schemas
 
     def validate_json(self, file: str, schema_key: str) -> Dict:
-        with open(file, 'r') as f:
+        with open(file, "r", encoding="utf-8") as f:
             data = json.load(f)
         jsonschema.validate(data, self.schemas[schema_key])
         return data
 
     def exec_lua(self, script: str, api: Dict) -> Any:
         safe_env = self.lua.table(**api)
-        self.lua.globals()['os'] = None
+        self.lua.globals()["os"] = None
         start = time.time()
         try:
             func = self.lua.eval(script)
@@ -30,5 +52,3 @@ class ScriptEngine:
             return result
         except lupa.LuaError:
             return None
-        # Código anterior + schemas for all JSON
-    self.schemas['targeting'] = {"type": "object", "properties": {"priorities": {"type": "array"}}}

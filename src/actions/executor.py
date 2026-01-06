@@ -1,7 +1,12 @@
-from typing import List, Callable
+from __future__ import annotations
+
+from typing import List, Callable, Dict, TYPE_CHECKING
 import pyautogui
 from collections import deque
 import time
+
+if TYPE_CHECKING:
+    from gamestate.state import GameState  # ajusta si tu GameState está en otro módulo
 
 class ActionExecutor:
     def __init__(self):
@@ -30,6 +35,3 @@ class ActionExecutor:
             self.queue[0] = (act, signals, timeout, retries-1)
         else:
             self.queue.popleft()
-    # Código anterior + 2 señales
-    if all(sig(old, new) for sig in signals[:2]):
-        pass

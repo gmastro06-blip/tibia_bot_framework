@@ -1,5 +1,6 @@
 import json
-import time, Dict
+import time
+from typing import Dict
 
 class Logger:
     def log(self, stage: str, data: Dict):

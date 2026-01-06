@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import rapidfuzz
 from rapidfuzz.process import extractOne
 from rapidfuzz.fuzz import WRatio, token_set_ratio
@@ -7,15 +7,15 @@ import json
 class BestiaryMatcher:
     def __init__(self):
         with open('data/creatures_registry.json', 'r') as f:
-            self.registry: List[Dict] = json.load(f)
-        self.buckets: Dict[str, List[Dict]] = self.index()
+            self.registry: List[dict] = json.load(f)
+        self.buckets: dict[str, List[dict]] = self.index()
         self.corrections = self.load_corrections()
 
-    def load_corrections(self) -> Dict:
+    def load_corrections(self) -> dict:
         with open('data/ocr_corrections.json', 'r') as f:
             return json.load(f)
 
-    def index(self) -> Dict:
+    def index(self) -> dict:
         buckets = {}
         for c in self.registry:
             first = c['name_key'][0]
@@ -43,7 +43,7 @@ class BestiaryMatcher:
                 return best[0], best[1]
         return None, 0
 
-    def get_candidates(self, norm: str) -> List[Dict]:
+    def get_candidates(self, norm: str) -> List[dict]:
         first = norm[0]
         len_n = len(norm)
         key = f"{first}_{len_n-3}-{len_n+3}"

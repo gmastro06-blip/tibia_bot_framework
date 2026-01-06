@@ -1,7 +1,13 @@
-import keyboard
-import time
-import GameState, List, pyautogui
+from __future__ import annotations
+
+from typing import List, Callable, Dict, TYPE_CHECKING
+import pyautogui, keyboard
+from collections import deque
 from threading import Thread
+import time
+
+if TYPE_CHECKING:
+    from gamestate.state import GameState  # ajusta si tu GameState está en otro módulo
 
 class SafetyManager:
     def __init__(self):

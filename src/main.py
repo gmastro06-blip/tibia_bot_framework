@@ -15,8 +15,8 @@ from battlelist.extractor import BattlelistExtractor
 from bestiary.matcher import BestiaryMatcher
 from navigation.navigator import Navigator
 from decision.behavior_tree import BehaviorTree
-from script.engine import ScriptEngine
-from action.executor import ActionExecutor
+from scripting.engine import ScriptEngine
+from actions.executor import ActionExecutor
 from safety.manager import SafetyManager
 from telemetry.logger import Logger
 from telemetry.replay import Replay
@@ -43,8 +43,8 @@ def main() -> NoReturn:
         }
     }
     calibrator = UICalibrator(rois_norm['rois_guess_norm'], tuple(rois_norm['source_resolution']))
-    capture = DXGICapture("Tibia Clone")
-    vision = VisionInference("models/yolo.onnx", ["classes"])
+    capture = DXGICapture("Tibia -")
+    vision = VisionInference("models/mobilenet.onnx", classes=[])
     tracker = ByteTrack()
     battle_extractor = BattlelistExtractor()
     matcher = BestiaryMatcher()

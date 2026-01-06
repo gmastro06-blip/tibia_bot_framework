@@ -39,7 +39,7 @@ class Navigator:
                 neighbors.append((nx, ny))
         return neighbors
 
-    def reconstruct_path(self, came_from: Dict, current: Tuple) -> List[Tuple]:
+    def reconstruct_path(self, came_from: dict, current: Tuple) -> List[Tuple]:
         path = [current]
         while current in came_from:
             current = came_from[current]

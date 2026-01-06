@@ -1,9 +1,11 @@
-from typing import List, str, Optional
-import easyocr
-import cv2
+from typing import Optional
 import re
-import onnxruntime as ort  # Para hook CRNN
+
+import cv2
 import numpy as np
+import easyocr
+import onnxruntime as ort
+
 
 class OCR:
     def __init__(self, crnn_model_path: Optional[str] = None):

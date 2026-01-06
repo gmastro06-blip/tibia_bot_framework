@@ -959,6 +959,17 @@ files = [
 ]
 
 [[package]]
+name = "nvidia-ml-py3"
+version = "7.352.0"
+description = "Python Bindings for the NVIDIA Management Library"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "nvidia-ml-py3-7.352.0.tar.gz", hash = "sha256:390f02919ee9d73fe63a98c73101061a6b37fa694a793abf56673320f1f51277"},
+]
+
+[[package]]
 name = "nvidia-nccl-cu12"
 version = "2.27.5"
 description = "NVIDIA Collective Communication Library (NCCL) Runtime"
@@ -6192,4 +6203,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15"
-content-hash = "fdf3d31bbde99188841709769faf31a1a8421decaad913e9b31b300b3346248c"
+content-hash = "f9b6f03a8c7c3af2c50df4f27abbeba932bd0b12e9a2420e0d3758f6d02e47eb"
