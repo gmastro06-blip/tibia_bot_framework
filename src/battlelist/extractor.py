@@ -1,5 +1,3 @@
-# src/battlelist/extractor.py - Versión corregida (copia y reemplaza completo)
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -10,14 +8,13 @@ import numpy as np
 import easyocr
 from collections import deque
 from vision.ocr import robust_ocr_digits
-from vision.utils import hsv_segment_bar
 
 class BattlelistExtractor:
     def __init__(self, row_height: int = 20, n_buffer: int = 10):
         self.row_height = row_height
         self.buffers: Dict[int, deque[Dict[str, Any]]] = {}
 
-    def extract(self, crop: np.ndarray) -> List[Dict[str, Any]]:  # Cambiado a np.ndarray
+    def extract(self, crop: np.ndarray) -> List[Dict[str, Any]]:
         if crop is None or crop.size == 0:
             return []
         h, w = crop.shape[:2]
@@ -30,7 +27,7 @@ class BattlelistExtractor:
                 continue
             ocr_text = ""
             results = reader.readtext(row_crop)
-            if results:
+            if results and len(results) > 0:
                 ocr_text = results[0][1]
             hp_pct = self._measure_hp_bar(row_crop)
             if i not in self.buffers:
@@ -41,7 +38,11 @@ class BattlelistExtractor:
                 rows.append({"ocr_text": majority, "hp_pct": hp_pct})
         return rows
 
-    def _measure_hp_bar(self, row_crop: np.ndarray) -> float:  # Cambiado a np.ndarray
+    def _measure_hp_bar(self, row_crop: np.ndarray) -> float:
         if row_crop.size == 0:
             return 0.0
-        return hsv_segment_bar(row_crop[:, -50:], "red")
+        hsv = cv2.cvtColor(row_crop[:, -50:], cv2.COLOR_BGR2HSV)
+        mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
+        mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
+        mask = mask1 + mask2
+        return cv2.countNonZero(mask) / (row_crop.shape[0] * 50)

@@ -1,5 +1,3 @@
-# src/calibration/calibrator.py - Versión completa corregida (con todos los métodos definidos, calibración auto robusta para HP/MP top)
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -8,7 +6,7 @@ from typing import Dict, Tuple
 import json
 import cv2
 import numpy as np
-from vision.utils import find_contours_rects, blob_detect_white, hsv_segment_bar
+import re  # Agregado
 
 class UICalibrator:
     def __init__(self, guess_norm: Dict):
@@ -37,40 +35,46 @@ class UICalibrator:
         return self.resolved_rois
 
     def _auto_hp_mp_top(self, frame: np.ndarray, h: int, w: int):
-        top_strip = frame[0:int(0.15 * h), 0:w]  # Top 15% para números grandes
+        top_strip = frame[0:int(0.15 * h), 0:w]
         gray = cv2.cvtColor(top_strip, cv2.COLOR_BGR2GRAY)
         thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
         upscale = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         dilate = cv2.dilate(upscale, np.ones((3,3), np.uint8))
-        import easyocr
+        import easyocr  # Lazy
         reader = easyocr.Reader(['en'], gpu=False)
         results = reader.readtext(dilate, allowlist='0123456789/', paragraph=False)
         valid = [r for r in results if r[2] > 0.3 and '/' in r[1] and r[1].replace('/', '').isdigit()]
         if valid:
             valid.sort(key=lambda r: min(p[0] for p in r[0]))
-            # HP izquierda (primer resultado)
             hp_res = valid[0]
             bbox, text, conf = hp_res
-            x = int(min(p[0] for p in bbox) / 2)  # Downscale bbox
-            y = int(min(p[1] for p in bbox) / 2)
-            ww = int((max(p[0] for p in bbox) - x) / 2)
-            hh = int((max(p[1] for p in bbox) - y) / 2)
+            min_x = min(p[0] for p in bbox)
+            min_y = min(p[1] for p in bbox)
+            max_x = max(p[0] for p in bbox)
+            max_y = max(p[1] for p in bbox)
+            x = int(min_x / 2)
+            y = int(min_y / 2)
+            ww = int((max_x - min_x) / 2)
+            hh = int((max_y - min_y) / 2)
             self.resolved_rois['hp_top_ocr'] = (x, y, ww, hh)
             print(f"HP top OCR auto-detectado: '{text}' en {self.resolved_rois['hp_top_ocr']}")
-            # MP derecha (último resultado)
             if len(valid) > 1:
                 mp_res = valid[-1]
                 bbox, text, conf = mp_res
-                x = int(min(p[0] for p in bbox) / 2)
-                y = int(min(p[1] for p in bbox) / 2)
-                ww = int((max(p[0] for p in bbox) - x) / 2)
-                hh = int((max(p[1] for p in bbox) - y) / 2)
+                min_x = min(p[0] for p in bbox)
+                min_y = min(p[1] for p in bbox)
+                max_x = max(p[0] for p in bbox)
+                max_y = max(p[1] for p in bbox)
+                x = int(min_x / 2)
+                y = int(min_y / 2)
+                ww = int((max_x - min_x) / 2)
+                hh = int((max_y - min_y) / 2)
                 self.resolved_rois['mp_top_ocr'] = (x, y, ww, hh)
                 print(f"MP top OCR auto-detectado: '{text}' en {self.resolved_rois['mp_top_ocr']}")
 
     def _auto_battlelist(self, frame: np.ndarray, h: int, w: int):
         right = frame[0:h, int(0.8 * w):w]
-        rows = find_contours_rects(right, min_area=200.0)
+        rows = self.find_contours_rects(right, min_area=200.0)
         if rows:
             rows.sort(key=lambda r: r[1])
             y_start = rows[0][1]
@@ -80,13 +84,13 @@ class UICalibrator:
 
     def _auto_minimap(self, frame: np.ndarray, h: int, w: int):
         search = frame[0:int(0.4 * h), int(0.6 * w):w]
-        candidates = find_contours_rects(search, min_area=1000.0)
+        candidates = self.find_contours_rects(search, min_area=1000.0)
         best_score = 0
         best_rect = None
         for cand in candidates:
             crop = search[cand[1]:cand[1]+cand[3], cand[0]:cand[0]+cand[2]]
             edges = cv2.Canny(crop, 100, 200).mean()
-            dot = blob_detect_white(crop)
+            dot = self.blob_detect_white(crop)
             score = edges + (500 if dot else 0)
             if score > best_score:
                 best_score = score
@@ -99,7 +103,7 @@ class UICalibrator:
 
     def _auto_low_bars(self, frame: np.ndarray, h: int, w: int):
         low_right = frame[int(0.7 * h):h, int(0.9 * w):w]
-        red_ratio = hsv_segment_bar(low_right, "red")
+        red_ratio = self.hsv_segment_bar(low_right, "red")
         if red_ratio > 0.05:
             self.resolved_rois['hp_low_bar'] = (int(0.9 * w), int(0.7 * h), int(0.1 * w), int(0.05 * h))
             print("HP low bar auto-detectada")
@@ -109,3 +113,33 @@ class UICalibrator:
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         with open(full_path, 'w', encoding='utf-8') as f:
             json.dump({k: list(v) for k, v in self.resolved_rois.items()}, f, indent=4)
+
+    # Funciones utils integradas (de vision.utils)
+    def find_contours_rects(self, img: np.ndarray, min_area: float = 1000.0) -> list[tuple[int, int, int, int]]:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        rects = []
+        for cnt in contours:
+            x, y, ww, hh = cv2.boundingRect(cnt)
+            if ww * hh > min_area:
+                rects.append((x, y, ww, hh))
+        return rects
+
+    def blob_detect_white(self, img: np.ndarray) -> bool:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return bool(contours)
+
+    def hsv_segment_bar(self, img: np.ndarray, color: str) -> float:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        if color == "red":
+            mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
+            mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
+            mask = mask1 + mask2
+        elif color == "blue":
+            mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))
+        else:
+            mask = np.zeros_like(hsv[:,:,0])
+        return cv2.countNonZero(mask) / (img.shape[0] * img.shape[1])

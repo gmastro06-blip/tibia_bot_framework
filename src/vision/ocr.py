@@ -1,5 +1,3 @@
-# src/vision/ocr.py - Versión OCR robusta para números Tibia (preproceso upscale + dilate)
-
 from typing import Tuple, Optional
 import cv2
 import easyocr

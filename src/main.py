@@ -1,9 +1,6 @@
-# src/main.py - Versión corregida completa (copia y reemplaza)
-
 import sys
 import os
-# Hack para imports locales (funciona con python -m src.main o python src/main.py)
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from typing import NoReturn
 import threading
@@ -26,20 +23,19 @@ def main() -> NoReturn:
     executor = ActionExecutor()
     safety = SafetyManager(kill_key="esc")
     telemetry = TelemetryLogger()
+    pause_event = threading.Event()
 
     frame_queue = FrameQueue(max_size=5)
     state_queue = GameStateQueue(max_size=2)
 
-    # Thread A: Capture
     def capture_thread() -> None:
-        while not safety.is_paused():
+        while not pause_event.is_set():
             frame = capture.capture()
             frame_queue.put(frame, drop_oldest=True)
             telemetry.log_metric("capture_fps", capture.get_fps())
 
-    # Thread B: Vision
     def vision_thread() -> None:
-        while not safety.is_paused():
+        while not pause_event.is_set():
             frame = frame_queue.get_latest()
             if frame is None:
                 continue
@@ -49,9 +45,8 @@ def main() -> NoReturn:
             state_queue.put(state)
             telemetry.log_metric("vision_ms", vision.get_latency_ms())
 
-    # Thread C: Decision/Actuation
     def decision_thread() -> None:
-        while not safety.is_paused():
+        while not pause_event.is_set():
             state = state_queue.get_latest()
             if state is None:
                 continue
@@ -65,7 +60,7 @@ def main() -> NoReturn:
     threading.Thread(target=vision_thread, daemon=True).start()
     threading.Thread(target=decision_thread, daemon=True).start()
 
-    safety.monitor()  # Bloquea main hasta kill
+    safety.monitor(pause_event)  # Bloquea main hasta kill
 
 if __name__ == "__main__":
     main()

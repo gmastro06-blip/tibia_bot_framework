@@ -1,41 +1,44 @@
-# src/decision/engine.py - Versión corregida completa (copia y reemplaza el archivo)
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import py_trees
 from typing import List, Any
-from scripting.engine import ScriptEngine  # Sin relative ..
+from scripting.engine import ScriptEngine
 from gamestate.models import GameState
 
-# Nodos placeholder (implementa lógica real después)
 class HealNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Heal")
     
     def update(self) -> py_trees.common.Status:
-        print("[BT] Checking heal...")
-        # TODO: if state.hp < 50: heal action
-        return py_trees.common.Status.SUCCESS
+        state = py_trees.blackboard.Blackboard().get("state")
+        if state and state.hp_cur < 0.5 * state.hp_max:
+            print("[BT] Healing...")
+            return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.FAILURE
 
 class AttackNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Attack")
     
     def update(self) -> py_trees.common.Status:
-        print("[BT] Checking attack...")
-        # TODO: if target: attack
-        return py_trees.common.Status.SUCCESS
+        state = py_trees.blackboard.Blackboard().get("state")
+        if state and state.battlelist:
+            print("[BT] Attacking...")
+            return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.FAILURE
 
 class MoveToNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Move To")
     
     def update(self) -> py_trees.common.Status:
-        print("[BT] Moving to waypoint...")
-        # TODO: navigator move
-        return py_trees.common.Status.SUCCESS
+        state = py_trees.blackboard.Blackboard().get("state")
+        if state:
+            print("[BT] Moving...")
+            return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.FAILURE
 
 class DecisionEngine:
     def __init__(self):
@@ -50,6 +53,7 @@ class DecisionEngine:
 
     def evaluate(self, state: GameState) -> List[Any]:
         self.script_engine.load_script()
+        py_trees.blackboard.Blackboard().set("state", state)
         self.tree.tick()
-        actions: List[Any] = []  # Recopila de nodos si implementas blackboard/actions
+        actions: List[Any] = []  # Recopila de blackboard si implementas
         return actions

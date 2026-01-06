@@ -1,5 +1,3 @@
-# src/bestiary/matcher.py - Versión completa corregida con anotación para buckets
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -19,7 +17,6 @@ class BestiaryMatcher:
         else:
             print(f"Advertencia: Registry no encontrado en {full_path}. Matching desactivado (unknown mobs).")
         
-        # Anotación explícita para buckets: clave (letra inicial, longitud ±tol), valor lista de nombres
         self.buckets: Dict[Tuple[str, int], List[str]] = {}
         for key in self.registry:
             l = len(key)
@@ -29,14 +26,20 @@ class BestiaryMatcher:
                 if bucket_key not in self.buckets:
                     self.buckets[bucket_key] = []
                 self.buckets[bucket_key].append(key)
+        self.corrections = self._load_corrections()
+
+    def _load_corrections(self) -> Dict[str, str]:
+        corr_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data/ocr_corrections.json")
+        if os.path.exists(corr_path):
+            with open(corr_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {"0rc": "orc", "dr4g0n": "dragon", "rn4st3r": "master", "cycl0ps": "cyclops"}  # Default
 
     def normalize_ocr(self, text: str) -> str:
         if not text:
             return ""
         text = text.casefold().strip().replace("'", "").replace("-", " ")
-        # Correcciones comunes (puedes expandir con ocr_corrections.json)
-        corrections = {"0rc": "orc", "dr4g0n": "dragon", "rn4st3r": "master", "cycl0ps": "cyclops"}
-        for wrong, right in corrections.items():
+        for wrong, right in self.corrections.items():
             text = text.replace(wrong, right)
         return text
 
@@ -61,4 +64,4 @@ class BestiaryMatcher:
             return scores[0][0]
         elif top_score >= 85 and (len(scores) == 1 or top_score - scores[1][1] > 5):
             return scores[0][0]
-        return None  # Unknown o ambiguo
+        return None

@@ -4,14 +4,14 @@ import cv2
 import numpy as np
 
 class Navigator:
-    def __init__(self, grid_size: Tuple[int, int] = (50, 50)):  # Minimap grid
+    def __init__(self, grid_size: Tuple[int, int] = (50, 50)):
         self.grid_size = grid_size
 
     def a_star(self, start: Tuple[int, int], goal: Tuple[int, int], cost_map: np.ndarray) -> List[Tuple[int, int]]:
         def heuristic(a: Tuple[int, int], b: Tuple[int, int]) -> int:
             return abs(a[0] - b[0]) + abs(a[1] - b[1])
         open_set = [(0, start)]
-        came_from: dict[Tuple[int, int], Tuple[int, int]] = {}  # Hint
+        came_from: dict[Tuple[int, int], Tuple[int, int]] = {}
         g_score = {start: 0}
         f_score = {start: heuristic(start, goal)}
         while open_set:
@@ -33,17 +33,15 @@ class Navigator:
                         heapq.heappush(open_set, (f_score[neighbor], neighbor))
         return []
 
-    def replan(self, current_pos: Tuple[int, int], waypoint: Tuple[int, int], minimap_crop: cv2.Mat | None) -> List[Tuple[int, int]]:  # Noneable
-        # Segment walkable si viable (e.g., color != black blocked)
-        cost_map = np.ones(self.grid_size)  # Placeholder, 1 walkable
+    def replan(self, current_pos: Tuple[int, int], waypoint: Tuple[int, int], minimap_crop: np.ndarray | None) -> List[Tuple[int, int]]:
+        cost_map = np.ones(self.grid_size)
         return self.a_star(current_pos, waypoint, cost_map)
 
     def detect_stuck(self, pos_history: List[Tuple[int, int]], threshold: int = 5) -> bool:
         if len(pos_history) < threshold:
             return False
         dists = [np.linalg.norm(np.array(pos_history[i]) - np.array(pos_history[i+1])) for i in range(threshold-1)]
-        return bool(sum(dists) < 1)  # Explícito bool
+        return sum(dists) < 1
 
     def recover_stuck(self, current_path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
-        # Micro-moves, backtrack
-        return current_path[:-2] + [(current_path[-1][0]+1, current_path[-1][1])]  # Ejemplo
+        return current_path[:-2] + [(current_path[-1][0]+1, current_path[-1][1])]
