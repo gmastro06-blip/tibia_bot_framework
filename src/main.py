@@ -70,6 +70,9 @@ def main() -> None:
                     except Exception:
                         pass
                 frame_queue.put(frame)
+            else:
+                print("Warning: No se pudo capturar frame, esperando...")
+                time.sleep(1.0)  # Wait before retrying
             time.sleep(0.01)
 
     def vision_thread() -> None:
@@ -80,21 +83,28 @@ def main() -> None:
                     continue
                 frame = frame_queue.get()
                 if frame is None or frame.size == 0:
+                    print("Warning: Invalid frame received from capture")
                     continue
+                print(f"Debug: Frame shape: {frame.shape}")
                 rois = calibrator.calibrate(frame)
+                print(f"Debug: Calibrated ROIs: {list(rois.keys())}")
                 if not rois:
+                    print("Warning: No ROIs calibrated")
                     continue
 
                 def safe_crop(roi_name: str) -> Optional[np.ndarray]:
                     if roi_name not in rois:
+                        print(f"Warning: ROI '{roi_name}' not found in calibrated ROIs")
                         return None
                     x, y, w, h = rois[roi_name]
                     if w <= 0 or h <= 0 or x + w > frame.shape[1] or y + h > frame.shape[0]:
+                        print(f"Warning: Invalid ROI dimensions for '{roi_name}': x={x}, y={y}, w={w}, h={h}, frame_shape={frame.shape}")
                         return None
                     return frame[y:y+h, x:x+w]
 
                 battle_crop = safe_crop('battlelist_rows')
                 if battle_crop is None or battle_crop.size == 0:
+                    print("Warning: Battle list crop failed or empty")
                     continue
                 # BattlelistExtractor.extract expects cv2.Mat compatible input (numpy arrays work)
                 battle = battle_extractor.extract(battle_crop)
@@ -105,10 +115,17 @@ def main() -> None:
                 ocr_hp = ''
                 if hp_crop is not None:
                     ocr_hp = vision.ocr.read(hp_crop.astype(np.uint8))
+                    print(f"Debug: HP OCR result: '{ocr_hp}'")
+                else:
+                    print("Warning: HP OCR crop failed")
 
                 hp_bar_crop = safe_crop('hp_low_bar')
                 bar_hp = (calibrator.hsv_segment_bar(hp_bar_crop, 'red')
                           if hp_bar_crop is not None else 0.0)
+                if hp_bar_crop is not None:
+                    print(f"Debug: HP bar result: {bar_hp:.2f}")
+                else:
+                    print("Warning: HP bar crop failed")
 
                 minimap_crop = safe_crop('minimap_content')
                 player_pos = (0, 0)
@@ -116,6 +133,9 @@ def main() -> None:
                     detected = calibrator.blob_detect_white(minimap_crop)
                     if detected:
                         player_pos = detected[0]
+                    print(f"Debug: Minimap player position: {player_pos}")
+                else:
+                    print("Warning: Minimap crop failed")
                 minimap_cache[0] = minimap_crop  # Store for navigator use
 
                 output = {'battle': battle, 'ocr_hp': ocr_hp, 'bar_hp': bar_hp, 'player_pos': player_pos}
@@ -127,8 +147,15 @@ def main() -> None:
                         pass
                 gs_queue.put(gs)
 
+                # Log regions for debugging
+                if battle_crop is not None:
+                    replay.save_roi('battlelist', battle_crop, gs, f"entities: {len(battle)}")
+                if hp_crop is not None:
+                    replay.save_roi('hp_ocr', hp_crop, gs, f"ocr_hp: {ocr_hp}")
+                if hp_bar_crop is not None:
+                    replay.save_roi('hp_bar', hp_bar_crop, gs, f"bar_hp: {bar_hp:.2f}")
                 if minimap_crop is not None:
-                    replay.save_roi('minimap', minimap_crop, gs, '')
+                    replay.save_roi('minimap', minimap_crop, gs, f"pos: {player_pos}")
             except Exception as e:
                 print(f"Vision error: {e}")
 

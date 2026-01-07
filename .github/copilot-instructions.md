@@ -26,6 +26,11 @@ poetry run pytest tests/
 poetry run mypy src/
 ```
 
+## Screen Capture Implementation
+**Fallback Capture Strategy**: When specific Tibia window not found, automatically captures full screen using MSS library. Prevents black/dummy frames and ensures real image data for all ROIs.
+
+**Thread-Safe MSS Usage**: Creates new MSS instance per capture call to avoid multi-threading issues. Uses context manager (`with mss() as sct:`) for proper resource cleanup.
+
 ## Key Conventions
 
 ### Import Patterns
@@ -79,13 +84,15 @@ mask_red = cv2.bitwise_or(mask_low, mask_high)
 - **configs/ocr_corrections.json**: Map misread text → correct names
 
 ## Common Pitfalls
-1. **Window capture fails**: `DXGICapture` requires exact window title match (default: `"Tibia -"`)
+1. **Window capture fails**: `DXGICapture` requires exact window title match (default: `"Tibia -"`), falls back to full screen capture via MSS
 2. **Type errors with cv2.Mat**: Always accept `Union[cv2.Mat, np.ndarray]`, cast to `uint8` before OCR
 3. **Circular imports**: Use `TYPE_CHECKING` and runtime imports inside functions when needed
 4. **Queue blocking**: Never use `.get()` without timeout in real-time threads - use `.get_nowait()` + exception handling
 5. **ROI coordinates**: Never hardcode pixel values - always use normalized coordinates and `UICalibrator.normalize_to_px()`
+6. **Black ROI images**: Fixed by implementing MSS fallback capture when BitBlt fails - ensures real screen content instead of dummy frames
 
 ## Testing & Debugging
 - Add replay logging: `replay.save_roi('debug_name', crop, gamestate, action_str)`
 - View captured frames: Run [debug_overlay.py](../debug_overlay.py) (implementation TBD)
 - Verify ROIs: Check `data/ROIs_resueltos.json` for calibration output
+- Debug capture issues: Bot now captures real screen content via MSS fallback when BitBlt fails, preventing black/dummy ROI images
