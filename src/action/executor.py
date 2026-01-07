@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from typing import List, Callable, Dict, TYPE_CHECKING
-import pyautogui
 from collections import deque
 import time
 
 if TYPE_CHECKING:
     from gamestate.state import GameState  # ajusta si tu GameState está en otro módulo
+
 
 class ActionExecutor:
     def __init__(self):

@@ -7,10 +7,11 @@ from typing import List, Any
 from src.script.engine import ScriptEngine
 from gamestate.models import GameState
 
+
 class HealNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Heal")
-    
+
     def update(self) -> py_trees.common.Status:
         state = py_trees.blackboard.Blackboard().get("state")
         if state and state.hp_cur < 0.5 * state.hp_max:
@@ -18,10 +19,11 @@ class HealNode(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.SUCCESS
         return py_trees.common.Status.FAILURE
 
+
 class AttackNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Attack")
-    
+
     def update(self) -> py_trees.common.Status:
         state = py_trees.blackboard.Blackboard().get("state")
         if state and state.battlelist:
@@ -29,16 +31,18 @@ class AttackNode(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.SUCCESS
         return py_trees.common.Status.FAILURE
 
+
 class MoveToNode(py_trees.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="Move To")
-    
+
     def update(self) -> py_trees.common.Status:
         state = py_trees.blackboard.Blackboard().get("state")
         if state:
             print("[BT] Moving...")
             return py_trees.common.Status.SUCCESS
         return py_trees.common.Status.FAILURE
+
 
 class DecisionEngine:
     def __init__(self):

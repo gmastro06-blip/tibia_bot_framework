@@ -6,7 +6,7 @@ from typing import Dict, Tuple
 import json
 import cv2
 import numpy as np
-import re  # Agregado
+
 
 class UICalibrator:
     def __init__(self, guess_norm: Dict):
@@ -37,9 +37,13 @@ class UICalibrator:
     def _auto_hp_mp_top(self, frame: np.ndarray, h: int, w: int):
         top_strip = frame[0:int(0.15 * h), 0:w]
         gray = cv2.cvtColor(top_strip, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-        upscale = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        dilate = cv2.dilate(upscale, np.ones((3,3), np.uint8))
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, 11, 2
+        )
+        upscale = cv2.resize(thresh, None, fx=2, fy=2,
+                             interpolation=cv2.INTER_CUBIC)
+        dilate = cv2.dilate(upscale, np.ones((3, 3), np.uint8))
         import easyocr  # Lazy
         reader = easyocr.Reader(['en'], gpu=False)
         results = reader.readtext(dilate, allowlist='0123456789/', paragraph=False)
@@ -135,11 +139,14 @@ class UICalibrator:
     def hsv_segment_bar(self, img: np.ndarray, color: str) -> float:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         if color == "red":
-            mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
-            mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
+            mask1 = cv2.inRange(hsv, np.array([0, 70, 50]),
+                                np.array([10, 255, 255]))
+            mask2 = cv2.inRange(hsv, np.array([170, 70, 50]),
+                                np.array([180, 255, 255]))
             mask = mask1 + mask2
         elif color == "blue":
-            mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))
+            mask = cv2.inRange(hsv, np.array([100, 70, 50]),
+                               np.array([140, 255, 255]))
         else:
-            mask = np.zeros_like(hsv[:,:,0])
+            mask = np.zeros_like(hsv[:, :, 0])
         return cv2.countNonZero(mask) / (img.shape[0] * img.shape[1])

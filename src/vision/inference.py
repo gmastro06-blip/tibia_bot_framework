@@ -5,6 +5,7 @@ import numpy as np
 import os
 from vision.ocr import OCR
 
+
 class VisionInference:
     def __init__(self, model_path: str = "models/yolo.onnx", classes: List[str] = []):
         self.classes = classes
@@ -17,9 +18,13 @@ class VisionInference:
                 print("Modelo ONNX cargado (GPU preferido)")
             except Exception as e:
                 print(f"GPU falló: {e}. Fallback CPU")
-                self.sess = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+                self.sess = ort.InferenceSession(
+                    model_path, providers=['CPUExecutionProvider']
+                )
         else:
-            print(f"Modelo {model_path} no encontrado. Detector desactivado (opcional hasta fase robusta)")
+            msg = f"Modelo {model_path} no encontrado. "
+            msg += "Detector desactivado (opcional hasta fase robusta)"
+            print(msg)
 
     def detect(self, frame: np.ndarray) -> List:
         if self.sess is None or frame is None or frame.size == 0:
@@ -29,7 +34,7 @@ class VisionInference:
         try:
             dets = self.sess.run(None, {'input': input})[0]
             return dets.tolist() if dets is not None else []
-        except:
+        except Exception:
             return []
 
     def classify(self, img: np.ndarray) -> str:
@@ -40,5 +45,5 @@ class VisionInference:
         try:
             output = self.sess.run(None, {'input': input})[0]
             return self.classes[np.argmax(output)] if self.classes else "unknown"
-        except:
+        except Exception:
             return "unknown"

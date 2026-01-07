@@ -3,11 +3,13 @@
 from dataclasses import dataclass
 from typing import List, Dict, Tuple
 
+
 @dataclass
 class Entity:
     name: str
     hp_pct: float  # Ya float
     position: Tuple[int, int] = (0, 0)
+
 
 @dataclass
 class GameState:

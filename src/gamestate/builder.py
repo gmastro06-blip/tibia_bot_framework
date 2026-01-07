@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 import numpy as np
 
+
 @dataclass
 class GameState:
     hp_cur: int = 0
@@ -12,6 +13,7 @@ class GameState:
     battlelist: List[Dict[str, Any]] = field(default_factory=list)
     states: List[str] = field(default_factory=list)
     equipment: Dict[str, str] = field(default_factory=dict)
+
 
 class GameStateBuilder:
     def __init__(self, history_len: int = 5):
@@ -52,7 +54,11 @@ class GameStateBuilder:
         battlelist = self.history[-1].battlelist
         states = self.history[-1].states
         equipment = self.history[-1].equipment
-        return GameState(hp_cur=hp_cur, hp_max=hp_max, mp_cur=mp_cur, mp_max=mp_max, player_pos=player_pos, battlelist=battlelist, states=states, equipment=equipment)
+        return GameState(
+            hp_cur=hp_cur, hp_max=hp_max, mp_cur=mp_cur, mp_max=mp_max,
+            player_pos=player_pos, battlelist=battlelist,
+            states=states, equipment=equipment
+        )
 
     def build(self, vision_output: Dict) -> GameState:
         partial = {}
@@ -60,7 +66,13 @@ class GameStateBuilder:
         ocr_mp = vision_output.get('ocr_mp', '')
         bar_hp = vision_output.get('bar_hp', 0.0)
         bar_mp = vision_output.get('bar_mp', 0.0)
-        partial['hp_cur'], partial['hp_max'], partial['mp_cur'], partial['mp_max'] = self.fuse_hp_mp(ocr_hp, ocr_mp, bar_hp, bar_mp)
+        hp_cur, hp_max, mp_cur, mp_max = self.fuse_hp_mp(
+            ocr_hp, ocr_mp, bar_hp, bar_mp
+        )
+        partial['hp_cur'] = hp_cur
+        partial['hp_max'] = hp_max
+        partial['mp_cur'] = mp_cur
+        partial['mp_max'] = mp_max
         partial['player_pos'] = vision_output.get('player_pos', (0, 0))
         partial['battlelist'] = vision_output.get('battlelist', [])
         partial['states'] = vision_output.get('states', [])

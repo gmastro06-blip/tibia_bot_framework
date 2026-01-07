@@ -1,10 +1,11 @@
-from typing import Tuple, Optional, Dict
+from typing import Optional
 import cv2
 import win32gui
 import win32con
 import time
 import numpy as np
 from mss import mss
+
 
 class DXGICapture:
     def __init__(self, title_partial: str = "Tibia -"):
@@ -31,7 +32,12 @@ class DXGICapture:
         if win32gui.IsIconic(self.hwnd):
             win32gui.ShowWindow(self.hwnd, win32con.SW_RESTORE)
         rect = win32gui.GetWindowRect(self.hwnd)
-        self.region = {"top": rect[1], "left": rect[0], "width": rect[2] - rect[0], "height": rect[3] - rect[1]}
+        self.region = {
+            "top": rect[1],
+            "left": rect[0],
+            "width": rect[2] - rect[0],
+            "height": rect[3] - rect[1]
+        }
 
     def capture(self) -> Optional[np.ndarray]:
         start = time.time()
@@ -48,5 +54,6 @@ class DXGICapture:
             self.dropped += 1
             return None
         self.latency_ms = (time.time() - start) * 1000
-        self.fps = 1 / (self.latency_ms / 1000) if self.latency_ms > 0 else 0
+        fps_calc = 1 / (self.latency_ms / 1000) if self.latency_ms > 0 else 0
+        self.fps = fps_calc
         return frame

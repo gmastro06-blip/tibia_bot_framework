@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import time
 import cv2
 import d3dshot  # pip install d3dshot for DXGI
@@ -6,6 +6,7 @@ import mss
 import numpy as np
 import win32gui
 import obsws_python as obs  # Fallback OBS
+
 
 class CaptureProvider:
     def __init__(self, window_title: str = "Tibia Clone", resolution: Tuple[int, int] = (1920, 1080)):
@@ -24,17 +25,17 @@ class CaptureProvider:
             self.hwnd = win32gui.FindWindow(None, self.window_title)
             if self.hwnd:
                 return "dxgi"
-        except:
+        except Exception:
             pass
         try:
             self.sct = mss.mss()
             return "mss"
-        except:
+        except Exception:
             pass
         try:
             self.obs_cl = obs.ReqClient(host='localhost', port=4455)
             return "obs"
-        except:
+        except Exception:
             raise ValueError("No capture mode available")
 
     def capture(self) -> Optional[np.ndarray]:
@@ -68,4 +69,10 @@ class CaptureProvider:
         while time.time() - start < duration:
             self.capture()
             frames += 1
-        return {"fps": self.fps, "latency_ms": self.latency_ms, "dropped": self.dropped_frames, "cpu": self.cpu_usage, "gpu": self.gpu_usage}
+        return {
+            "fps": self.fps,
+            "latency_ms": self.latency_ms,
+            "dropped": self.dropped_frames,
+            "cpu": self.cpu_usage,
+            "gpu": self.gpu_usage
+        }

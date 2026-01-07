@@ -4,6 +4,7 @@ import numpy as np
 from vision.ocr import OCR
 from collections import deque
 
+
 class BattlelistExtractor:
     def __init__(self, row_height: int = 20, num_rows: int = 10):
         self.row_height = row_height
@@ -34,8 +35,14 @@ class BattlelistExtractor:
     def measure_hp_bar(self, row: Union[cv2.Mat, np.ndarray]) -> float:
         hsv = cv2.cvtColor(row, cv2.COLOR_BGR2HSV)
         # Red hue detection (wraps around: 0-10 and 170-180)
-        mask_red_low = cv2.inRange(hsv, np.array([0, 70, 50], dtype=np.uint8), np.array([10, 255, 255], dtype=np.uint8))
-        mask_red_high = cv2.inRange(hsv, np.array([170, 70, 50], dtype=np.uint8), np.array([180, 255, 255], dtype=np.uint8))
+        mask_red_low = cv2.inRange(
+            hsv, np.array([0, 70, 50], dtype=np.uint8),
+            np.array([10, 255, 255], dtype=np.uint8)
+        )
+        mask_red_high = cv2.inRange(
+            hsv, np.array([170, 70, 50], dtype=np.uint8),
+            np.array([180, 255, 255], dtype=np.uint8)
+        )
         mask_red = cv2.bitwise_or(mask_red_low, mask_red_high)
         non_zero = cv2.countNonZero(mask_red)
         total_pixels = row.shape[0] * row.shape[1]

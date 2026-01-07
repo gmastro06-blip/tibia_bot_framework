@@ -4,6 +4,7 @@ import jsonschema
 import json
 import time
 
+
 class ScriptEngine:
     def __init__(self):
         self.lua = lupa.LuaRuntime()
@@ -41,7 +42,7 @@ class ScriptEngine:
         return data
 
     def exec_lua(self, script: str, api: Dict) -> Any:
-        safe_env = self.lua.table(**api)
+        # safe_env = self.lua.table(**api)  # Not used yet
         self.lua.globals()["os"] = None
         start = time.time()
         try:

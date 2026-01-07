@@ -1,6 +1,7 @@
 import json
 import os
 
+
 def label_unknowns(directory: str, output: str = "configs/ocr_corrections.json"):
     corrections = {}
     if os.path.exists(output):

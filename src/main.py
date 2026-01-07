@@ -3,27 +3,26 @@ import os
 import pyautogui
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from typing import Optional
+from typing import Optional, Dict, List
 import threading
 from queue import Queue
 import time
-import cv2
 import numpy as np
 from capture.dxgi_capture import DXGICapture
 from calibration.ui_calibrator import UICalibrator
 from vision.inference import VisionInference
-from vision.trackers import ByteTrack
+# from vision.trackers import ByteTrack  # Not used yet
 from gamestate.builder import GameState, GameStateBuilder
 from battlelist.extractor import BattlelistExtractor
 from bestiary.matcher import BestiaryMatcher
 from navigation.navigator import Navigator
 from decision.behavior_tree import BehaviorTree
-from script.engine import ScriptEngine
+# from script.engine import ScriptEngine  # Not used yet
 from action.executor import ActionExecutor
 from safety.manager import SafetyManager
-from telemetry.logger import Logger
+# from telemetry.logger import Logger  # Not used yet
 from telemetry.replay import Replay
-from typing import Dict, List, Any
+
 
 def main() -> None:
     rois_guess_norm: Dict[str, Dict[str, float]] = {
@@ -48,16 +47,16 @@ def main() -> None:
     capture = DXGICapture("Tibia -")
     vision = VisionInference("models/yolo.onnx", ["classes"])
     # OCR already initialized in VisionInference.__init__
-    tracker = ByteTrack()
+    # tracker = ByteTrack()  # Initialized but not used yet
     battle_extractor = BattlelistExtractor()
     matcher = BestiaryMatcher()
     builder = GameStateBuilder()
     navigator = Navigator((100, 100))
     bt = BehaviorTree()
-    script = ScriptEngine()
+    # script = ScriptEngine()  # Initialized but not used yet
     executor = ActionExecutor()
     safety = SafetyManager()
-    logger = Logger()
+    # logger = Logger()  # Initialized but not used yet
     replay = Replay()
 
     frame_queue: Queue[Optional[np.ndarray]] = Queue(maxsize=5)
@@ -71,7 +70,7 @@ def main() -> None:
                 if frame_queue.full():
                     try:
                         frame_queue.get_nowait()
-                    except:
+                    except Exception:
                         pass
                 frame_queue.put(frame)
             time.sleep(0.01)
@@ -106,13 +105,20 @@ def main() -> None:
                     b['resolved'] = matcher.match(b['name'])
 
                 hp_crop = safe_crop('hp_top_ocr')
-                ocr_hp = vision.ocr.read(hp_crop.astype(np.uint8) if hp_crop is not None else hp_crop) if hp_crop is not None else ''
+                ocr_hp = ''
+                if hp_crop is not None:
+                    ocr_hp = vision.ocr.read(hp_crop.astype(np.uint8))
 
                 hp_bar_crop = safe_crop('hp_low_bar')
-                bar_hp = calibrator.hsv_segment_bar(hp_bar_crop, 'red') if hp_bar_crop is not None else 0.0
+                bar_hp = (calibrator.hsv_segment_bar(hp_bar_crop, 'red')
+                          if hp_bar_crop is not None else 0.0)
 
                 minimap_crop = safe_crop('minimap_content')
-                player_pos = calibrator.blob_detect_white(minimap_crop)[0] if minimap_crop is not None and calibrator.blob_detect_white(minimap_crop) else (0, 0)
+                player_pos = (0, 0)
+                if minimap_crop is not None:
+                    detected = calibrator.blob_detect_white(minimap_crop)
+                    if detected:
+                        player_pos = detected[0]
                 minimap_cache[0] = minimap_crop  # Store for navigator use
 
                 output = {'battle': battle, 'ocr_hp': ocr_hp, 'bar_hp': bar_hp, 'player_pos': player_pos}
@@ -120,7 +126,7 @@ def main() -> None:
                 if gs_queue.full():
                     try:
                         gs_queue.get_nowait()
-                    except:
+                    except Exception:
                         pass
                 gs_queue.put(gs)
 
@@ -141,7 +147,8 @@ def main() -> None:
                 if not safety.check_critical(gs, {}):
                     safety.panic()
                     continue
-                minimap_for_nav = minimap_cache[0] if minimap_cache[0] is not None else np.zeros((100, 100, 3), dtype=np.uint8)
+                minimap_for_nav = (minimap_cache[0] if minimap_cache[0] is not None
+                                   else np.zeros((100, 100, 3), dtype=np.uint8))
                 navigator.update(gs.player_pos, minimap_for_nav)
                 move_dir = navigator.get_next_move()
                 if move_dir != 'wait':
@@ -164,6 +171,7 @@ def main() -> None:
     for t in threads:
         t.start()
     safety.watchdog(threads)
+
 
 if __name__ == "__main__":
     main()

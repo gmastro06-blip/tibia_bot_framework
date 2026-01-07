@@ -2,6 +2,7 @@ from typing import List, Dict, Optional
 from gamestate.builder import GameState
 import pyautogui
 
+
 class TargetingManager:
     def __init__(self, priorities: List[str] = ["Dragon", "Demon", "Boss"]):
         self.priorities = priorities

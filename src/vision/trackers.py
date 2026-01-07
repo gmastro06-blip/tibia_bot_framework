@@ -1,6 +1,7 @@
 from typing import List, Dict
 import numpy as np
 
+
 class ByteTrack:
     def __init__(self):
         self.tracks: Dict[int, Dict] = {}

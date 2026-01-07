@@ -1,7 +1,7 @@
 import py_trees as bt
-from typing import Any
 from gamestate.builder import GameState
 import pyautogui
+
 
 class HealNode(bt.behaviour.Behaviour):
     def __init__(self):
@@ -14,6 +14,7 @@ class HealNode(bt.behaviour.Behaviour):
             return bt.common.Status.SUCCESS
         return bt.common.Status.FAILURE
 
+
 class AttackNode(bt.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="AttackTarget")
@@ -25,6 +26,7 @@ class AttackNode(bt.behaviour.Behaviour):
             return bt.common.Status.SUCCESS
         return bt.common.Status.FAILURE
 
+
 class MoveNode(bt.behaviour.Behaviour):
     def __init__(self):
         super().__init__(name="MoveToWaypoint")
@@ -35,6 +37,7 @@ class MoveNode(bt.behaviour.Behaviour):
             pyautogui.press('up')  # Move example
             return bt.common.Status.RUNNING
         return bt.common.Status.SUCCESS
+
 
 class BehaviorTree:
     def __init__(self):

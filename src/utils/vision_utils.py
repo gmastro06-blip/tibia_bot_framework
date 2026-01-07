@@ -2,7 +2,12 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-def find_contours_rects(img: np.ndarray, min_area: int = 1000, aspect_ratio_range: Tuple[float, float] = (0.5, 2.0)) -> List[Tuple[int, int, int, int]]:
+
+def find_contours_rects(
+    img: np.ndarray,
+    min_area: int = 1000,
+    aspect_ratio_range: Tuple[float, float] = (0.5, 2.0)
+) -> List[Tuple[int, int, int, int]]:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -15,7 +20,12 @@ def find_contours_rects(img: np.ndarray, min_area: int = 1000, aspect_ratio_rang
             rects.append((x, y, w, h))
     return rects
 
-def blob_detect_white(img: np.ndarray, min_area: int = 10, max_area: int = 100) -> List[Tuple[int, int]]:
+
+def blob_detect_white(
+    img: np.ndarray,
+    min_area: int = 10,
+    max_area: int = 100
+) -> List[Tuple[int, int]]:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
     params = cv2.SimpleBlobDetector_Params()
@@ -25,6 +35,7 @@ def blob_detect_white(img: np.ndarray, min_area: int = 10, max_area: int = 100) 
     detector = cv2.SimpleBlobDetector_create(params)
     keypoints = detector.detect(mask)
     return [(int(kp.pt[0]), int(kp.pt[1])) for kp in keypoints]
+
 
 def hsv_segment_bar(img: np.ndarray, color: str = 'red') -> float:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)

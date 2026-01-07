@@ -3,12 +3,12 @@ import cv2
 import numpy as np
 import json
 import os
-import re
 
 try:
     import easyocr
 except ImportError:
     easyocr = None  # type: ignore
+
 
 class UICalibrator:
     def __init__(self, rois_guess_norm: Dict[str, Any], source_res: Tuple[int, int]):
@@ -36,7 +36,12 @@ class UICalibrator:
             self.reader = easyocr.Reader(['en'], gpu=True)
         return self.reader
 
-    def find_contours_rects(self, img: np.ndarray, min_area: int = 1000, aspect_ratio_range: Tuple[float, float] = (0.5, 2.0)) -> List[Tuple[int, int, int, int]]:
+    def find_contours_rects(
+        self,
+        img: np.ndarray,
+        min_area: int = 1000,
+        aspect_ratio_range: Tuple[float, float] = (0.5, 2.0)
+    ) -> List[Tuple[int, int, int, int]]:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, 50, 150)
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -98,7 +103,10 @@ class UICalibrator:
             edges = cv2.Canny(gray, 50, 150)
             edge_density: float = float(np.mean(edges.astype(np.float64))) / 255.0
             dots = self.blob_detect_white(crop)
-            score: float = edge_density + (10.0 if any(abs(dx - w/2) < 20 and abs(dy - h/2) < 20 for dx, dy in dots) else 0.0)
+            center_dot = any(
+                abs(dx - w/2) < 20 and abs(dy - h/2) < 20 for dx, dy in dots
+            )
+            score: float = edge_density + (10.0 if center_dot else 0.0)
             candidates.append(((x + search_w_start, y, w, h), score))
         if candidates:
             return max(candidates, key=lambda c: c[1])[0]

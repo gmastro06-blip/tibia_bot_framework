@@ -1,7 +1,7 @@
 # src/decision/nodes.py
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 import py_trees
 
 from src.gamestate.models import GameState
@@ -25,7 +25,8 @@ class HealNode(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.FAILURE
 
         if state.hp <= self.hp_threshold:
-            self.emit({"type": "heal", "reason": f"hp<=%d" % self.hp_threshold})
+            self.emit({"type": "heal",
+                       "reason": f"hp<={self.hp_threshold}"})
             return py_trees.common.Status.SUCCESS
 
         return py_trees.common.Status.FAILURE

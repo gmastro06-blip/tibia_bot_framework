@@ -1,8 +1,8 @@
 from typing import List, Tuple, Dict
 import numpy as np
 import heapq
-import cv2
 import random
+
 
 class Navigator:
     def __init__(self, grid_size: Tuple[int, int] = (50, 50)):
@@ -34,7 +34,7 @@ class Navigator:
                     current = came_from[current]
                 path.append(start)
                 return path[::-1]
-            for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                 neighbor = (current[0] + dx, current[1] + dy)
                 if 0 <= neighbor[0] < self.grid_size[0] and 0 <= neighbor[1] < self.grid_size[1]:
                     tent_g = g_score[current] + 1
@@ -49,9 +49,15 @@ class Navigator:
         self.stuck_history.append(player_pos)
         if len(self.stuck_history) > self.stuck_threshold:
             self.stuck_history.pop(0)
-        if len(self.stuck_history) >= self.stuck_threshold and max(self.stuck_history, key=lambda p: p[0])[0] - min(self.stuck_history, key=lambda p: p[0])[0] < 5:
-            # Stuck recovery
-            player_pos = (player_pos[0] + random.randint(-5,5), player_pos[1] + random.randint(-5,5))
+        if len(self.stuck_history) >= self.stuck_threshold:
+            max_x = max(self.stuck_history, key=lambda p: p[0])[0]
+            min_x = min(self.stuck_history, key=lambda p: p[0])[0]
+            if max_x - min_x < 5:
+                # Stuck recovery
+                player_pos = (
+                    player_pos[0] + random.randint(-5, 5),
+                    player_pos[1] + random.randint(-5, 5)
+                )
         if self.waypoints:
             goal = self.waypoints[0]
             if np.linalg.norm(np.array(player_pos) - np.array(goal)) < 5:
@@ -63,8 +69,12 @@ class Navigator:
         if self.current_path and len(self.current_path) > 1:
             dx = self.current_path[1][0] - self.current_path[0][0]
             dy = self.current_path[1][1] - self.current_path[0][1]
-            if dx > 0: return 'right'
-            if dx < 0: return 'left'
-            if dy > 0: return 'down'
-            if dy < 0: return 'up'
+            if dx > 0:
+                return 'right'
+            if dx < 0:
+                return 'left'
+            if dy > 0:
+                return 'down'
+            if dy < 0:
+                return 'up'
         return 'wait'

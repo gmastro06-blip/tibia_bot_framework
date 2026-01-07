@@ -1,10 +1,14 @@
-# src/vision/utils.py - Versión corregida completa (cast explícito para mask y countNonZero)
+# src/vision/utils.py - Versión corregida completa (cast explícito para mask)
 
 import cv2
 import numpy as np
 from typing import List, Tuple
 
-def find_contours_rects(img: np.ndarray, min_area: float = 100.0) -> List[Tuple[int, int, int, int]]:
+
+def find_contours_rects(
+    img: np.ndarray,
+    min_area: float = 100.0
+) -> List[Tuple[int, int, int, int]]:
     if img.size == 0:
         return []
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -18,6 +22,7 @@ def find_contours_rects(img: np.ndarray, min_area: float = 100.0) -> List[Tuple[
             rects.append((x, y, w, h))
     return rects
 
+
 def blob_detect_white(img: np.ndarray) -> bool:
     if img.size == 0:
         return False
@@ -29,6 +34,7 @@ def blob_detect_white(img: np.ndarray) -> bool:
         if 5 < area < 100:
             return True
     return False
+
 
 def hsv_segment_bar(crop: np.ndarray, color: str = "red") -> float:
     if crop.size == 0:
@@ -55,7 +61,12 @@ def hsv_segment_bar(crop: np.ndarray, color: str = "red") -> float:
     total_pixels = crop.shape[0] * crop.shape[1]
     return filled / total_pixels if total_pixels > 0 else 0.0
 
-def validate_roi(frame: np.ndarray, rect: Tuple[int, int, int, int], name: str) -> bool:
+
+def validate_roi(
+    frame: np.ndarray,
+    rect: Tuple[int, int, int, int],
+    name: str
+) -> bool:
     crop = frame[rect[1]:rect[1]+rect[3], rect[0]:rect[0]+rect[2]]
     if crop.size == 0:
         return False

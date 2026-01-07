@@ -8,7 +8,11 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from capture.provider import CaptureProvider
 
-def benchmark_capture(provider: CaptureProvider, duration: int = 10) -> Dict[str, float]:
+
+def benchmark_capture(
+    provider: CaptureProvider,
+    duration: int = 10
+) -> Dict[str, float]:
     start = time.time()
     frames = 0
     latencies = []
@@ -32,6 +36,7 @@ def benchmark_capture(provider: CaptureProvider, duration: int = 10) -> Dict[str
 
 
 if __name__ == "__main__":
-    provider = CaptureProvider(mode="mss", window_title="Tibia - Loterinne")  # MSS no necesita ventana exacta
+    # MSS no necesita ventana exacta
+    provider = CaptureProvider(mode="mss", window_title="Tibia - Loterinne")
     results = benchmark_capture(provider, duration=20)
     print(results)
