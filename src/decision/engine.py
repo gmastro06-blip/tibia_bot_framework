@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import py_trees
 from typing import List, Any
-from scripting.engine import ScriptEngine
+from src.script.engine import ScriptEngine
 from gamestate.models import GameState
 
 class HealNode(py_trees.behaviour.Behaviour):

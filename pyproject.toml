@@ -26,6 +26,7 @@ pillow = ">=10"
 typed-d3dshot = "^1.0.1"
 nvidia-ml-py3 = "^7.352.0"
 onnxruntime = "^1.23.2"
+torch = {version = "^2.1.0", source = "pytorch"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
@@ -34,9 +35,12 @@ opencv-stubs = "^0.1.1"
 
 [[tool.poetry.source]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu130"
-priority = "supplemental"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+disable_error_code = ["misc"]

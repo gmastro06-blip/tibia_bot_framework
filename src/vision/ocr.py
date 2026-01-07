@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, Any
 import re
 
 import cv2
@@ -12,7 +12,7 @@ class OCR:
         self.reader = easyocr.Reader(['en'], gpu=True)
         self.crnn_sess = ort.InferenceSession(crnn_model_path, providers=['CUDAExecutionProvider']) if crnn_model_path else None
 
-    def preprocess(self, img: cv2.Mat) -> cv2.Mat:
+    def preprocess(self, img: Any) -> Any:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
         upscale = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
@@ -20,13 +20,13 @@ class OCR:
         dilate = cv2.dilate(denoise, np.ones((3,3), np.uint8), iterations=1)
         return dilate
 
-    def read(self, img: cv2.Mat, whitelist: str = '0123456789/') -> str:
+    def read(self, img: Any, whitelist: str = '0123456789/') -> str:
         pre = self.preprocess(img)
         result = self.reader.readtext(pre, allowlist=whitelist, detail=0)
         text = ''.join(result).strip()
         return re.sub(r'[^0-9/]', '', text)
 
-    def read_digits_crnn(self, img: cv2.Mat) -> str:
+    def read_digits_crnn(self, img: Any) -> str:
         if self.crnn_sess is None:
             return ""
         pre = self.preprocess(img)

@@ -1,59 +1,44 @@
-from __future__ import annotations
-
-from typing import List, Any, Optional, Tuple
-
+from typing import List, Optional
+import onnxruntime as ort
 import cv2
 import numpy as np
-import onnxruntime as ort
-
+import os
+from vision.ocr import OCR
 
 class VisionInference:
-    def __init__(self, model_path: str, classes: Optional[List[str]] = None, prefer_cuda: bool = True):
-        self.classes = classes or []
+    def __init__(self, model_path: str = "models/yolo.onnx", classes: List[str] = []):
+        self.classes = classes
+        self.sess: Optional[ort.InferenceSession] = None
+        self.ocr = OCR()  # Initialize OCR
+        if os.path.exists(model_path):
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            try:
+                self.sess = ort.InferenceSession(model_path, providers=providers)
+                print("Modelo ONNX cargado (GPU preferido)")
+            except Exception as e:
+                print(f"GPU falló: {e}. Fallback CPU")
+                self.sess = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+        else:
+            print(f"Modelo {model_path} no encontrado. Detector desactivado (opcional hasta fase robusta)")
 
-        providers: List[str] = ["CPUExecutionProvider"]
-        if prefer_cuda:
-            # OJO: en Windows a veces "aparece" CUDA pero falla por DLLs faltantes.
-            # Por eso: try/except al crear sesión.
-            if "CUDAExecutionProvider" in ort.get_available_providers():
-                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-
+    def detect(self, frame: np.ndarray) -> List:
+        if self.sess is None or frame is None or frame.size == 0:
+            return []
+        pre = cv2.resize(frame, (640, 640)) / 255.0
+        input = pre.transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
         try:
-            self.sess = ort.InferenceSession(model_path, providers=providers)
-        except Exception:
-            # fallback silencioso a CPU
-            self.sess = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+            dets = self.sess.run(None, {'input': input})[0]
+            return dets.tolist() if dets is not None else []
+        except:
+            return []
 
-        inp = self.sess.get_inputs()[0]
-        self.input_name = inp.name
-        self.input_shape = inp.shape  # puede contener None / 'batch'
-
-    def _infer_input_hw(self, fallback_hw: Tuple[int, int]) -> Tuple[int, int]:
-        # Común NCHW: [N, C, H, W]
-        if isinstance(self.input_shape, list) and len(self.input_shape) == 4:
-            h = self.input_shape[2]
-            w = self.input_shape[3]
-            if isinstance(h, int) and isinstance(w, int):
-                return (w, h)
-        return fallback_hw
-
-    def classify(self, img_bgr: np.ndarray) -> Any:
-        w, h = self._infer_input_hw((224, 224))
-        pre = cv2.resize(img_bgr, (w, h)).astype(np.float32) / 255.0
-        pre = pre[..., ::-1]  # BGR->RGB (muy común)
-        x = np.transpose(pre, (2, 0, 1))[np.newaxis, ...]  # NCHW
-
-        out = self.sess.run(None, {self.input_name: x})[0]
-        idx = int(np.argmax(out, axis=1)[0]) if out.ndim == 2 else int(np.argmax(out))
-
-        if self.classes and 0 <= idx < len(self.classes):
-            return self.classes[idx]
-        return idx
-
-    def detect(self, frame_bgr: np.ndarray) -> Any:
-        # Solo si tu modelo realmente es detector.
-        w, h = self._infer_input_hw((640, 640))
-        pre = cv2.resize(frame_bgr, (w, h)).astype(np.float32) / 255.0
-        pre = pre[..., ::-1]  # BGR->RGB
-        x = np.transpose(pre, (2, 0, 1))[np.newaxis, ...]  # NCHW
-        return self.sess.run(None, {self.input_name: x})
+    def classify(self, img: np.ndarray) -> str:
+        if self.sess is None or img is None or img.size == 0:
+            return "unknown"
+        pre = cv2.resize(img, (224, 224)) / 255.0
+        input = pre.astype(np.float32)[np.newaxis, ...].transpose(0, 3, 1, 2)
+        try:
+            output = self.sess.run(None, {'input': input})[0]
+            return self.classes[np.argmax(output)] if self.classes else "unknown"
+        except:
+            return "unknown"

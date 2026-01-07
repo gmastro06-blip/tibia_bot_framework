@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 import cv2
+import numpy as np
 from decision.behavior_tree import BehaviorTree
 
 if TYPE_CHECKING:
@@ -20,7 +21,7 @@ class Replay:
         os.makedirs(self.rois_dir, exist_ok=True)
         os.makedirs(self.replay_dir, exist_ok=True)
 
-    def save_roi(self, roi_name: str, crop: cv2.Mat, gamestate: GameState, action: str) -> None:
+    def save_roi(self, roi_name: str, crop: Union[cv2.Mat, np.ndarray], gamestate: GameState, action: str) -> None:
         ts = time.time()
         img_path = os.path.join(self.rois_dir, f"{ts}_{roi_name}.png")
         json_path = os.path.join(self.replay_dir, f"{ts}.json")
