@@ -42,7 +42,6 @@ class ScriptEngine:
         return data
 
     def exec_lua(self, script: str, api: Dict) -> Any:
-        # safe_env = self.lua.table(**api)  # Not used yet
         self.lua.globals()["os"] = None
         start = time.time()
         try:

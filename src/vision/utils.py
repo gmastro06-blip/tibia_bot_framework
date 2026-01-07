@@ -1,4 +1,4 @@
-# src/vision/utils.py - Versión corregida completa (cast explícito para mask)
+# Vision utility functions - Complete corrected version (explicit cast for mask)
 
 import cv2
 import numpy as np

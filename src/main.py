@@ -11,16 +11,13 @@ import numpy as np
 from capture.dxgi_capture import DXGICapture
 from calibration.ui_calibrator import UICalibrator
 from vision.inference import VisionInference
-# from vision.trackers import ByteTrack  # Not used yet
 from gamestate.builder import GameState, GameStateBuilder
 from battlelist.extractor import BattlelistExtractor
 from bestiary.matcher import BestiaryMatcher
 from navigation.navigator import Navigator
 from decision.behavior_tree import BehaviorTree
-# from script.engine import ScriptEngine  # Not used yet
 from action.executor import ActionExecutor
 from safety.manager import SafetyManager
-# from telemetry.logger import Logger  # Not used yet
 from telemetry.replay import Replay
 
 
