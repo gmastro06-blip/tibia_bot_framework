@@ -31,6 +31,10 @@ poetry run mypy src/
 
 **Thread-Safe MSS Usage**: Creates new MSS instance per capture call to avoid multi-threading issues. Uses context manager (`with mss() as sct:`) for proper resource cleanup.
 
+**Capture Validation**: Validates captured frames for content quality - checks for black images, uniform colors, color variation, and minimum resolution before processing.
+
+**Multi-Monitor Detection**: Automatically detects and captures from individual monitors (1, 2, 3...) before falling back to combined screen (0). Prioritizes monitor 1 (primary) for optimal performance.
+
 ## Key Conventions
 
 ### Import Patterns
@@ -89,10 +93,11 @@ mask_red = cv2.bitwise_or(mask_low, mask_high)
 3. **Circular imports**: Use `TYPE_CHECKING` and runtime imports inside functions when needed
 4. **Queue blocking**: Never use `.get()` without timeout in real-time threads - use `.get_nowait()` + exception handling
 5. **ROI coordinates**: Never hardcode pixel values - always use normalized coordinates and `UICalibrator.normalize_to_px()`
-6. **Black ROI images**: Fixed by implementing MSS fallback capture when BitBlt fails - ensures real screen content instead of dummy frames
+6. **Black ROI images**: Fixed by implementing MSS fallback capture with multi-monitor detection - ensures real screen content instead of dummy frames
 
 ## Testing & Debugging
 - Add replay logging: `replay.save_roi('debug_name', crop, gamestate, action_str)`
 - View captured frames: Run [debug_overlay.py](../debug_overlay.py) (implementation TBD)
 - Verify ROIs: Check `data/ROIs_resueltos.json` for calibration output
-- Debug capture issues: Bot now captures real screen content via MSS fallback when BitBlt fails, preventing black/dummy ROI images
+- Debug capture issues: Bot now captures real screen content via MSS fallback with multi-monitor detection, preventing black/dummy ROI images
+- Validate captures: System automatically validates frame quality (not black, has color variation, minimum resolution) before processing

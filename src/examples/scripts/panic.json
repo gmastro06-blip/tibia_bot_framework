@@ -1,8 +1,0 @@
-{
-  "triggers": {
-    "hp_below": 20,
-    "unknown_mob": true,
-    "stuck_ticks": 10
-  },
-  "actions": ["retreat", "logout"]
-}

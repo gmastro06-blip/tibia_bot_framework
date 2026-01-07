@@ -1,0 +1,1 @@
+# Gamestate module for Tibia bot

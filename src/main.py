@@ -1,28 +1,51 @@
 import sys
 import os
-import pyautogui
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Configurar path para imports absolutos desde el directorio del proyecto
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+import pyautogui
 from typing import Optional, Dict, List
 import threading
 from queue import Queue
 import time
 import numpy as np
+import json
 from capture.dxgi_capture import DXGICapture
-from calibration.ui_calibrator import UICalibrator
-from vision.inference import VisionInference
+# from calibration.ui_calibrator import UICalibrator
+# from vision.inference import VisionInference
+from vision.ocr import OCRProcessor
 from gamestate.builder import GameState, GameStateBuilder
-from battlelist.extractor import BattlelistExtractor
-from bestiary.matcher import BestiaryMatcher
-from navigation.navigator import Navigator
-from decision.behavior_tree import BehaviorTree
-from action.executor import ActionExecutor
-from safety.manager import SafetyManager
-from telemetry.replay import Replay
+# from battlelist.extractor import BattlelistExtractor
+# from bestiary.matcher import BestiaryMatcher
+# from navigation.navigator import Navigator
+# from decision.behavior_tree import BehaviorTree
+# from action.executor import ActionExecutor
+# from safety.manager import SafetyManager
+# from telemetry.replay import Replay
 
 
-def main() -> None:
-    rois_guess_norm: Dict[str, Dict[str, float]] = {
+def load_roi_config(resolution: tuple) -> tuple:
+    """Carga configuración de ROIs según la resolución detectada"""
+    width, height = resolution
+    config_files = {
+        (2048, 1076): "configs/rois_guess.json",
+        (1920, 1080): "configs/rois_guess_1920x1080.json",
+    }
+
+    config_file = config_files.get((width, height), "configs/rois_guess.json")  # fallback
+
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+            print(f"Configuración cargada desde {config_file} para resolución {width}x{height}")
+            return config["rois_guess_norm"], config["source_resolution"]
+    except FileNotFoundError:
+        print(f"Archivo de configuración {config_file} no encontrado, usando configuración por defecto")
+        # Configuración por defecto (2048x1076)
+        default_rois = {
             "hpmp_top_strip": {"x": 0.000000, "y": 0.000000, "w": 0.822754, "h": 0.037174},
             "hp_top_ocr": {"x": 0.052734, "y": 0.000000, "w": 0.107422, "h": 0.037174},
             "mp_top_ocr": {"x": 0.568359, "y": 0.000000, "w": 0.107422, "h": 0.037174},
@@ -39,162 +62,45 @@ def main() -> None:
             "game_viewport": {"x": 0.000000, "y": 0.037174, "w": 0.822754, "h": 0.780669},
             "chat_panel": {"x": 0.000000, "y": 0.817843, "w": 0.822754, "h": 0.182157}
         }
-    source_resolution: List[int] = [2048, 1076]
-    calibrator = UICalibrator(rois_guess_norm, (source_resolution[0], source_resolution[1]))
-    capture = DXGICapture("Tibia -")
-    vision = VisionInference("models/yolo.onnx", ["classes"])
-    # OCR initialized in VisionInference.__init__
-    # tracker = ByteTrack()  # Initialized but not used yet
-    battle_extractor = BattlelistExtractor()
-    matcher = BestiaryMatcher()
-    builder = GameStateBuilder()
-    navigator = Navigator((100, 100))
-    bt = BehaviorTree()
-    # script = ScriptEngine()  # Initialized but not used yet
-    executor = ActionExecutor()
-    safety = SafetyManager()
-    # logger = Logger()  # Initialized but not used yet
-    replay = Replay()
+        return default_rois, [2048, 1076]
 
-    frame_queue: Queue[Optional[np.ndarray]] = Queue(maxsize=5)
-    gs_queue: Queue[GameState] = Queue(maxsize=2)
-    minimap_cache: list = [None]  # Shared minimap crop for navigator
 
-    def capture_thread() -> None:
-        while True:
-            frame = capture.capture()
-            if frame is not None and frame.size > 0:
-                if frame_queue.full():
-                    try:
-                        frame_queue.get_nowait()
-                    except Exception:
-                        pass
-                frame_queue.put(frame)
-            else:
-                print("Warning: No se pudo capturar frame, esperando...")
-                time.sleep(1.0)  # Wait before retrying
-            time.sleep(0.01)
+def main() -> None:
+    print("Iniciando sistema de captura y análisis de HP/MP...")
 
-    def vision_thread() -> None:
-        while True:
-            try:
-                if frame_queue.empty():
-                    time.sleep(0.01)
-                    continue
-                frame = frame_queue.get()
-                if frame is None or frame.size == 0:
-                    print("Warning: Invalid frame received from capture")
-                    continue
-                print(f"Debug: Frame shape: {frame.shape}")
-                rois = calibrator.calibrate(frame)
-                print(f"Debug: Calibrated ROIs: {list(rois.keys())}")
-                if not rois:
-                    print("Warning: No ROIs calibrated")
-                    continue
+    # Probar la captura
+    capture = DXGICapture("Tibia - Loterinne")  # Título específico encontrado
+    print(f"Buscando ventana con título que contenga: '{capture.title_partial}'")
 
-                def safe_crop(roi_name: str) -> Optional[np.ndarray]:
-                    if roi_name not in rois:
-                        print(f"Warning: ROI '{roi_name}' not found in calibrated ROIs")
-                        return None
-                    x, y, w, h = rois[roi_name]
-                    if w <= 0 or h <= 0 or x + w > frame.shape[1] or y + h > frame.shape[0]:
-                        print(f"Warning: Invalid ROI dimensions for '{roi_name}': x={x}, y={y}, w={w}, h={h}, frame_shape={frame.shape}")
-                        return None
-                    return frame[y:y+h, x:x+w]
+    # Intentar capturar
+    frame = capture.capture()
+    if frame is not None:
+        print(f"✅ Captura exitosa: {frame.shape}")
 
-                battle_crop = safe_crop('battlelist_rows')
-                if battle_crop is None or battle_crop.size == 0:
-                    print("Warning: Battle list crop failed or empty")
-                    continue
-                # BattlelistExtractor.extract expects cv2.Mat compatible input (numpy arrays work)
-                battle = battle_extractor.extract(battle_crop)
-                for b in battle:
-                    b['resolved'] = matcher.match(b['name'])
+        # Cargar configuración de ROIs
+        resolution = (frame.shape[1], frame.shape[0])  # (width, height)
+        rois, source_resolution = load_roi_config(resolution)
+        print(f"Resolución detectada: {resolution}, ROIs cargadas para: {source_resolution}")
 
-                hp_crop = safe_crop('hp_top_ocr')
-                ocr_hp = ''
-                if hp_crop is not None:
-                    ocr_hp = vision.ocr.read(hp_crop.astype(np.uint8))
-                    print(f"Debug: HP OCR result: '{ocr_hp}'")
-                else:
-                    print("Warning: HP OCR crop failed")
+        # Inicializar procesadores
+        gamestate_builder = GameStateBuilder()
 
-                hp_bar_crop = safe_crop('hp_low_bar')
-                bar_hp = (calibrator.hsv_segment_bar(hp_bar_crop, 'red')
-                          if hp_bar_crop is not None else 0.0)
-                if hp_bar_crop is not None:
-                    print(f"Debug: HP bar result: {bar_hp:.2f}")
-                else:
-                    print("Warning: HP bar crop failed")
+        # Extraer HP/MP del frame
+        gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
 
-                minimap_crop = safe_crop('minimap_content')
-                player_pos = (0, 0)
-                if minimap_crop is not None:
-                    detected = calibrator.blob_detect_white(minimap_crop)
-                    if detected:
-                        player_pos = detected[0]
-                    print(f"Debug: Minimap player position: {player_pos}")
-                else:
-                    print("Warning: Minimap crop failed")
-                minimap_cache[0] = minimap_crop  # Store for navigator use
+        # Mostrar valores por consola
+        print("\n" + "="*50)
+        print("VALORES EXTRAÍDOS:")
+        print("="*50)
+        print(f"HP Actual: {gamestate.hp_current}")
+        print(f"MP Actual: {gamestate.mp_current}")
+        print(f"Estado completo: {gamestate}")
+        print("="*50)
 
-                output = {'battle': battle, 'ocr_hp': ocr_hp, 'bar_hp': bar_hp, 'player_pos': player_pos}
-                gs = builder.build(output)
-                if gs_queue.full():
-                    try:
-                        gs_queue.get_nowait()
-                    except Exception:
-                        pass
-                gs_queue.put(gs)
+    else:
+        print("❌ No se pudo capturar")
 
-                # Log regions for debugging
-                if battle_crop is not None:
-                    replay.save_roi('battlelist', battle_crop, gs, f"entities: {len(battle)}")
-                if hp_crop is not None:
-                    replay.save_roi('hp_ocr', hp_crop, gs, f"ocr_hp: {ocr_hp}")
-                if hp_bar_crop is not None:
-                    replay.save_roi('hp_bar', hp_bar_crop, gs, f"bar_hp: {bar_hp:.2f}")
-                if minimap_crop is not None:
-                    replay.save_roi('minimap', minimap_crop, gs, f"pos: {player_pos}")
-            except Exception as e:
-                print(f"Vision error: {e}")
-
-    navigator.load_waypoints('configs/route.json')
-
-    def decision_thread() -> None:
-        while True:
-            try:
-                if gs_queue.empty():
-                    time.sleep(0.01)
-                    continue
-                gs = gs_queue.get()
-                if not safety.check_critical(gs, {}):
-                    safety.panic()
-                    continue
-                minimap_for_nav = (minimap_cache[0] if minimap_cache[0] is not None
-                                   else np.zeros((100, 100, 3), dtype=np.uint8))
-                navigator.update(gs.player_pos, minimap_for_nav)
-                move_dir = navigator.get_next_move()
-                if move_dir != 'wait':
-                    pyautogui.press(move_dir)
-                actions = bt.tick(gs)
-                for act in actions:
-                    if callable(act):
-                        executor.add_action(act, [], timeout=2.0)
-                    else:
-                        print(f"Warning: action {act} is not callable")
-                executor.execute(gs)
-            except Exception as e:
-                print(f"Decision error: {e}")
-
-    threads = [
-        threading.Thread(target=capture_thread, daemon=True),
-        threading.Thread(target=vision_thread, daemon=True),
-        threading.Thread(target=decision_thread, daemon=True)
-    ]
-    for t in threads:
-        t.start()
-    safety.watchdog(threads)
+    print("Sistema de análisis probado.")
 
 
 if __name__ == "__main__":
