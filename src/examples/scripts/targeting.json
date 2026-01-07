@@ -1,0 +1,8 @@
+{
+  "criteria": {
+    "min_faves": 0,
+    "types": ["monster"],
+    "names": ["orc", "troll"],
+    "order": "hp_asc"
+  }
+}
