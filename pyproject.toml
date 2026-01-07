@@ -27,6 +27,10 @@ typed-d3dshot = "^1.0.1"
 nvidia-ml-py3 = "^7.352.0"
 onnxruntime = "^1.23.2"
 torch = {version = "^2.1.0", source = "pytorch"}
+pywin32 = "^311"
+onnxruntime-gpu = "^1.23.2"
+ultralytics = "^8.3.249"
+pytest = "^9.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"

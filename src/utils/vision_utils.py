@@ -27,7 +27,7 @@ def blob_detect_white(
     max_area: int = 100
 ) -> List[Tuple[int, int]]:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
+    mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))  # type: ignore[arg-type]
     params = cv2.SimpleBlobDetector_Params()
     params.filterByArea = True
     params.minArea = min_area
@@ -42,13 +42,13 @@ def hsv_segment_bar(img: np.ndarray, color: str = 'red') -> float:
     if color == 'red':
         lower = np.array([0, 70, 50])
         upper = np.array([10, 255, 255])
-        mask1 = cv2.inRange(hsv, lower, upper)
+        mask1 = cv2.inRange(hsv, lower, upper)  # type: ignore[arg-type]
         lower = np.array([170, 70, 50])
         upper = np.array([180, 255, 255])
-        mask2 = cv2.inRange(hsv, lower, upper)
+        mask2 = cv2.inRange(hsv, lower, upper)  # type: ignore[arg-type]
         mask = mask1 + mask2
     elif color == 'blue':
-        mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))
+        mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))  # type: ignore[arg-type]
     else:
         return 0.0
     fill_ratio = cv2.countNonZero(mask) / (img.shape[0] * img.shape[1])

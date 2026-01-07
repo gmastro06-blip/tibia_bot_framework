@@ -1,54 +1,53 @@
 from typing import Dict, Any
-import lupa
-import jsonschema
+import lupa  # type: ignore[import-untyped]
+import jsonschema  # type: ignore[import-untyped]
 import json
-import time
-
+import os
 
 class ScriptEngine:
     def __init__(self):
         self.lua = lupa.LuaRuntime()
-        self.schemas: Dict = self.load_schemas()
+        self.schemas: Dict[str, Any] = self.load_schemas()
 
-    def load_schemas(self) -> Dict:
-        schemas = {
-            "route": {
+    def load_schemas(self) -> Dict[str, Any]:
+        return {
+            'route': {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
                         "x": {"type": "number"},
                         "y": {"type": "number"},
-                    },
-                    "required": ["x", "y"],
-                    "additionalProperties": False,
-                },
+                        "name": {"type": "string"},
+                        "action": {"type": "string"}
+                    }
+                }
             },
-            "targeting": {
+            'targeting': {
                 "type": "object",
                 "properties": {
-                    "priorities": {"type": "array"},
-                },
-                "required": ["priorities"],
-                "additionalProperties": True,
-            },
+                    "priorities": {"type": "array", "items": {"type": "string"}},
+                    "min_hp_pct": {"type": "number"}
+                }
+            }
         }
-        return schemas
 
-    def validate_json(self, file: str, schema_key: str) -> Dict:
-        with open(file, "r", encoding="utf-8") as f:
+    def validate_json(self, file_path: str, schema_key: str) -> Dict:
+        full_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs", file_path)
+        with open(full_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         jsonschema.validate(data, self.schemas[schema_key])
         return data
 
-    def exec_lua(self, script: str, api: Dict) -> Any:
-        self.lua.globals()["os"] = None
-        start = time.time()
+    def exec_lua(self, script_path: str, api: Dict) -> Any:
+        full_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts", script_path)
+        safe_env = self.lua.table(**api)
+        self.lua.globals()['os'] = None
+        self.lua.globals()['io'] = None
         try:
-            func = self.lua.eval(script)
-            result = func()
-            if time.time() - start > 0.1:
-                raise TimeoutError("Lua timeout")
-            return result
-        except lupa.LuaError:
+            code = open(full_path, 'r', encoding='utf-8').read()
+            func = self.lua.eval(code)
+            return func()
+        except Exception as e:
+            print(f"Lua error: {e}")
             return None

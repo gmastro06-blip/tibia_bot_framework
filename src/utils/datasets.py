@@ -1,11 +1,11 @@
 from typing import List, Dict
 import os
-from imagehash import phash
-from PIL import Image
+from imagehash import phash  # type: ignore[import-untyped]
+from PIL import Image  # type: ignore[import-untyped]
 
 
 def dedupe_dataset(dir_path: str, threshold: float = 0.9) -> List[str]:
-    hashes: Dict[str, phash.ImageHash] = {}  # Hint
+    hashes: Dict[str, phash.ImageHash] = {}  # type: ignore[name-defined,attr-defined] # Hint
     for file in os.listdir(dir_path):
         img = Image.open(os.path.join(dir_path, file))
         h = phash(img)

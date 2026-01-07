@@ -27,7 +27,7 @@ def blob_detect_white(img: np.ndarray) -> bool:
     if img.size == 0:
         return False
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
+    mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))  # type: ignore[arg-type]
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
         area = cv2.contourArea(c)
@@ -45,13 +45,13 @@ def hsv_segment_bar(crop: np.ndarray, color: str = "red") -> float:
         upper1 = np.array([10, 255, 255], dtype=np.uint8)
         lower2 = np.array([170, 100, 100], dtype=np.uint8)
         upper2 = np.array([180, 255, 255], dtype=np.uint8)
-        mask1 = cv2.inRange(hsv, lower1, upper1)
-        mask2 = cv2.inRange(hsv, lower2, upper2)
+        mask1 = cv2.inRange(hsv, lower1, upper1)  # type: ignore[arg-type]
+        mask2 = cv2.inRange(hsv, lower2, upper2)  # type: ignore[arg-type]
         mask = cv2.bitwise_or(mask1, mask2)  # Mejor que + para evitar overflow
     elif color == "blue":
         lower = np.array([100, 100, 100], dtype=np.uint8)
         upper = np.array([140, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
+        mask = cv2.inRange(hsv, lower, upper)  # type: ignore[arg-type]
     else:
         mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
 

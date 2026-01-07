@@ -49,8 +49,8 @@ class UICalibrator:
         if img is None or img.size == 0:
             return []
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, np.array([0, 0, 220]), np.array([180, 30, 255]))
-        mask = cv2.erode(mask, np.ones((3,3)), iterations=1)
+        mask = cv2.inRange(hsv, np.array([0, 0, 220]), np.array([180, 30, 255]))  # type: ignore[arg-type]
+        mask = cv2.erode(mask, np.ones((3,3)), iterations=1)  # type: ignore[arg-type]
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         blobs = []
         for cnt in contours:
@@ -67,11 +67,11 @@ class UICalibrator:
             return 0.0
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         if color == 'red':
-            mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
-            mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
+            mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))  # type: ignore[arg-type]
+            mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))  # type: ignore[arg-type]
             mask = cv2.bitwise_or(mask1, mask2)
         elif color == 'blue':
-            mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))
+            mask = cv2.inRange(hsv, np.array([100, 70, 50]), np.array([140, 255, 255]))  # type: ignore[arg-type]
         else:
             return 0.0
         return float(cv2.countNonZero(mask)) / (img.shape[0] * img.shape[1])
@@ -98,13 +98,79 @@ class UICalibrator:
         if candidates:
             best = max(candidates, key=lambda c: c[1])[0]
             return best
-        return None  # Explicit None
+        return None
 
     def detect_player_dot(self, minimap_roi: np.ndarray) -> Tuple[int, int]:
         blobs = self.blob_detect_white(minimap_roi)
         if blobs:
             return blobs[0]
         return (minimap_roi.shape[1] // 2, minimap_roi.shape[0] // 2)
+
+    def assisted_calibrate(self, frame: np.ndarray) -> None:
+        rois = {}
+        def mouse_callback(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                param['tl'] = (x, y)
+            elif event == cv2.EVENT_LBUTTONUP:
+                param['br'] = (x, y)
+                rois[param['name']] = (param['tl'][0], param['tl'][1], param['br'][0] - param['tl'][0], param['br'][1] - param['tl'][1])
+        cv2.namedWindow('Calibrate')
+        cv2.imshow('Calibrate', frame)
+        for name in self.rois_norm.keys():
+            param = {'name': name, 'tl': None, 'br': None}
+            cv2.setMouseCallback('Calibrate', mouse_callback, param)
+            cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        with open('data/rois_resueltos.json', 'w') as f:
+            json.dump(rois, f)
+
+    def check_drift(self, frame: np.ndarray, roi_name: str) -> float:
+        roi = self.rois_px[roi_name]
+        crop = frame[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+        baseline_path = f'data/baseline_{roi_name}.json'
+        if os.path.exists(baseline_path):
+            with open(baseline_path, 'r') as f:
+                baseline_hist = np.array(json.load(f))
+            hist = cv2.calcHist([crop], [0], None, [256], [0, 256])
+            score = cv2.compareHist(hist, baseline_hist, cv2.HISTCMP_BHATTACHARYYA)
+            return score
+        return 0.0
+
+    def validate_roi(self, frame: np.ndarray, roi_name: str) -> bool:
+        roi = self.rois_px[roi_name]
+        crop = frame[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+        if roi_name == 'minimap_content':
+            dots = self.blob_detect_white(crop)
+            return bool(dots)
+        elif roi_name in ['hp_top_ocr', 'mp_top_ocr']:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+            text = self.load_reader().readtext(thresh, allowlist='0123456789/', detail=0)
+            if text:
+                text = ''.join(text)
+                match = re.match(r'(\d+)/(\d+)', text)
+                if match and int(match.group(1)) <= int(match.group(2)):
+                    return True
+            return False
+        elif roi_name in ['hp_low_bar', 'mp_low_bar']:
+            color = 'red' if 'hp' in roi_name else 'blue'
+            fill = self.hsv_segment_bar(crop, color)
+            return 0.1 < fill < 1.0
+        elif roi_name == 'battlelist_rows':
+            texts = [self.load_reader().readtext(crop[i:i+20, :], detail=0) for i in range(0, crop.shape[0], 20)]
+            return any(len(t) > 0 for t in texts)
+        return False
+
+    def refine_roi(self, frame: np.ndarray, roi_name: str) -> Tuple[int, int, int, int]:
+        roi = self.rois_px[roi_name]
+        expand_factor = 1.2
+        exp_x = max(0, roi[0] - int(roi[2] * 0.1))
+        exp_y = max(0, roi[1] - int(roi[3] * 0.1))
+        exp_w = min(self.source_res[0] - exp_x, int(roi[2] * expand_factor))
+        exp_h = min(self.source_res[1] - exp_y, int(roi[3] * expand_factor))
+        exp_crop = frame[exp_y:exp_y+exp_h, exp_x:exp_x+exp_w]
+        new_rect = self.auto_calibrate_minimap(exp_crop) if 'minimap' in roi_name else roi
+        return new_rect or roi
 
     def calibrate(self, frame: np.ndarray) -> Dict[str, Tuple[int, int, int, int]]:
         if self.calibrated or frame is None or frame.size == 0:

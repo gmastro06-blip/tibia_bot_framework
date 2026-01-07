@@ -43,7 +43,7 @@ def main() -> None:
     calibrator = UICalibrator(rois_guess_norm, (source_resolution[0], source_resolution[1]))
     capture = DXGICapture("Tibia -")
     vision = VisionInference("models/yolo.onnx", ["classes"])
-    # OCR already initialized in VisionInference.__init__
+    # OCR initialized in VisionInference.__init__
     # tracker = ByteTrack()  # Initialized but not used yet
     battle_extractor = BattlelistExtractor()
     matcher = BestiaryMatcher()

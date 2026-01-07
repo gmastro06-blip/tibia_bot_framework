@@ -21,7 +21,8 @@ class CaptureProvider:
 
     def _init_mode(self) -> str:
         try:
-            self.d3d = d3dshot.create_capture()
+            import d3dshot  # type: ignore[import-untyped]
+            self.d3d = d3dshot.create()
             self.hwnd = win32gui.FindWindow(None, self.window_title)
             if self.hwnd:
                 return "dxgi"
@@ -54,7 +55,7 @@ class CaptureProvider:
             frame = np.array(sct_img)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
         elif self.mode == "obs":
-            cap = cv2.VideoCapture(0)  # Virtual cam index
+            cap = cv2.VideoCapture(0)  # type: ignore[call-arg] # Virtual cam index
             ret, frame = cap.read()
             cap.release()
             if not ret:

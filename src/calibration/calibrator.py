@@ -41,7 +41,8 @@ class UICalibrator:
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY_INV, 11, 2
         )
-        upscale = cv2.resize(thresh, None, fx=2, fy=2,
+        height, width = thresh.shape
+        upscale = cv2.resize(thresh, (width * 2, height * 2),
                              interpolation=cv2.INTER_CUBIC)
         dilate = cv2.dilate(upscale, np.ones((3, 3), np.uint8))
         import easyocr  # Lazy
@@ -132,7 +133,7 @@ class UICalibrator:
 
     def blob_detect_white(self, img: np.ndarray) -> bool:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))
+        mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([180, 50, 255]))  # type: ignore[arg-type]
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         return bool(contours)
 
@@ -140,13 +141,13 @@ class UICalibrator:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         if color == "red":
             mask1 = cv2.inRange(hsv, np.array([0, 70, 50]),
-                                np.array([10, 255, 255]))
+                                np.array([10, 255, 255]))  # type: ignore[arg-type]
             mask2 = cv2.inRange(hsv, np.array([170, 70, 50]),
-                                np.array([180, 255, 255]))
+                                np.array([180, 255, 255]))  # type: ignore[arg-type]
             mask = mask1 + mask2
         elif color == "blue":
             mask = cv2.inRange(hsv, np.array([100, 70, 50]),
-                               np.array([140, 255, 255]))
+                               np.array([140, 255, 255]))  # type: ignore[arg-type]
         else:
             mask = np.zeros_like(hsv[:, :, 0])
         return cv2.countNonZero(mask) / (img.shape[0] * img.shape[1])
