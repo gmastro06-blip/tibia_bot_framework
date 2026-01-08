@@ -1,0 +1,199 @@
+{
+  "counts": {
+    "lines": 103,
+    "pos_points": 42,
+    "labels": 26,
+    "actions": 6,
+    "unique_actions": 5
+  },
+  "distance": {
+    "total_manhattan": 4714,
+    "total_euclid": 3931.638809410523,
+    "max_manhattan": 763,
+    "max_jump": {
+      "from": {
+        "line_index": 93,
+        "x": 32339,
+        "y": 32272,
+        "z": 11
+      },
+      "to": {
+        "line_index": 95,
+        "x": 32628,
+        "y": 32746,
+        "z": 4
+      },
+      "dx": 289,
+      "dy": 474,
+      "dz": -7,
+      "manhattan": 763,
+      "euclid": 555.1549333294265
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 16,
+          "x": 32632,
+          "y": 32740,
+          "z": 4
+        },
+        "to": {
+          "line_index": 26,
+          "x": 32342,
+          "y": 32271,
+          "z": 11
+        },
+        "dx": -290,
+        "dy": -469,
+        "dz": 7,
+        "manhattan": 759,
+        "euclid": 551.4172648729816
+      },
+      {
+        "from": {
+          "line_index": 26,
+          "x": 32342,
+          "y": 32271,
+          "z": 11
+        },
+        "to": {
+          "line_index": 31,
+          "x": 32908,
+          "y": 32338,
+          "z": 15
+        },
+        "dx": 566,
+        "dy": 67,
+        "dz": 4,
+        "manhattan": 633,
+        "euclid": 569.9517523440032
+      },
+      {
+        "from": {
+          "line_index": 31,
+          "x": 32908,
+          "y": 32338,
+          "z": 15
+        },
+        "to": {
+          "line_index": 39,
+          "x": 33579,
+          "y": 32262,
+          "z": 7
+        },
+        "dx": 671,
+        "dy": -76,
+        "dz": -8,
+        "manhattan": 747,
+        "euclid": 675.290307941703
+      },
+      {
+        "from": {
+          "line_index": 87,
+          "x": 33586,
+          "y": 32262,
+          "z": 7
+        },
+        "to": {
+          "line_index": 90,
+          "x": 32905,
+          "y": 32340,
+          "z": 15
+        },
+        "dx": -681,
+        "dy": 78,
+        "dz": 8,
+        "manhattan": 759,
+        "euclid": 685.4524053499265
+      },
+      {
+        "from": {
+          "line_index": 90,
+          "x": 32905,
+          "y": 32340,
+          "z": 15
+        },
+        "to": {
+          "line_index": 93,
+          "x": 32339,
+          "y": 32272,
+          "z": 11
+        },
+        "dx": -566,
+        "dy": -68,
+        "dz": -4,
+        "manhattan": 634,
+        "euclid": 570.0701711193105
+      },
+      {
+        "from": {
+          "line_index": 93,
+          "x": 32339,
+          "y": 32272,
+          "z": 11
+        },
+        "to": {
+          "line_index": 95,
+          "x": 32628,
+          "y": 32746,
+          "z": 4
+        },
+        "dx": 289,
+        "dy": 474,
+        "dz": -7,
+        "manhattan": 763,
+        "euclid": 555.1549333294265
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32622,
+          "y": 32742,
+          "z": 7
+        },
+        "first_line": 4,
+        "again_line": 7
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "go_withdraw_amulet",
+    "call_withdraw_garlic_necklace",
+    "skip_withdraw_amulet",
+    "has_gems",
+    "go_feyrist",
+    "exit_no_gems",
+    "use_gems",
+    "activate_lure",
+    "red_portal_1",
+    "use_gem_north",
+    "red_portal_2",
+    "use_gem_north",
+    "after_portal",
+    "skip_equip_amulet",
+    "hunt",
+    "set_higher_lure",
+    "set_lower_lure",
+    "after_set_lure",
+    "after_mountain",
+    "leave",
+    "red_portal_1",
+    "red_portal_2",
+    "after_portal_2",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "end",
+    "target_off",
+    "wait"
+  ]
+}

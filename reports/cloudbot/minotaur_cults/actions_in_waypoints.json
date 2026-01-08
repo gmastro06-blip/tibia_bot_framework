@@ -1,0 +1,72 @@
+[
+  {
+    "line": 9,
+    "action": "travel_thais",
+    "raw": "action travel_thais"
+  },
+  {
+    "line": 61,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 64,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 106,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 112,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 114,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 156,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 161,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 166,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 169,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 172,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 175,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 178,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 181,
+    "action": "end",
+    "raw": "action end"
+  }
+]

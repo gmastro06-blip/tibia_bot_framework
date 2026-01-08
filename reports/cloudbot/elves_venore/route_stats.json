@@ -1,0 +1,184 @@
+{
+  "counts": {
+    "lines": 201,
+    "pos_points": 186,
+    "labels": 8,
+    "actions": 7,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 1144,
+    "total_euclid": 967.2564201584707,
+    "max_manhattan": 27,
+    "max_jump": {
+      "from": {
+        "line_index": 192,
+        "x": 32998,
+        "y": 32073,
+        "z": 6
+      },
+      "to": {
+        "line_index": 193,
+        "x": 32976,
+        "y": 32078,
+        "z": 6
+      },
+      "dx": -22,
+      "dy": 5,
+      "dz": 0,
+      "manhattan": 27,
+      "euclid": 22.561028345356956
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33098,
+          "y": 32108,
+          "z": 7
+        },
+        "first_line": 50,
+        "again_line": 51
+      },
+      {
+        "pos": {
+          "x": 33099,
+          "y": 32134,
+          "z": 7
+        },
+        "first_line": 58,
+        "again_line": 59
+      },
+      {
+        "pos": {
+          "x": 33099,
+          "y": 32138,
+          "z": 6
+        },
+        "first_line": 61,
+        "again_line": 62
+      },
+      {
+        "pos": {
+          "x": 33058,
+          "y": 32158,
+          "z": 8
+        },
+        "first_line": 74,
+        "again_line": 76
+      },
+      {
+        "pos": {
+          "x": 33058,
+          "y": 32158,
+          "z": 8
+        },
+        "first_line": 74,
+        "again_line": 77
+      },
+      {
+        "pos": {
+          "x": 33099,
+          "y": 32130,
+          "z": 7
+        },
+        "first_line": 57,
+        "again_line": 153
+      },
+      {
+        "pos": {
+          "x": 33088,
+          "y": 32089,
+          "z": 7
+        },
+        "first_line": 40,
+        "again_line": 169
+      },
+      {
+        "pos": {
+          "x": 33045,
+          "y": 32096,
+          "z": 7
+        },
+        "first_line": 32,
+        "again_line": 176
+      },
+      {
+        "pos": {
+          "x": 33021,
+          "y": 32100,
+          "z": 6
+        },
+        "first_line": 28,
+        "again_line": 181
+      },
+      {
+        "pos": {
+          "x": 33013,
+          "y": 32100,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 183
+      },
+      {
+        "pos": {
+          "x": 33004,
+          "y": 32099,
+          "z": 7
+        },
+        "first_line": 25,
+        "again_line": 186
+      },
+      {
+        "pos": {
+          "x": 32999,
+          "y": 32096,
+          "z": 6
+        },
+        "first_line": 21,
+        "again_line": 189
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 18,
+        "again_line": 192
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 18,
+        "again_line": 197
+      }
+    ],
+    "repeat_positions": 12
+  },
+  "labels": [
+    "start",
+    "refill",
+    "go_hunt",
+    "door1",
+    "door2",
+    "hunt",
+    "leave",
+    "end"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "deposit",
+    "sell"
+  ]
+}

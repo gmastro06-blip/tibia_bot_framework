@@ -1,0 +1,86 @@
+ {
+"setup": [
+	"You can use any setup.json for this script, all you need to setup is the 'script_options'",
+	"Make sure you set the 'backpack_name' and have enough backpacks to hold the items. The backpacks should all have a single backpack inside of the same type",
+	"Also, ensure that each depot number has only items that are sold in the same NPC or city.",
+	"Some npcs require quest access, please be sure that you have done the quest"
+],
+  "general": {
+    "loot_priority": "after",
+    "anti_trap": "weapon",
+    "walk_type": "keys"
+  },
+  "script_options": {
+    "skill_train": "sword",
+
+    "backpack_name":"Golden Backpack",
+
+    "rashid": true,
+    "green_djinn":false,
+    "blue_djinn":true,
+    "flint":false,
+    "lailene":false,
+    "alexander":false,
+    "telas":false,
+    "tamoril":false,
+    "esrik":false,
+
+    "rashid_depot":9,
+    "djinn_depot":10,
+    "edron_depot":6,
+    "flint_depot":5,
+    "tamoril_depot":8,
+    "esrik_depot":7
+  },
+  "containers": {
+	  "loot_bp":"Red Backpack"
+  },
+  "tools": {
+    "rope": { "name": "rope" }
+  },
+  "items": {
+    "strong mana potion": { "hotkey": "e", "id": 237, "use": "self" },
+    "great health potion": { "hotkey": "f3", "id": 239, "use": "self" },
+    "brown mushroom": { "hotkey": "f11", "id": 3725, "use": "use" },
+    "sword ring": { "hotkey": "f9", "id": 3091, "use": "equip" }
+  },
+  "spells": {
+    "utani hur": "v",
+    "utura gran": "R",
+    "utito tempo": "X",
+    "exura ico": "r",
+    "exura med ico": "g",
+    "exura gran ico": "f",
+    "exori": "1",
+    "exori min": "2",
+    "exori hur": "3",
+    "exori gran": "4",
+    "exori ico": "q"
+  },
+  "healing": [
+    { "type": "hp", "below_percent": 30, "use_spell": "exura gran ico", "min_mana_percent": 20, "priority": 7, "cooldown": 600 },
+    { "type": "hp", "below_percent": 60, "use_item": "great health potion", "priority": 5 },
+    { "type": "hp", "below_percent": 85, "use_spell": "exura med ico", "min_mana_percent": 10, "priority": 4 },
+    { "type": "hp", "below_percent": 97, "use_spell": "exura ico", "min_mana_percent": 5, "priority": 3 },
+    { "type": "mp", "below_percent": 90, "use_item": "strong mana potion", "priority": 2 },
+    { "type": "hp", "below_percent": 95, "use_spell": "utura gran", "min_mana_percent": 20, "priority": 1, "cooldown": 60 }
+  ],
+  "hunt_config": {
+    "cap_leave": -10,
+    "mana_name": "strong mana potion",
+    "take_mana": 100,
+    "mana_leave": 25,
+    "health_name": "great health potion",
+    "take_health": 200,
+    "health_leave": 40
+  },
+  "persistent_actions": [
+    { "action": "haste", "interval": 40, "args": [ "v" ] },
+    { "action": "eat_food", "interval": 40, "args": [ "f11" ] }
+  ],
+  "target_monsters": [
+  ],
+  "target_spells": [
+  ],
+  "loot": []
+}

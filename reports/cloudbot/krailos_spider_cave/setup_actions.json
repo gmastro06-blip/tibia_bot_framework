@@ -1,0 +1,270 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 120
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": [
+        5
+      ]
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 3
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "7",
+        "selected_monsters": [
+          "Giant Spider",
+          "Brimstone Bug"
+        ],
+        "amount": 6
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33663,
+              31760,
+              9
+            ],
+            [
+              33678,
+              31770,
+              9
+            ]
+          ],
+          [
+            [
+              33674,
+              31733,
+              9
+            ],
+            [
+              33689,
+              31753,
+              9
+            ]
+          ],
+          [
+            [
+              33689,
+              31753,
+              9
+            ],
+            [
+              33670,
+              31757,
+              9
+            ]
+          ],
+          [
+            [
+              33646,
+              31735,
+              9
+            ],
+            [
+              33662,
+              31748,
+              9
+            ]
+          ],
+          [
+            [
+              33643,
+              31767,
+              9
+            ],
+            [
+              33659,
+              31777,
+              9
+            ]
+          ],
+          [
+            [
+              33678,
+              31765,
+              9
+            ],
+            [
+              33689,
+              31775,
+              9
+            ]
+          ]
+        ],
+        "monster_count": 2
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 5,
+      "use_in_battle": true
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters_diamond_arrow",
+      "interval": 0.5,
+      "args": {
+        "count": 3
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Wailing Widow",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Brimstone Bug",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wailing Widow",
+      "action": "stand",
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "stand",
+      "loot": true
+    },
+    {
+      "name": "Brimstone Bug",
+      "action": "stand",
+      "loot": true
+    },
+    {
+      "name": "Wailing Widow",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Brimstone Bug",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

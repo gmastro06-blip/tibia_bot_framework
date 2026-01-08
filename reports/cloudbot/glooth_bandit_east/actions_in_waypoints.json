@@ -1,0 +1,67 @@
+[
+  {
+    "line": 23,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 53,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 72,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 74,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 78,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 83,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 85,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 88,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 91,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 94,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 97,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 100,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 105,
+    "action": "travel_oramond",
+    "raw": "action travel_oramond"
+  }
+]

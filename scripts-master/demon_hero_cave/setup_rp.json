@@ -1,0 +1,108 @@
+{
+"general": 
+{
+	"loot_type":"auto",
+	"loot_priority":"first"
+},
+"script_options": {
+	"hours_leave": [9],
+	"skill_train":"distance",
+	"imbuements":[
+		{"equip_slot":"weapon", "name":"Intricate Strike", "type":"Critical Hit"},
+		{"equip_slot":"helmet", "name":"Intricate Void", "type":"Mana Leech"}
+	],
+	"summon":"f3",
+	"infernalist": false,
+	"sort_deposit": {"flint":5, "alexander":6, "lailene":6, "esrik":7, "tamoril":8, "rashid": 9, "green_djinn": 10}
+},
+"containers": 
+{
+	"loot_bp":"Shopping Bag"
+},
+"tools":
+{
+	"rope": {"name":"squeezing gear of girlpower", "id": 9596},
+	"shovel": {"name":"squeezing gear of girlpower", "id": 9596}
+},
+"items":
+{
+	"strong mana potion": {"hotkey":"e", "id":237, "use":"self"},
+	"ultimate spirit potion": {"hotkey":"f", "id":23374, "use":"self"},
+	"infernal bolt": {"hotkey":"j", "id":6528, "use":"equip"},
+	"spectral bolt": {"hotkey":"k", "id":25758, "use":"equip"},
+	"brown mushroom": {"hotkey":"f11", "id":3725, "use":"use"}
+},
+"spells":
+{
+	"utani hur": "v",
+	"utura gran": "R",
+	"utevo gran res sac": "f3",
+	"exevo gran con vis": "f4",
+	"exura gran san":"r",
+	"exevo mas san":"1",
+	"exori con":"q"
+},
+"healing":
+[
+	{"type":"mp", "below_percent":20, "use_item":"ultimate spirit potion",      "priority":5},
+	{"type":"hp", "below_percent":75, "use_spell":"exura gran san", "min_mana_percent":10,  "priority":4},
+	{"type":"hp", "below_percent":50, "use_item":"ultimate spirit potion",      "priority":3},
+	{"type":"mp", "below_percent":80, "use_item":"strong mana potion", "priority":3},
+	{"type":"hp", "below_percent":98, "use_spell":"utura gran", "min_mana_percent":50, "priority":1, "cooldown":60},
+	{"type":"hp", "below_percent":101, "use_spell":"exevo gran con vis", "min_mana_percent":50, "priority":1, "cooldown":301}
+],
+"hunt_config": {
+	"cap_leave": 200,
+	"mana_name": "strong mana potion",
+	"take_mana": 1100,
+	"mana_leave": 300,
+	"health_name": "ultimate spirit potion",
+	"take_health": 200,
+	"health_leave": 80,
+	"ammo_name": "infernal bolt",
+	"take_ammo": 1000,
+	"ammo_leave": 250
+},
+"label_actions": 
+[
+    {"label":"check_infernalist", "action":"conditional_jump_script_options", "args": {"var_name": "infernalist", "label_jump":"go_infernalist", "label_skip":"skip_infernalist"}},
+    {"label":"disable_distance", "action":"set_target_action", "args": {"action": "follow"}},
+    {"label":"activate_distance", "action":"set_target_action", "args": {"action": "distance"}}
+],
+"persistent_actions": [
+	{"action":"drop_vials", "interval":60},
+	{"action":"haste", "interval":40, "args":{"hotkey":"v"}},
+	{"action":"anti_paralyze", "interval":1, "args":["r"]},
+	{"action":"recover_full_mana", "interval":3, "args":["e"]},
+	{"action":"cast_spell_if_monsters", "interval":4, "args":{"min_mp":50, "spell_hotkey":"1", "monster_count":5, "dist":4, "use_with_target_off":true}},
+	{"action":"eat_food", "interval":40, "args":{"hotkey":"f11"}},
+	{"action":"refill_priority_ammo", "interval":5, "use_in_battle":true, "args":{"priority_ammo_name":"spectral bolt", "regular_ammo_name":"infernal bolt"}},
+	{"action":"dynamic_barrier_rectangles", "interval":1, "use_in_battle":true, "args":{
+		"rectangles":[
+			[[33141,31700,15], [33145,31704,15]],
+			[[33065,31716,12], [33066,31723,12]],
+			[[33065,31716,13], [33066,31723,13]],
+			[[33065,31716,14], [33066,31723,14]],
+			[[33065,31716,15], [33066,31723,15]],
+			[[33083,31695,15],[33122,31702,15]],
+			[[33108,31714,15],[33123,31727,15]],
+			[[33083,31722,15],[33103,31726,15]],
+			[[33063,31703,15],[33087,31722,15]]
+		],
+		"monster_count":1
+	}}
+],
+"target_monsters": 
+[
+	{"name":"Infernalist", "action":"distance", "min_dist":4, "max_dist":5, "loot":true},
+	{"name":"Massive Fire Elemental", "action":"distance", "min_dist":4, "max_dist":6, "loot":true},
+	{"name":"Demon", "action":"distance", "min_dist":4, "max_dist":6, "follow_below_hp_percentage":5, "loot":true}
+],
+"target_spells":
+[
+	{"name":"exori con", "min_mana_percent":20, "priority":1, "cooldown":2,
+		"monsters":["Demon", "Infernalist"]},
+	{"name":"exevo mas san", "min_mana_percent":50, "priority":2, "min_monster_count":2, "cooldown":4}
+],
+"loot": []
+}

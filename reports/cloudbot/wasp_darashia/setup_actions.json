@@ -1,0 +1,88 @@
+{
+  "label_actions": [
+    {
+      "label": "check_honeycomb",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "honeycomb",
+        "amount": 10,
+        "label_jump": "not_enough_honeycombs",
+        "label_skip": "leave"
+      }
+    },
+    {
+      "label": "check_honeycomb",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "honeycomb",
+        "amount": 5,
+        "label_jump": "not_enough_honeycombs",
+        "label_skip": "leave"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 1,
+      "args": {
+        "coords_barrier": [
+          [
+            33230,
+            32412,
+            7
+          ],
+          [
+            33231,
+            32412,
+            7
+          ]
+        ]
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 1,
+      "args": {
+        "coords_barrier": [
+          [
+            33230,
+            32412,
+            7
+          ],
+          [
+            33231,
+            32412,
+            7
+          ]
+        ]
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

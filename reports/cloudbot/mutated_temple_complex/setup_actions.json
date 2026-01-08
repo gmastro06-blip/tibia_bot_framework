@@ -1,0 +1,57 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 30,
+      "max_interval": 100,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "enabled": false,
+      "alias": "equip_ring_alias",
+      "action": "equip_item",
+      "interval": 10,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f12",
+        "amount": 0,
+        "slot": "ring"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Mutated Bat",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Mutated Tiger",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 3,
+      "loot": true
+    }
+  ]
+}

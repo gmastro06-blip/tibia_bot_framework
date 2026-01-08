@@ -1,0 +1,73 @@
+{
+"general": {
+	"loot_type": "auto",
+	"loot_priority": "after",
+	"walk_type": "keys"
+},
+"script_options": {
+	"hours_leave":[9.5],
+	"skill_train": "distance",
+	"hunt_down":true,
+	"hunt_down2":false
+},
+"containers": {
+	"loot_bp":"Brocade Backpack"
+},
+"tools": {},
+"items": {
+	"strong mana potion": {"hotkey":"e", "use":"self"},
+    	"drill bolt": {"hotkey":"f10", "use":"equip"},
+	"life ring": {"hotkey": "f9", "use": "equip"},
+	"brown mushroom": {"hotkey":"f11", "use":"use"}
+},
+"spells": {
+	"exura san":"r",
+	"exura":"f4",
+	"exura gran":"f",
+	"exori con":"q",
+	"exori san":"1",
+	"exevo mas san":"2",
+	"utani hur":"v",
+	"utura":"R"
+},
+"healing": [
+	{"type":"hp", "below_percent":65, "use_spell":"exura san", "min_mana_percent":10,  "priority":3},
+	{"type":"hp", "below_percent":85, "use_spell":"exura gran", "min_mana_percent":10,  "priority":2},
+	{"type":"hp", "below_percent":95, "use_spell":"utura", "min_mana_percent":50, "priority":1, "cooldown":60},
+	{"type":"mp", "below_percent":70, "use_item":"strong mana potion", "priority":1}
+],
+"hunt_config": {
+	"cap_leave": 0,
+	"mana_name": "strong mana potion",
+	"take_mana": 190,
+	"mana_leave": 50,
+	"ammo_name": "drill bolt",
+	"take_ammo": 600,
+	"ammo_leave": 150
+},
+"label_actions": [],
+"persistent_actions": [
+	{"action":"drop_vials", "interval":60},
+	{"action":"use_hotkey", "interval":54, "use_in_battle":true, "args":{"hotkey":"f10"}},
+	{"action":"anti_paralyze", "interval":1, "args":["f4"]},
+	{"action":"stop_target_no_supplies", "interval": 15, "args":{"mana":false, "health":false, "cap":false, "rune":false, "ammo":true, "time":false}},
+	{"action":"eat_food", "interval":40, "args":{"hotkey":"f11"}},
+	{"action":"haste", "interval":40, "args":["v"]},
+	{"action": "equip_item", "interval": 30, "args": {"hotkey": "f9", "amount": 0, "slot": "ring"}},
+	{"action":"blacklist_coords", "interval":30, "args":{"coords_barrier":[[33334, 32696, 9], [33334, 32697, 9],[33334, 32698, 9],[33334, 32699, 9],[33334, 32700, 9],[33334, 32701, 9],[33334, 32702, 9],[33334, 32703, 9]]}}
+],
+"target_monsters": [
+	{"name":"Enlightened Of The Cult", "action":"distance", "min_dist":2, "max_dist":4, "priority":4, "loot":true},
+	{"name":"Adept Of The Cult", "action":"distance", "min_dist":2, "max_dist":4, "priority":3, "loot":true},
+	{"name":"Acolyte Of The Cult", "action":"distance", "min_dist":2, "max_dist":4, "priority":2, "loot":true},
+	{"name":"Novice Of The Cult", "action":"follow", "priority":1, "loot":true}
+],
+"target_spells": [
+	{"name":"exori san", "min_mana_percent":10, "priority":1, "cooldown":2,
+		"monsters":["Ghost"]},
+	{"name":"exori con", "min_mana_percent":10, "priority":1, "cooldown":2,
+		"monsters":["Adept Of The Cult", "Acolyte Of The Cult", "Novice Of The Cult", "Enlightened Of The Cult"]},
+	{"name":"exevo mas san", "min_mana_percent": 30, "priority": 3, "cooldown": 4, "min_monster_count": 4}
+],
+"loot": []
+}

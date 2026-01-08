@@ -1,0 +1,42 @@
+[
+  {
+    "line": 11,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 17,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 24,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 26,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 76,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 78,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 85,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 117,
+    "action": "end",
+    "raw": "action end"
+  }
+]

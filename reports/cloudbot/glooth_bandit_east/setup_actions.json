@@ -1,0 +1,189 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 4,
+        "min_count": 2
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 5,
+      "use_in_battle": true
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters_diamond_arrow",
+      "interval": 0.5,
+      "args": {
+        "count": 5
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Glooth Bandit",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Brigand",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Metal Gargoyle",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rustheap Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Walker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Bandit",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Brigand",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Metal Gargoyle",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rustheap Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Walker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Warlock",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

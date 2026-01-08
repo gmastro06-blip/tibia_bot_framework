@@ -1,0 +1,112 @@
+[
+  {
+    "line": 1,
+    "action": "debug",
+    "raw": "action debug"
+  },
+  {
+    "line": 7,
+    "action": "give_fish_captain",
+    "raw": "action give_fish_captain"
+  },
+  {
+    "line": 11,
+    "action": "buy_bait",
+    "raw": "action buy_bait"
+  },
+  {
+    "line": 13,
+    "action": "set_bait",
+    "raw": "action set_bait"
+  },
+  {
+    "line": 16,
+    "action": "go_up",
+    "raw": "action go_up"
+  },
+  {
+    "line": 18,
+    "action": "telescope",
+    "raw": "action telescope"
+  },
+  {
+    "line": 20,
+    "action": "go_down",
+    "raw": "action go_down"
+  },
+  {
+    "line": 24,
+    "action": "straight",
+    "raw": "action straight"
+  },
+  {
+    "line": 25,
+    "action": "repeat",
+    "raw": "action repeat"
+  },
+  {
+    "line": 27,
+    "action": "go_down",
+    "raw": "action go_down"
+  },
+  {
+    "line": 31,
+    "action": "starboard",
+    "raw": "action starboard"
+  },
+  {
+    "line": 32,
+    "action": "repeat",
+    "raw": "action repeat"
+  },
+  {
+    "line": 34,
+    "action": "go_down",
+    "raw": "action go_down"
+  },
+  {
+    "line": 38,
+    "action": "larboard",
+    "raw": "action larboard"
+  },
+  {
+    "line": 39,
+    "action": "repeat",
+    "raw": "action repeat"
+  },
+  {
+    "line": 41,
+    "action": "go_down",
+    "raw": "action go_down"
+  },
+  {
+    "line": 45,
+    "action": "speed",
+    "raw": "action speed"
+  },
+  {
+    "line": 46,
+    "action": "repeat",
+    "raw": "action repeat"
+  },
+  {
+    "line": 48,
+    "action": "go_down",
+    "raw": "action go_down"
+  },
+  {
+    "line": 51,
+    "action": "passage",
+    "raw": "action passage"
+  },
+  {
+    "line": 54,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 55,
+    "action": "end",
+    "raw": "action end"
+  }
+]

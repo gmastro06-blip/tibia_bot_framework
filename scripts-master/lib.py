@@ -1,0 +1,1605 @@
+''' User defined functions
+
+User defined functions 
+These functions can be used in the waypoint actions (actions.py) or during regular intervals (persistent_actions).
+'''
+import time
+from time import sleep
+from datetime import datetime
+from pytz import timezone
+import json
+import os, sys, random
+
+# Use sqm
+def use_sqm(client, sqm):
+    print('[Action] Use sqm', sqm)
+    x, y = client.gameboard.sqm_to_coordinate(*sqm)
+    client.click(x, y, button='right')
+    sleep(1)
+
+# Use hotkey at sqm
+def use_hotkey_at_sqm(client, hotkey, sqm):
+    print('[Action] Use hotkey', hotkey, 'at', sqm)
+    x, y = client.gameboard.sqm_to_coordinate(*sqm)
+    client.hotkey(hotkey)
+    sleep(0.3)
+    client.click(x, y, button='left')
+    sleep(1)
+
+# Use item at sqm (item must be assigned to a hotkey in setup.json)
+def use_item_at_sqm(client, item_name='sword', sqm=(0,0)):
+    hotkey = client.item_hotkeys[item_name]
+    use_hotkey_at_sqm(client, hotkey, sqm)
+
+# Use item from backpack to sqm. Item must be visible.
+def use_item_from_container_to_sqm(client, item_name='sword', sqm=(0,0)):
+    containers = client.get_opened_containers()
+    for container in containers:
+        num_slots = container.get_num_slots()
+        for slot in reversed(range(num_slots)):
+            if item_name in container.get_item_in_slot(slot):
+                print(f'[Action] Use item {item_name} in sqm {sqm}')
+                client.use_slot(container, slot)
+                client.move_mouse_sqm(sqm)
+                client.click_sqm(*sqm)
+                return
+
+# Move item from sqm to backpack.
+def get_item_from_sqm(client, sqm=(0,0), dest_container='Backpack'):
+    dest = client.get_container(dest_container)
+    if not dest:
+        print(f'[Action] Could not find backpack {dest_container} to hold items')
+    client.get_item_from_sqm(sqm, dest)
+
+# Drop item from backpack to sqm. Item must be visible.
+# use stack=True to drop a single item of the stack
+def drop_item_to_sqm(client, item_name='empty potion flask', stack=False, dest_sqm=(0,0)):
+    containers = client.get_opened_containers()
+    for container in containers:
+        num_slots = container.get_num_slots()
+        for slot in reversed(range(num_slots)):
+            if item_name in container.get_item_in_slot(slot):
+                print(f'[Action] Dropping item {item_name} to {dest_sqm}')
+                client.drop_item_from_container(container, slot, stack=stack, sqm=dest_sqm)
+                return
+    print(f'[Action] Could not find {item_name}')
+
+def drop_equip(client, slot='ammunition'):
+    client.drop_item_from_container(client.equips, slot)
+
+# Warning: Do not use with same interval of other persistents like equip_item, refill_ammo...
+def drop_items(client, names=[]):
+    print('[Action] Call drop items', names)
+    monster_count = client.battle_list.get_monster_count()
+    if monster_count < 1:
+        containers = client.get_opened_containers()
+        for container in containers:
+            num_slots = container.get_num_slots()
+            for slot in reversed(range(num_slots)):
+                item_in_slot = container.get_item_in_slot(slot) 
+                for name in names:
+                    client.heal()
+                    if name in item_in_slot:
+                        print('[Action] Dropping', name)
+                        client.drop_item_from_container(container, slot)
+                        client.sleep(0.1, 0.12)
+
+# Drop vials from backpack. Vials must be visible.
+# Will drop only if capacity < cap and if there are no monsters on screen.
+def drop_vials(client, cap=500, drop_stacks=4, monster_count=1):
+    m_count = client.battle_list.get_monster_count()
+    if m_count < monster_count and client.get_cap() <= cap:
+        containers = client.get_opened_containers()
+        for container in containers:
+            num_slots = container.get_num_slots()
+            for slot in reversed(range(num_slots)):
+                if 'empty potion flask' in container.get_item_in_slot(slot):
+                    print('[Action] Dropping vial')
+                    client.drop_item_from_container(container, slot)
+                    sleep(0.3)
+                    drop_stacks -= 1
+                    if drop_stacks <= 0:
+                        break
+
+# Use rune if monsters hit greater than threshold
+# rune must be in items
+def throw_rune_if_monsters(client, min_mp, rune_name, min_monsters_hit=3, selected_monsters='all', use_with_target_off=True):
+    rune_hotkey = client.item_hotkeys.get(rune_name, 'none')
+    if rune_hotkey == 'none':
+        print(f'[Action] Rune {rune_name} is not configured in items')
+    monster_list = client.battle_list.get_monster_list()
+    if selected_monsters != 'all':
+        selected_monsters = [''.join([c for c in m if c.isalpha()]) for m in selected_monsters]
+        monster_list = [m for m in monster_list if m in selected_monsters]
+
+    if len(monster_list) < min_monsters_hit:
+        return
+    if not use_with_target_off and not client.target_on:
+        return
+
+    creatures_sqm = client.gameboard.get_sqm_monsters()
+    client.mark_allowed_active_scan(creatures_sqm) 
+    reachable_creatures_sqm = [sqm for sqm in creatures_sqm if client.minimap.is_reachable(sqm)]
+    best_sqm, monsters_hit = client.find_sqm_max_hit(reachable_creatures_sqm)
+    hp_percentage, mp_percentage = client.status_bar.get_percentage()
+    if mp_percentage > min_mp and monsters_hit >= min_monsters_hit:
+        print(f'[Action] Throw rune {rune_name} in {best_sqm} to hit {monsters_hit} monsters')
+        client.hotkey(rune_hotkey)
+        sleep(0.1)
+        client.click_sqm(*best_sqm)
+
+# Scan bodies on screen and mark them to loot
+def scan_bodies(client, dist=5):
+    if client.loot_priority != 'skip' or (client.track_loot and client.loot_drop_tracker):
+        print(f'[Action] Scan corpses around {dist} sqm')
+        client.mark_bodies_near_sqm((0,0), dist=dist)
+
+# Set persistent interval
+## Use 999999 or high number to turn off
+def set_persistent_interval(client, persistent_alias, interval=60):
+    for persistent in client.persistent_actions:
+        if persistent.get('alias') == persistent_alias:
+            print(f'[Action] Set persistent {persistent_alias} interval to {interval}')
+            persistent['interval'] = interval
+            break
+
+# Enable a persistent action
+def set_persistent_enabled(client, persistent_alias):
+    for persistent in client.persistent_actions:
+        if persistent.get('alias') == persistent_alias:
+            print(f'[Action] Enable persistent {persistent_alias}')
+            persistent['enabled'] = True
+            break
+
+# Disable a persistent action
+def set_persistent_disabled(client, persistent_alias):
+    for persistent in client.persistent_actions:
+        if persistent.get('alias') == persistent_alias:
+            print(f'[Action] Disable persistent {persistent_alias}')
+            persistent['enabled'] = False 
+            break
+
+# Change persistent args by using alias
+def set_persistent_args(client, persistent_alias, key, value):
+    for persistent in client.persistent_actions:
+        if persistent.get('alias', 'none') == persistent_alias:
+            print(f'[Action] Set persistent {persistent_alias} arg {key}:{value}')
+            persistent['args'][key] = value
+            break
+
+# Set action for target monster
+def set_target_action(client, selected_monsters='all', action='follow'):
+    if selected_monsters != 'all':
+        selected_monsters = [m.replace(' ', '') for m in selected_monsters]
+    for monster in client.target_conf:
+        if selected_monsters == 'all' or monster in selected_monsters:
+            client.target_conf[monster]['action'] = action
+    print(f'[Action] Set target config of monsters {selected_monsters} to {action}')
+
+# Change target mode of monsters if number of selected_monsters in screen is greater or equal than count.
+# monster_action_map is a list of monsters and actions before and after.
+def swap_target_action(client, selected_monsters='all', count=3, action_below='distance', action_above='follow', only_monsters='all'):
+    monster_list = client.battle_list.get_monster_list(filter_by=client.target_conf.keys())
+    if selected_monsters != 'all':
+        selected_monsters = [m.replace(' ', '') for m in selected_monsters]
+        monster_list = [m for m in monster_list if m in selected_monsters]
+    if only_monsters != 'all':
+        only_monsters = [m.replace(' ', '') for m in only_monsters]
+
+    monster_count = len(monster_list)
+
+    set_action_below=False
+    set_action_above=False
+    for monster in client.target_conf:
+        if only_monsters == 'all' or monster in only_monsters:
+            if monster_count >= count:
+                if client.target_conf[monster]['action'] != action_above:
+                    set_action_above=True
+                    client.target_conf[monster]['action'] = action_above
+            else:
+                if client.target_conf[monster]['action'] != action_below:
+                    set_action_below=True
+                    client.target_conf[monster]['action'] = action_below
+    if set_action_above:
+        print(f'[Action] Set target of {only_monsters} monsters to {action_above}')
+    if set_action_below:
+        print(f'[Action] Set target of {only_monsters} monsters to {action_below}')
+
+# Attack distance if too many monsters on screen
+def distance_monster_count_above(client, selected_monsters='all', count=3):
+    print('[Action] Deprecated, use swap_target_action')
+    monster_list = client.battle_list.get_monster_list(filter_by=client.target_conf.keys())
+    monster_count = len(monster_list)
+
+    if selected_monsters != 'all':
+        selected_monsters = [m.replace(' ', '') for m in selected_monsters]
+
+    follow=True
+    for monster in client.target_conf:
+        if selected_monsters == 'all' or monster in selected_monsters:
+            if monster_count >= count:
+                follow=False
+                client.target_conf[monster]['action'] = 'distance'
+            else:
+                client.target_conf[monster]['action'] = 'follow'
+    if follow:
+        print('[Action] Follow monsters')
+    else:
+        print('[Action] Distance attack lure')
+
+# Attack distance until certain amount of monsters on screen, then follow
+def distance_attack_lure(client, selected_monsters='all', count=4):
+    print('[Action] Deprecated, use swap_target_action')
+    monster_list = client.battle_list.get_monster_list(filter_by=client.target_conf.keys())
+    monster_count = len(monster_list)
+
+    if selected_monsters != 'all':
+        selected_monsters = [m.replace(' ', '') for m in selected_monsters]
+
+
+    follow=False
+    for monster in client.target_conf:
+        if selected_monsters == 'all' or monster in selected_monsters:
+            if monster_count >= count:
+                follow=True
+                client.target_conf[monster]['action'] = 'follow'
+            elif monster_count < 1 and not client.battle_list.is_targetting():
+                client.target_conf[monster]['action'] = 'distance'
+            else:
+                return
+    if follow:
+        print('[Action] Follow monsters')
+    else:
+        print('[Action] Distance attack lure')
+
+# Cast spell if monsters around
+## Monsters_count is deprecated, use monster_count
+def cast_spell_if_monsters(client, min_mp, spell_hotkey, monster_count=3, monsters_count=3, selected_monsters='all', dist=1, use_with_target_off=False):
+    if monster_count == 3:
+        print('[Action] cast_spell_if_monsters monsters_count is deprecated, use monster_count')
+        monster_count = monsters_count
+    monster_list = client.battle_list.get_monster_list()
+    if selected_monsters != 'all':
+        selected_monsters = [''.join([c for c in m if c.isalpha()]) for m in selected_monsters]
+        monster_list = [m for m in monster_list if m in selected_monsters]
+
+    if len(monster_list) < monster_count:
+        return
+    if not use_with_target_off and not client.target_on:
+        return
+
+    creatures_sqm = client.gameboard.get_sqm_monsters()
+    hp_percentage, mp_percentage = client.status_bar.get_percentage()
+
+    if mp_percentage > min_mp and sum(max(abs(x[0]), abs(x[1])) <= dist for x in creatures_sqm) >= monster_count:
+        print(f'[Action] Cast spell in hotkey {spell_hotkey}')
+        client.hotkey(spell_hotkey)
+
+# Use hotkey if condition is active
+# conditions is one of ['poisoned', 'bleeding', 'cursed', 'mana', 'paralyzed', 'electrified', 'battle', 'haste', 'drunk', 'hungry', 'protected']
+def use_hotkey_if_condition(client, hotkey='f10', condition='poisoned'):
+    conditions = client.condition_bar.get_condition_list()
+    if condition in conditions:
+        print(f'[Action] Condition {condition} is active, using hotkey {hotkey}')
+        client.hotkey(hotkey)
+
+# Anti paralyze
+def anti_paralyze(client, hotkey='f2'):
+    use_hotkey_if_condition(client, hotkey, 'paralyzed')
+
+# Anti poison
+def anti_poison(client, hotkey='f10'):
+    use_hotkey_if_condition(client, hotkey, 'poisoned')
+
+# Equip dwarven ring then unequip it (does not work)
+def anti_drunk(client, item_equip, item_unequip=None, slot='ring'):
+    conditions = client.condition_bar.get_condition_list()
+
+    equip_item_count = client.get_hotkey_item_count(client.items[item_equip])
+    equip_hotkey = client.item_hotkeys[item_equip]
+
+    item_name = client.get_name_item_in_slot(client.equips, slot)
+
+    if 'drunk' in conditions:
+        if item_name != item_equip and equip_item_count > 0:
+            print('[Action] Equip dwarven ring')
+            client.hotkey(equip_hotkey)
+    else:
+        print('[Action] Item equipped', item_name)
+        if item_name == item_equip:
+            if item_unequip is None:
+                print('[Action] Unequip dwarven ring')
+                client.hotkey(equip_hotkey)
+            else:
+                unequip_hotkey = client.item_hotkeys[item_unequip]
+                print('[Action] Equip', item_unequip)
+                client.hotkey(unequip_hotkey)
+
+def wait(client, tmin=1, tmax=1.2):
+    client.sleep(tmin, tmax, heal=True)
+
+# Wait until mana is above mana_perc
+# If hotkey is none, will not refill mana and some other way to refill mana should be active.
+def wait_mana_percentage_below(client, mana_perc, hotkey=None, monster_count_below=1):
+    monster_count = client.battle_list.get_monster_count()
+    while monster_count < monster_count_below:
+        _, mp_percentage = client.status_bar.get_percentage()
+        client.heal()
+        if mp_percentage > mana_perc:
+            return
+        if hotkey:
+            client.hotkey(hotkey)
+            client.sleep(0.5, 0.7)
+        client.sleep(0.2, 0.3, heal=True)
+
+def recover_full_mana(client, hotkey='e', monster_count_below=1):
+    monster_count = client.battle_list.get_monster_count()
+    hp_percentage, mp_percentage = client.status_bar.get_percentage()
+    if monster_count < monster_count_below and mp_percentage < 95:
+        print(f'[Action] Recover mana {hotkey}')
+        client.use_potion(hotkey)
+
+# Use hotkey
+def use_hotkey(client, hotkey='f11'):
+    client.hotkey(hotkey)
+
+# Deprecated, use function use_hotkey
+def eat_food(client, hotkey='f11'):
+    food_hotkey = hotkey
+    client.hotkey(food_hotkey)
+
+# Cast haste
+def haste(client, hotkey='v'):
+    spell_hotkey = hotkey
+    monster_count = client.battle_list.get_monster_count()
+    conditions = client.condition_bar.get_condition_list()
+    if monster_count < 1 and 'haste' not in conditions:
+        client.hotkey(spell_hotkey)
+
+# Equip item
+def equip_item(client, hotkey='f10', selected_monsters='all', dist=10, amount=1, slot='ring', unequip=True):
+    monster_list = client.battle_list.get_monster_list()
+    if selected_monsters != 'all':
+        selected_monsters = [''.join([c for c in m if c.isalpha()]) for m in selected_monsters]
+        monster_list = [m for m in monster_list if m in selected_monsters]
+
+    creatures_sqm = client.gameboard.get_sqm_monsters()
+    monster_count = len(monster_list)
+    if len(creatures_sqm) >= monster_count: # Found all monsters on screen
+        near_monster_count = sum(max(abs(x[0]), abs(x[1])) <= dist for x in creatures_sqm)
+        monster_count =  min(monster_count, near_monster_count)
+    
+    item_name = client.equips.get_item_in_slot(slot)
+
+    if monster_count >= amount and item_name == 'none':
+        print('[Action] Equip item')
+        client.hotkey(hotkey)
+    elif unequip and monster_count < amount and item_name != 'none':
+        print('[Action] Unequip item')
+        client.hotkey(hotkey)
+
+# Equip item if conditions, and equip back
+def swap_equip(client, item_equip, item_unequip, selected_monsters='all', dist=10, amount=1, slot='ring', hp_perc=100):
+    hp_percentage, _ = client.status_bar.get_percentage()
+
+    monster_list = client.battle_list.get_monster_list()
+    if selected_monsters != 'all':
+        selected_monsters = [''.join([c for c in m if c.isalpha()]) for m in selected_monsters]
+        monster_list = [m for m in monster_list if m in selected_monsters]
+
+    creatures_sqm = client.gameboard.get_sqm_monsters()
+    #print('Monsters:', monster_list)
+    monster_count = len(monster_list)
+    if len(creatures_sqm) >= monster_count: # Found all monsters on screen
+        near_monster_count = sum(max(abs(x[0]), abs(x[1])) <= dist for x in creatures_sqm)
+        monster_count =  min(monster_count, near_monster_count)
+    
+    equip_item_count = client.get_hotkey_item_count(client.items[item_equip])
+    equip_hotkey = client.item_hotkeys[item_equip]
+
+    unequip_hotkey = client.item_hotkeys[item_unequip]
+
+    item_name = client.equips.get_item_in_slot(slot)
+    if monster_count >= amount and equip_item_count > 0 and hp_percentage < hp_perc and item_name != item_equip:
+        print(f'[Action] Equip item {item_name}')
+        client.hotkey(equip_hotkey)
+    elif monster_count < amount and item_name != item_unequip:
+        print(f'[Action] Unequip item {item_name}')
+        client.hotkey(unequip_hotkey)
+
+# Cast spell if mana full
+def cast_spell(client, hotkey='v', min_mp=98):
+    spell_hotkey = hotkey
+    hp_percentage, mp_percentage = client.status_bar.get_percentage()
+    if mp_percentage > min_mp:
+        client.hotkey(spell_hotkey)
+
+# Refill spear using hotkey
+def refill_ammo(client, ammo_name="spear", equip_slot="weapon", min_amount=1):
+    refill_hotkey_slot = client.items[ammo_name]
+    refill_hotkey = client.item_hotkeys[ammo_name]
+
+    ammo_count = client.equips.get_count_item_in_slot(equip_slot)
+
+    print('[Action] Ammo count', ammo_count)
+    if ammo_count is None or ammo_count < min_amount:
+        client.hotkey(refill_hotkey)
+
+# Refill spear using hotkey
+def refill_priority_ammo(client, priority_ammo_name="royal spear", regular_ammo_name="spear", equip_slot="weapon", min_amount=1):
+    priority_ammo_slot = client.items[priority_ammo_name]
+    priority_ammo_hotkey = client.item_hotkeys[priority_ammo_name]
+
+    ammo_used = client.get_name_item_in_slot(client.equips, equip_slot)
+
+    priority_ammo_count = client.get_hotkey_item_count(priority_ammo_slot)
+    print(f'[Action] {priority_ammo_name} count', priority_ammo_count)
+    if priority_ammo_count > 0: 
+        if not ammo_used.startswith(priority_ammo_name): 
+            print(f'[Action] Equip {priority_ammo_name} into {equip_slot}')
+            client.hotkey(priority_ammo_hotkey)
+    else:
+        # Regular ammo
+        ammo_count = client.equips.get_count_item_in_slot(equip_slot)
+        if ammo_count is None:
+            if ammo_used == regular_ammo_name:
+                ammo_count = 1
+            else:
+                ammo_count = 0
+        if ammo_used is None or ammo_count < min_amount:
+            regular_ammo_hotkey = client.item_hotkeys[regular_ammo_name]
+            print(f'[Action] Equip {regular_ammo_name} into {equip_slot}')
+            client.hotkey(regular_ammo_hotkey)
+
+# Refill quiver using hotkey
+def refill_ammo_to_quiver(client, ammo_name="bolt", quiver_slots=6):
+    refill_hotkey_slot = client.items[ammo_name]
+    refill_hotkey = client.item_hotkeys[ammo_name]
+
+    ammo_count = client.get_hotkey_item_count(refill_hotkey_slot)
+    quiver_count = client.equips.get_count_item_in_slot("shield")
+
+    if (quiver_count % 100) >= quiver_slots:
+        print('[Action] Quiver is full')
+        return
+
+    if ammo_count > quiver_count:
+        print('[Action] Refill quiver')
+        client.hotkey(refill_hotkey)
+
+# Move a single stack of ammo_name into quiver.
+# Use singular name for ammo_name e.g. diamond arrow.
+def refill_quiver(client, quiver_name='Quiver', ammo_name='diamond arrow'):
+    ammo_hotkey_slot = client.items[ammo_name]
+    ammo_count = client.get_hotkey_item_count(ammo_hotkey_slot)
+
+    quiver = client.get_container(quiver_name)
+    if not quiver:
+        print(f'[Action] {quiver} container must be open to refill')
+        return
+    quiver_slots = quiver.get_num_slots()
+    empty_slots = 0
+    for slot in reversed(range(quiver_slots)):
+        if quiver.get_item_in_slot(slot) == 'none':
+            empty_slots += 1
+
+    if empty_slots == 0 or ammo_count < 100 * (quiver_slots - empty_slots):
+        print(f'[Action] Quiver is already filled')
+        return
+
+    containers = client.get_opened_containers_with_name()
+    for container, name in containers:
+        if 'Quiver' in name:
+            continue
+        num_slots = container.get_num_slots()
+        for slot in reversed(range(num_slots)):
+            if ammo_name in container.get_item_in_slot(slot):
+                print(f'[Action] Move {ammo_name} from {name} to {quiver_name}')
+                client.take_item_from_slot(container, slot, dest=quiver)
+                sleep(0.3)
+                return
+
+def conjure_diamond_arrows(client):
+    print('[Action] This is deprecated, conjure diamond arrows does not exist')
+    return
+
+# Function to levitate
+def levitate(client, direction, hotkey):
+    minimap = client.minimap.refresh()
+    if minimap is None:
+        return 
+    map_status = hash(minimap.tostring())
+
+    key = {'south':'s', 'north':'w', 'east':'d', 'west':'a'}[direction]
+    sqms = {'south':(0,-1), 'north':(0,1), 'east':(1,0), 'west':(-1,0)}
+    sqm = sqms[direction]
+    if not client.minimap.is_sqm_walkable(sqm):
+        client.press(key)
+        sleep(0.5)
+        new_minimap = client.minimap.refresh()
+        if new_minimap is None:
+            return 
+        new_map_status = hash(new_minimap.tostring())
+
+        if map_status == new_map_status:
+            client.hotkey('ctrl', key)
+            sleep(0.3)
+            client.hotkey(hotkey)
+            sleep(0.3)
+    else:
+        client.hotkey('ctrl', key)
+        sleep(0.3)
+        client.hotkey(hotkey)
+        sleep(0.3)
+
+def lure_monsters(client, count=3, min_count=1, drop_above_hp_perc=0, wait=False):
+    #monster_count = client.battle_list.get_monster_count()
+    monster_list = client.battle_list.get_monster_list(filter_by=client.target_conf.keys())
+    monster_hp_list = client.battle_list.get_monster_hp_list(filter_by=client.target_conf.keys(), above_hp_perc=drop_above_hp_perc)
+    monster_count_above_hp_perc = len(monster_hp_list)
+    monster_count = len(monster_list)
+    if not client.target_on and monster_count >= count:
+        client.target_on = True
+        print(f'[Action] Target on: monster count {monster_count}')
+    elif client.target_on and monster_count < min_count and monster_count_above_hp_perc == monster_count:
+            client.target_on = False
+            print(f'[Action] Target off: monster count {monster_count}')
+    elif wait and (not client.target_on and min_count <= monster_count < count):
+        #client.hotkey('esc')
+        creatures_sqm = client.gameboard.get_sqm_monsters()
+        reachable_creatures_sqm = [sqm for sqm in creatures_sqm if client.minimap.is_reachable(sqm)]
+        if len(monster_list) > 0 and len(reachable_creatures_sqm) > 0:
+            x, y = zip(*reachable_creatures_sqm)
+            if any(abs(l) >= 5 for l in x) or any(abs(l) >= 4 for l in y):
+                print('[Action] Wait lure')
+                client.heal()
+                client.sleep(1)
+
+def lure_monsters_diamond_arrow(client, count=3, min_count=1, wait=False):
+    ammo_used = client.get_name_item_in_slot(client.equips, 'ammunition')
+    if ammo_used in ('diamond arrows', 'burst arrows'):
+        lure_monsters(client, count, min_count, wait)
+    # Regular arrows no lure
+    else:
+        client.target_on = True
+
+    # Optional hunt distance
+    #if monster_count > 2:
+    #    for monsters in client.target_conf.values():
+    #        monsters['action'] = 'follow'
+    #if ammo_used != 'diamond arrows' and monster_count < 3:
+    #    for monsters in client.target_conf.values():
+    #        monsters['action'] = 'distance'
+
+def wait_lure(client, direction_movement='all', lure_amount=3, dist=3, max_wait=2, min_left_behind=1):
+    def monsters_around(creatures_sqm, dist=2):
+        return sum(max(abs(x[0]), abs(x[1])) <= dist for x in creatures_sqm)
+
+    def dist_sqm(sqm):
+        return max(abs(sqm[0]), abs(sqm[1]))
+
+    # Indicate how many monsters will be left behind if continue walking. 
+    # monsters are left behind if they are opposite to the direction char is going to
+    # directions: n, e, s, w
+    def monsters_left_behind(creatures_sqm, direction_movement='all'):
+        if direction_movement == 'n':
+            return sum(m[1] < 0 and dist_sqm(m) > dist for m in creatures_sqm) 
+        elif direction_movement == 's':
+            return sum(m[1] > 0 and dist_sqm(m) > dist for m in creatures_sqm) 
+        elif direction_movement == 'e':
+            return sum(m[0] < 0 and dist_sqm(m) > dist for m in creatures_sqm) 
+        elif direction_movement == 'w':
+            return sum(m[0] > 0 and dist_sqm(m) > dist for m in creatures_sqm) 
+        elif direction_movement == 'away':
+            return sum(dist_sqm(m) > dist for m in creatures_sqm)
+        else:
+            return len(creatures_sqm)
+
+    wait_start = time.time()
+    t = time.time()
+    while time.time() < wait_start + max_wait:
+        if time.time() - t > 0.2:
+            client.heal()
+        t = time.time()
+        creatures_sqm = client.gameboard.get_sqm_monsters()
+        reachable_creatures_sqm = [sqm for sqm in creatures_sqm if client.minimap.is_reachable(sqm)]
+        m_around = monsters_around(reachable_creatures_sqm, dist=dist)
+        if client.battle_list.get_monster_count() < min_left_behind:
+            print('[Action] Not enough monsters around to lure')
+            break
+
+        if m_around < lure_amount:
+            m_left_behind = monsters_left_behind(reachable_creatures_sqm, direction_movement=direction_movement)
+            print('[Action] Monsters left behind', m_left_behind)
+            if m_left_behind >= min_left_behind:
+                print('[Action] Waiting lure')
+            else:
+                break
+        else:
+            print(f'[Action] Lured {m_around} monsters in range {dist}')
+            break
+
+def withdraw_item_from_stash(client, item_name, amount, hotkey_item=None):
+    item_count = client.get_hotkey_item_count(client.items[item_name])
+    if item_count >= amount:
+        print('[Stash] Already has enough', item_name)
+        return True
+    client.withdraw_item_from_stash(item_name, amount=amount - item_count)
+    # Check if withdraw was succesfull
+    item_count = client.get_hotkey_item_count(client.items[item_name])
+    if item_count >= amount:
+        print(f'[Stash] Count {item_name}: {item_count}')
+        return True
+    print('[Stash] Could not withdraw', amount, 'x', item_name, 'from stash')
+    return False
+
+def withdraw_item_from_depot_to_backpack(client, item_name, depot_num, backpack_name, amount, stack=True):
+    src = client.open_depot(depot_num)
+    if not src:
+        print('[Action] Could not open depot to withdraw')
+        return False
+
+    dest = client.get_container(backpack_name)
+    if not dest:
+        print('[Action] Could not find backpack to hold items')
+        return False
+
+    # Open depot num
+    client.use_slot(src, depot_num - 1) # open depot_num
+    sleep(0.5)
+
+    # Try 5 times to withdraw item
+    for i in range(5):
+        item_count = client.get_hotkey_item_count(client.items[item_name])
+        if item_count >= amount:
+            client.return_container(src)
+            print('[Action] Withdrawn', item_name)
+            return True
+
+        # Move item from src to dest
+        if stack == False:
+            for i in range(max(0, amount - item_count)):
+                client.take_item_from_slot(src, src_slot=0, dest=dest)
+                sleep(0.2)
+        else:
+            while max(0, amount - item_count) > 100:
+                client.take_item_from_slot(src, src_slot=0, dest=dest)
+                amount -= 100
+                sleep(0.1)
+            client.take_stack_from_slot(src, src_slot=0, dest=dest, amount=amount - item_count)
+            sleep(0.2)
+        sleep(0.3)
+
+    client.return_container(src)
+
+    print('[Action] Could not withdraw', item_name, '. Make sure this item is in the depot and that the character can hold that amount')
+    return False
+
+# Move item or container to stash
+def stash_item_from_slot(client, src, src_slot):
+    dest = client.open_locker()
+    if not dest:
+        print('[Action] Could not find locker')
+        return False
+
+    client.take_item_from_slot(src, src_slot, dest, dest_slot=1)
+    return True
+
+# Deposit all items from backpack to depot
+def deposit_all_from_backpack_to_depot(client, backpack_name, depot_num):
+    items = None
+    path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "../scripts/items.json")
+    with open(path) as f:
+        content = f.read()
+        items = json.loads(content)
+    if items is None:
+        print('Failed to load item list')
+        return False
+
+    sort_deposit = client.script_options.get('sort_deposit', dict()) 
+
+    src = client.get_container(backpack_name)
+    if not src:
+        print('[Action] Could not find backpack', backpack_name, 'with items')
+        return False
+
+    dest = client.open_depot(max([depot_num, *sort_deposit.values()]))
+    if not dest:
+        print('[Action] Could not open depot to deposit')
+        return False
+
+    enter = 0
+    tries = 32
+    while not src.is_empty() and tries > 0 and enter < 20: 
+        tries -= 1
+        item_name = client.get_name_item_in_slot(src, 0)
+        if item_name != backpack_name.lower():
+            depot_dest = depot_num
+            for npc in items.keys():
+                if item_name in items[npc]:
+                    depot_dest = sort_deposit.get(npc, depot_num)
+                    break
+            print(f'[Action] Deposit item {item_name} to depot {depot_num}')
+            client.take_item_from_slot(src, 0, dest, dest_slot=depot_dest - 1)
+        else:
+            enter += 1
+            client.use_slot(src, 0)
+            sleep(0.4)
+            tries = 32
+        sleep(0.4)
+
+    if tries < 0 or enter >= 20:
+        return False
+
+    for i in range(enter):
+        client.return_container(src)
+        sleep(0.4)
+    return True
+
+# Will reach npc and say 'hi' already. So don't put 'hi' in list of words.
+def talk_npc(client, list_words, reach=True):
+    client.npc_say(list_words, reach=reach)
+
+# This will send text in local chat.
+def say(client, sentence):
+    client.say(sentence)
+
+def npc_refill(client, mana=False, health=False, ammo=False, rune=False, food=False):
+    buy_list_names = []
+    buy_list_count = []
+    if mana:
+        mana_name, take_mana = client.hunt_config['mana_name'], client.hunt_config['take_mana']
+        mana_count = client.get_hotkey_item_count(client.items[mana_name])
+        buy_list_names.append(mana_name)
+        buy_list_count.append(take_mana - mana_count)
+    if health:
+        health_name, take_health = client.hunt_config['health_name'], client.hunt_config['take_health']
+        health_count = client.get_hotkey_item_count(client.items[health_name])
+        buy_list_names.append(health_name)
+        buy_list_count.append(take_health - health_count)
+
+        if 'health_name2' in client.hunt_config.keys():
+            health_name2, take_health2 = client.hunt_config['health_name2'], client.hunt_config['take_health2']
+            health_count2 = client.get_hotkey_item_count(client.items[health_name2])
+            buy_list_names.append(health_name2)
+            buy_list_count.append(take_health2 - health_count2)
+    if rune:
+        rune_name, take_rune = client.hunt_config['rune_name'], client.hunt_config['take_rune']
+        rune_count = client.get_hotkey_item_count(client.items[rune_name])
+        buy_list_names.append(rune_name)
+        buy_list_count.append(take_rune - rune_count)
+
+        if 'rune_name2' in client.hunt_config.keys():
+            rune_name2, take_rune2 = client.hunt_config['rune_name2'], client.hunt_config['take_rune2']
+            rune_count2 = client.get_hotkey_item_count(client.items[rune_name2])
+            buy_list_names.append(rune_name2)
+            buy_list_count.append(take_rune2 - rune_count2)
+    if ammo:
+        ammo_name, take_ammo = client.hunt_config['ammo_name'], client.hunt_config['take_ammo']
+        ammo_count = client.get_hotkey_item_count(client.items[ammo_name])
+        buy_list_names.append(ammo_name)
+        buy_list_count.append(take_ammo - ammo_count)
+        
+    if food:
+        food_name, take_food = client.hunt_config['food_name'], client.hunt_config['take_food']
+        food_count = client.get_hotkey_item_count(client.items[food_name])
+        buy_list_names.append(food_name)
+        buy_list_count.append(take_food - food_count)
+
+    print('[Action] Buying', list(zip(buy_list_names, buy_list_count)))
+    say = None
+    if (mana or health) and not rune and not ammo and not food:
+        print('[Action] Buying only potions')
+        say = ['potions']
+    elif rune and not mana and not health and not ammo and not food:
+        print('[Action] Buying only runes')
+        say = ['runes']
+    success = client.buy_items_from_npc(buy_list_names, buy_list_count, say=say)
+    if not success:
+        print('[Action] Failed to buy one or more items')
+
+def buy_items_npc(client, item_list_name, item_list_count):
+    print('[Action] Buying', list(zip(item_list_name, item_list_count)))
+    success = client.buy_items_from_npc(item_list_name, item_list_count)
+    if not success:
+        print('[Action] Failed to buy one or more items')
+
+def use_imbuing_shrine(client, sqm=None):
+    imbuements = client.script_options['imbuements']
+    for imbuement in imbuements:
+        print('[Action] Checking', imbuement['equip_slot'])
+        active_imbuements = client.get_imbuements_equip(imbuement['equip_slot'])
+        print('Active', active_imbuements)
+        if active_imbuements:
+            if imbuement['name'] in active_imbuements:
+                print('Imbuement', imbuement['name'], 'active')
+            else:
+                print('Equip', imbuement['equip_slot'], 'has no', imbuement['name'], 'active')
+                for i in range(1, 4):
+                    try:
+                        shrine = client.use_imbuing_shrine(imbuement['equip_slot'], sqm=sqm)
+                        if shrine:
+                            shrine.imbue_item(imbuement['type'], imbuement['name'].split()[0])
+                            break
+                        else:
+                            print('Imbuing shrine not found')
+                    except Exception as e:
+                        print('Failed to imbue item', e)
+
+def time_leave(client):
+    cest = timezone('Europe/Berlin')
+    now = datetime.now(cest)
+    print('Current time', now)
+    for h in client.script_options.get('hours_leave', []):
+        hour_leave = datetime(now.year, now.month, now.day, round(h - (h%1)), round(60 * (h % 1)), 0, tzinfo=now.tzinfo)
+        delta_mins = (now - hour_leave).total_seconds() / 60
+        if 0 < delta_mins < 60:
+            print('Now:', now, 'Leave check:', hour_leave)
+            return True
+    return False
+
+def check(client, mana=True, health=True, cap=True, rune=False, ammo=False, time=False, other=True):
+    if client.force_resupply:
+        print('[Action] Force Resupply')
+        return False
+    if client.force_train:
+        print('[Action] Force Train')
+        return False
+    success_msg = [] 
+    fail_msg = [] 
+    mana_check = health_check = cap_check = ammo_check = rune_check = time_check = True
+    if mana:
+        mana_name, take_mana = client.hunt_config['mana_name'], client.hunt_config['take_mana']
+        mana_count = client.get_hotkey_item_count(client.items[mana_name])
+        mana_leave = client.hunt_config['mana_leave']
+        mana_check = mana_count > mana_leave
+        if mana_check:
+            success_msg.append(f'Mana: {mana_count}/{mana_leave}')
+        else:
+            fail_msg.append(f'Mana: {mana_count}/{mana_leave}')
+
+    if health:
+        health_name, take_health = client.hunt_config['health_name'], client.hunt_config['take_health']
+        health_count = client.get_hotkey_item_count(client.items[health_name])
+        health_leave = client.hunt_config['health_leave']
+        health_check = health_count > health_leave
+        if health_check:
+            success_msg.append(f'Health: {health_count}/{health_leave}')
+        else:
+            fail_msg.append(f'Health: {health_count}/{health_leave}')
+
+        if 'health_name2' in client.hunt_config.keys():
+            health_name2, take_health2 = client.hunt_config['health_name2'], client.hunt_config['take_health2']
+            health_count2 = client.get_hotkey_item_count(client.items[health_name2])
+            health_leave2 = client.hunt_config['health_leave2']
+            health_check2 = health_count2 > health_leave2
+            if health_check2:
+                success_msg.append(f'Health2: {health_count2}/{health_leave2}')
+            else:
+                fail_msg.append(f'Health2: {health_count2}/{health_leave2}')
+            health_check = health_check and health_check2
+    if rune:
+        rune_name, take_rune = client.hunt_config['rune_name'], client.hunt_config['take_rune']
+        rune_count = client.get_hotkey_item_count(client.items[rune_name])
+        rune_leave = client.hunt_config['rune_leave']
+        rune_check = rune_count > rune_leave
+        if rune_check:
+            success_msg.append(f'Rune: {rune_count}/{rune_leave}')
+        else:
+            fail_msg.append(f'Rune: {rune_count}/{rune_leave}')
+
+        if 'rune_name2' in client.hunt_config.keys():
+            rune_name2, take_rune2 = client.hunt_config['rune_name2'], client.hunt_config['take_rune2']
+            rune_count2 = client.get_hotkey_item_count(client.items[rune_name2])
+            rune_leave2 = client.hunt_config['rune_leave2']
+            rune_check2 = rune_count2 > rune_leave2
+            if rune_check2:
+                success_msg.append(f'Rune2: {rune_count2}/{rune_leave2}')
+            else:
+                fail_msg.append(f'Rune2: {rune_count2}/{rune_leave2}')
+            rune_check = rune_check and rune_check2
+    if ammo:
+        ammo_name, take_ammo = client.hunt_config['ammo_name'], client.hunt_config['take_ammo']
+        ammo_count = client.get_hotkey_item_count(client.items[ammo_name])
+        ammo_leave = client.hunt_config['ammo_leave']
+        ammo_check = ammo_count > ammo_leave
+        if ammo_check:
+            success_msg.append(f'Ammo: {ammo_count}/{ammo_leave}')
+        else:
+            fail_msg.append(f'Ammo: {ammo_count}/{ammo_leave}')
+
+    if cap:
+        cap_count = client.get_cap()
+        cap_leave = client.hunt_config['cap_leave']
+        cap_check = cap_count > cap_leave
+        if cap_check:
+            success_msg.append(f'Cap: {cap_count}/{cap_leave}')
+        else:
+            fail_msg.append(f'Cap: {cap_count}/{cap_leave}')
+    if time:
+        time_check = not time_leave(client)
+        if time_check:
+            success_msg.append(f'Time: {time_check}')
+        else:
+            fail_msg.append(f'Time: {time_check}')
+
+    if len(fail_msg) > 0:
+        print(f'[Action] Failed:', ' | '.join(fail_msg))
+    elif len(success_msg) > 0:
+        print(f'[Action] Success:', ' | '.join(success_msg))
+    if all((mana_check, health_check, cap_check, ammo_check, rune_check, time_check, other)):
+        return True
+    return False
+
+def check_hunt(client, success, fail=None, mana=True, health=True, cap=True, rune=False, ammo=False, time=False, other=True):
+    mana=mana and 'mana_name' in client.hunt_config.keys()
+    health=health and 'health_name' in client.hunt_config.keys()
+    ammo=ammo and 'ammo_name' in client.hunt_config.keys()
+    rune=rune and 'rune_name' in client.hunt_config.keys()
+    if check(client, mana, health, cap, rune, ammo, time, other):
+        client.jump_label(success)
+    elif fail:
+        client.jump_label(fail)
+
+def check_time(client, train, repeat):
+    cest = timezone('Europe/Berlin')
+    if client.force_train:
+        print('[Action] Forced go train')
+        client.jump_label(train)
+    elif time_leave(client):
+        print(f'[Action] Time to train {datetime.now(cest)}')
+        client.jump_label(train)
+    else:
+        print(f'[Action] Skip train {datetime.now(cest)} not in hours_leave: {client.script_options["hours_leave"]}')
+        client.jump_label(repeat)
+
+# Add vip members to a group called "Blacklist" and hide offline vips
+# Will jump label if any player in group Blacklist is appearing
+def check_blacklist_player_online(client, label_jump):
+    result = client.get_windows_by_names(['VIP'])
+    if result:
+        vip = result[0]
+        if 'Blacklist' in vip.recognize_text_content():
+            print('[Action] Players in blacklist are online')
+            print('[Action] Jump label:', label_jump)
+            client.jump_label(label_jump)
+    else:
+        print('[Action] Could not find VIP window')
+
+# Jump to label if player on screen
+# threshold sets the number of retries before leaving. The counter is reset in check_supplies action
+# go_train will force char to leave hunt and go train
+def conditional_jump_player_on_screen(client, label_jump='train', threshold=10, go_train=False):
+    if not client.use_player_list:
+        print('[Action] Option retro_safe or use_player_list must be set to true')
+        return
+    if client.player_battle_list.has_creature():
+        try:
+            client.player_threshold += 1
+        except Exception as e:
+            client.player_threshold = 1
+
+        print(f'[Action] Player on screen (threshold {client.player_threshold})')
+
+        if client.player_threshold < threshold:
+            return
+        print(f'[Action] Jump label {label_jump} due to player on screen')
+        client.jump_label(label_jump)
+        if go_train:
+            client.force_train = True
+
+def reset_player_on_screen_threshold(client):
+    client.player_threshold = 0
+
+# Target off if monster on screen
+## Retro safe must be on
+def stop_target_player_on_screen(client):
+    if not client.use_player_list:
+        print('[Action] Option retro_safe or use_player_list must be set to true')
+        return
+    if client.target_on and client.use_player_list and client.player_battle_list.has_creature():
+        print('[Action] Stop target 2s due to player on screen')
+        if client.battle_list.is_targetting():
+            client.hotkey('esc')
+            sleep(0.1)
+        client.attack_timeout = time.time() + 2
+
+# Add player name to ignore list. Messages from that player will not appear in console.
+def ignore_player(client, player_name):
+    print(f'[Action] Add player "{player_name}" to ignore list')
+    client.add_ignore_player(player_name)
+
+def _get_numbers_from_text(text):
+    only_numbers = ''.join([c if c.isdigit() else ' ' for c in text])
+    only_numbers = ' '.join(only_numbers.split())
+    return list(map(int, only_numbers.split()))
+
+# Open quest tracker and leave only the message of the quest visible.
+# Only works for tasks with a single monster to kill.
+#example: check_kill_count('medusae', 500, 'done_task', 'repeat')
+def check_kill_count(client, monster_name, kill_amount, label_jump, label_skip):
+    result = client.get_windows_by_names(['QuestTracker'])
+    kill_amount = str(kill_amount)
+    if result:
+        tracker = result[0]
+        tracker_text = tracker.recognize_text_content()
+        if monster_name in tracker_text:
+            print('[Action] Monster found')
+            print('Tracker_Text:', tracker_text)
+            current_killcount = tracker_text[tracker_text.find("hunted")+6:tracker_text.find(kill_amount, tracker_text.find(monster_name)-len(kill_amount), tracker_text.find(monster_name))]
+            print('[Action] Hunted ', current_killcount, '/', str(kill_amount), ' ', monster_name)
+            if int(current_killcount) > int(kill_amount):
+                print('[Action] Kill Count reached, Jump label:', label_jump)
+                client.jump_label(label_jump)
+            else:
+                print('[Action] Kill Count not reached, Jump label:', label_skip)
+                client.jump_label(label_skip)
+        else:
+            print('[Action] Could not find Monster Name')
+    else:
+        print('[Action] Could not find Quest Tracker window')
+
+# Open quest tracker and leave only the message of the quest visible
+#example: check_kill_sea_serpents('done_task', 'repeat')
+def check_kill_sea_serpents(client, label_jump, label_skip, kill_amount=900):
+    result = client.get_windows_by_names(['QuestTracker'])
+    if result:
+        tracker = result[0]
+        tracker_text = tracker.recognize_text_content()
+        monster_name='seaserpents'
+        if monster_name in tracker_text:
+            print('[Action] Monster found')
+            print('Tracker_Text:', tracker_text)
+            text = tracker_text[tracker_text.find("hunted") + 6:]
+            current_killcount = sum(_get_numbers_from_text(text)[:-1])
+            print('[Action] Hunted ', current_killcount, '/', str(kill_amount), ' ', monster_name)
+            if int(current_killcount) > int(kill_amount):
+                print('[Action] Kill Count reached, Jump label:', label_jump)
+                client.jump_label(label_jump)
+            else:
+                print('[Action] Kill Count not reached, Jump label:', label_skip)
+                client.jump_label(label_skip)
+        else:
+            print('[Action] Could not find Monster Name')
+    else:
+        print('[Action] Could not find Quest Tracker window')
+
+# Open quest tracker and leave only the message of the quest visible
+#example: check_kill_pirates('done_task', 'repeat')
+def check_kill_pirates(client, label_jump, label_skip, monster_name='pirates', kill_amount=3000):
+    result = client.get_windows_by_names(['QuestTracker'])
+    if result:
+        tracker = result[0]
+        tracker_text = tracker.recognize_text_content()
+        tracker_text = tracker_text.replace('\n', '')
+        if monster_name in tracker_text:
+            print('[Action] Monster found')
+            print('Tracker_Text:', tracker_text)
+            text = tracker_text[tracker_text.find("killed") + 6:]
+            current_killcount = sum(_get_numbers_from_text(text))
+            print('[Action] Hunted ', current_killcount, '/', str(kill_amount), ' ', monster_name)
+            if int(current_killcount) > int(kill_amount):
+                print('[Action] Kill Count reached, Jump label:', label_jump)
+                client.jump_label(label_jump)
+            else:
+                print('[Action] Kill Count not reached, Jump label:', label_skip)
+                client.jump_label(label_skip)
+        else:
+            print('[Action] Could not find Monster Name')
+    else:
+        print('[Action] Could not find Quest Tracker window')
+
+def check_skill(client):
+    skill = client.script_options['skill_train']
+    if skill == 'sword':
+        client.jump_label('sword')
+    elif skill == 'axe':
+        client.jump_label('axe')
+    elif skill == 'club':
+        client.jump_label('club')
+    elif skill == 'distance':
+        client.jump_label('distance')
+    elif skill == 'magic':
+        client.jump_label('magic')
+
+def check_supplies(client, mana=True, health=True, cap=True, imbuement=True, rune=False, ammo=False, on_fail='train'):
+    client.turn_chat_off()
+    client.player_threshold = 0
+    mana_check = health_check = cap_check = ammo_check = rune_check = quiver_check = imbuement_check = True
+    print('[Action] Check Supplies results:')
+    if mana:
+        mana_name, take_mana = client.hunt_config['mana_name'], client.hunt_config['take_mana']
+        mana_count = client.get_hotkey_item_count(client.items[mana_name])
+        mana_check = mana_count >= 0.9 * take_mana
+        print('[Action] Mana:', mana_check, mana_count, '/', take_mana)
+    if health:
+        health_name, take_health = client.hunt_config['health_name'], client.hunt_config['take_health']
+        health_count = client.get_hotkey_item_count(client.items[health_name])
+        health_check = health_count >= 0.9 * take_health
+        print('[Action] Health:', health_check, health_count, '/', take_health)
+        if 'health_name2' in client.hunt_config.keys():
+            health_name2, take_health2 = client.hunt_config['health_name2'], client.hunt_config['take_health2']
+            health_count2 = client.get_hotkey_item_count(client.items[health_name2])
+            health_check2 = health_count2 >=  0.9 * take_health2
+            health_check = health_check and health_check2
+            print('[Action] Health2:', health_check2, health_count2, '/', take_health2)
+    if rune:
+        rune_name, take_rune = client.hunt_config['rune_name'], client.hunt_config['take_rune']
+        rune_count = client.get_hotkey_item_count(client.items[rune_name])
+        rune_check = rune_count >= 0.9 * take_rune
+        print('[Action] Rune:', rune_check, rune_count, '/', take_rune)
+        if 'rune_name2' in client.hunt_config.keys():
+            rune_name2, take_rune2 = client.hunt_config['rune_name2'], client.hunt_config['take_rune2']
+            rune_count2 = client.get_hotkey_item_count(client.items[rune_name2])
+            rune_check2 = rune_count2 >=  0.9 * take_rune2
+            rune_check = rune_check and rune_check2
+            print('[Action] Rune2:', rune_check2, rune_count2, '/', take_rune2)
+    if cap:
+        cap_check = client.get_cap() > client.hunt_config['cap_leave']
+        print('[Action] Cap:', cap_check, client.get_cap(), '/', client.hunt_config['cap_leave'])
+    if ammo:
+        ammo_name, take_ammo = client.hunt_config['ammo_name'], client.hunt_config['take_ammo']
+        ammo_count = client.get_hotkey_item_count(client.items[ammo_name])
+        ammo_check = ammo_count >= 0.9 * take_ammo
+        print('[Action] Ammo:', ammo_check, ammo_count, '/', take_ammo)
+        
+    if imbuement:
+        imbuement_check = check_imbuements(client)
+        print('[Action] Imbuements:', imbuement_check)
+
+    if not all((mana_check, health_check, cap_check, ammo_check, quiver_check, imbuement_check, rune_check)):
+        client.save_screenshot()
+        if on_fail == 'train': 
+            print('[Action] Missing supplies, go train')
+            if 'train' in client.waypoint.labels:
+                client.script_options['hours_leave'] = list(range(25))
+                client.jump_label('train')
+            else:
+                print('[Action] Label train not setup, logout')
+                client.logout()
+
+        elif on_fail == 'logout':
+            print('[Action] Missing supplies, logout')
+            client.logout()
+    else:
+        client.force_resupply = False
+        client.force_train = False
+
+def check_imbuements(client):
+    if 'imbuements' in client.script_options.keys():
+        imbuements = client.script_options['imbuements']
+        if len(imbuements) < 1:
+            return True
+        equip_slots = list(set([imbuement['equip_slot'] for imbuement in imbuements]))
+        print('Equip slots:', equip_slots)
+        active_imbuements = client.get_imbuements_equips(equip_slots)
+        print('Active imbuements:', active_imbuements)
+
+        for imbuement in imbuements:
+            client.heal()
+            client.sleep(0.3, 0.4)
+            equip_slot = imbuement['equip_slot']
+            equip_imbuements = active_imbuements.get(equip_slot, None)
+            if equip_imbuements:
+                if imbuement['name'] in equip_imbuements:
+                    print(equip_slot, ': imbuement', imbuement['name'], 'active')
+                else:
+                    print('[Action] Equip', imbuement['equip_slot'], 'has no', imbuement['name'], 'active')
+                    return False
+    return True
+
+# Stop targetting if one of the supplies is missing.
+# Warning: Cannot be used with lure monsters.
+def stop_target_no_supplies(client, mana=True, health=True, cap=True, rune=False, ammo=False, time=False, other=True):
+    if check(client, mana, health, cap, rune, ammo, time, other):
+        if not client.target_on:
+            print('[Action] Start target supplies ok')
+            client.target_on = True
+    else:
+        if client.target_on:
+            print('[Action] Stop target no supplies')
+            client.target_on = False
+
+# Stop looting
+def stop_looting(client, selected_monsters='all', cap=0):
+    print('[Action] stop_looting')
+
+    if selected_monsters != 'all':
+        selected_monsters = [m.replace(' ', '') for m in selected_monsters]
+
+    for monster in client.target_conf:
+        if selected_monsters == 'all' or monster in selected_monsters:
+            print('[Action] {} in selected_monsters list'.format(monster))
+            if client.get_cap() > cap:
+                client.target_conf[monster]['loot'] = True
+            else:
+                client.target_conf[monster]['loot'] = False
+
+# Jump to label
+def jump_to_label(client, label):
+  print('[Action] Jump to label:', label)
+  client.jump_label(label)
+
+# Jump random label
+# Ex: call jump_to_random_label("labels":["label1", "label2"])
+def jump_to_random_label(client, labels):
+  label = random.choice(labels)
+  print('[Action] Jump to random label:', label)
+
+  client.jump_label(label)
+
+# Conditional jump monsters on screen
+# selected_monsters is 'all' or a list e.g. ['Tarantula', 'Giant Spider']
+def conditional_jump_monsters_on_screen(client, label_jump=None, label_skip=None, selected_monsters='all', amount=1, turn_target_off=False):
+    monster_list = client.battle_list.get_monster_list()
+    if selected_monsters != 'all':
+        monster_list = [m for m in monster_list if m in selected_monsters]
+    monster_count = len(monster_list)
+    if monster_count >= amount:
+        print('[Action] Jump due to monsters on screen ', label_jump)
+        if turn_target_off:
+            client.target_on = False
+        if label_jump:
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] Skip jump, not enough monsters on screen', label_skip)
+        client.jump_label(label_skip)
+
+# Conditional jump using script_options variable value
+def conditional_jump_script_options_value(client, var_name, label_jump_map):
+    value = client.script_options.get(var_name, False)
+    if value:
+        print(f'[Action] Value of variable {var_name} is {value}')
+        if value not in label_jump_map:
+            print(f'[Action] Value {value} is not on label_jump_map')
+        else:
+            print(f'[Action] Jump to label {label_jump_map[value]}')
+            client.jump_label(label_jump_map[value])
+    else:
+        print('[Action] Variable {var_name} does not exist')
+
+# Conditional jump using script_options variable true or false
+def conditional_jump_script_options(client, var_name, label_jump=None, label_skip=None):
+    if client.script_options.get(var_name, False):
+        if label_jump:
+            print('[Action] true condition jump to ', label_jump)
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] false condition jump to ', label_skip)
+        client.jump_label(label_skip)
+    # else, just continues to next waypoint
+
+# Conditional jump if character pos is in coords list 
+def conditional_jump_position(client, coords, label_jump=None, label_skip=None):
+    cur_coord = client.minimap.get_current_coord()
+    print(f'[Action] Current coord {cur_coord}')
+    if cur_coord not in ('Unreachable', 'Out of range'):
+        if list(cur_coord) in coords:
+            print(f'[Action] Current coord {cur_coord} is in list')
+            if label_jump:
+                client.jump_label(label_jump)
+        elif label_skip:
+            print(f'[Action] Current coord {cur_coord} is not in list')
+            client.jump_label(label_skip)
+
+# Conditional jump if character pos is in coords list 
+def conditional_jump_floor(client, floor, label_jump=None, label_skip=None):
+    cur_floor = client.minimap.get_floor()
+    if cur_floor == floor:
+        print('[Action] current floor is', floor)
+        if label_jump:
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] current floor is not', floor)
+        client.jump_label(label_skip)
+
+# Conditional jump if item count == x
+def conditional_jump_item_count(client, item_name, amount, label_jump=None, label_skip=None):
+    item_count = client.get_hotkey_item_count(client.items[item_name])
+    if item_count == amount:
+        print('[Action] {} count is {}'.format(item_name, amount))
+        if label_jump:
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] {} count is not {}'.format(item_name, amount))
+        client.jump_label(label_skip)
+
+# Conditional jump if item count < x
+def conditional_jump_item_count_below(client, item_name, amount, label_jump=None, label_skip=None):
+    item_count = client.get_hotkey_item_count(client.items[item_name])
+    if item_count < amount:
+        print('[Action] {} count is below {}'.format(item_name, amount))
+        if label_jump:
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] {} count is not below {}'.format(item_name, amount))
+        client.jump_label(label_skip)
+
+# Conditional jump if level > x
+def conditional_jump_level_above(client, lvl, label_jump=None, label_skip=None):
+    level = client.get_level()
+    if level > lvl:
+        if label_jump:
+            print('[Action] Level {} reached. Jumping to label {}'.format(lvl, label_jump))
+            client.jump_label(label_jump)
+    elif label_skip:
+        print('[Action] Level {} not reached. Jumping to label {}'.format(lvl, label_skip))
+        client.jump_label(label_skip)
+
+# Conditional jump if is night in tibia time
+def conditional_jump_night(client, label_jump_night=None, label_jump_day=None):
+    cest = timezone('Europe/Berlin')
+    now = datetime.now(cest)
+    minute = now.minute
+    if minute > 45 or minute < 15:
+        print('[Action] Current time is night')
+        if label_jump_night:
+            client.jump_label(label_jump_night)
+    else:
+        print('[Action] Current time is day')
+        if label_jump_day:
+            client.jump_label(label_jump_day)
+
+# Alert if player on screen (will send max one alert every 5 mins)
+## Retro safe must be on
+def alert_player_on_screen(client):
+    if not client.use_player_list:
+        print('[Action] Option retro_safe or use_player_list must be set to true')
+        return
+    if client.player_battle_list.has_creature():
+        if time.time() > client.last_alert_time + 5:
+            print('[Action] Player on screen, sending alert')
+            players = ', '.join(client.player_battle_list.get_player_list())
+            client.send_alert_message(f"Player on screen: {players}")
+
+# Alert if private message on chat to discord_user_id configured in setup.
+def alert_private_message(client):
+    if client.check_private_message_in_chat():
+        client.send_alert_message(f"Private message on chat")
+
+# Blacklist coords so that bot think it is a wall.
+# coords_barrier is a list of barriers [[x,y,z],[x2,y2,z2],...]
+def blacklist_coords(client, coords_barrier):
+    client.minimap.add_barrier_coords(coords_barrier)
+
+# Wall activates only during target for distance hunting. The block_side indicates which side of the barrier blocks.
+# If target crosses barrier, will disable barrier to continue targeting
+# Example: target_wall([x,y,z], 3, 1): wall starting in (x,y,z) with 3 sqm width that blocks from both sides
+#   target_wall([x,y,z], height=3): wall starting in (x,y,z) with default 1sqm wigth and 3 sqm height that blocks from both sides
+#   target_wall([x,y,z], 2, 3): wall starting in (x,y,z) with 2 sqm width and  3 sqm height
+#   target_wall([x,y,z], 1, 3, block_side='east'): wall starting in (x,y,z) with 1 sqm width and  3 sqm height that 
+#      blocks player coming from right (east) to left (west)  | <---
+def target_wall(client, barrier_coord, width=1, height=1, block_side='all'):
+    cur_coord = client.minimap.get_current_coord()
+    if cur_coord in ('Unreachable', 'Out of range'):
+        return
+    if cur_coord[2] != barrier_coord[2]:
+        return
+    target_coord = client.get_target_coord()
+    if not target_coord or target_coord in ('Unreachable', 'Out of range'):
+        return
+
+    def block_west(c): 
+        return c[0] < barrier_coord[0]
+    def block_east(c): 
+        return c[0] >= barrier_coord[0] + width 
+    def block_south(c): 
+        return c[1] > barrier_coord[1]
+    def block_north(c): 
+        return c[1] <= barrier_coord[1] - height
+
+    activate = False
+    if block_side in ('east', 'all'):
+        activate |= (block_east(cur_coord) and block_east(target_coord))
+    if block_side in ('north', 'all'):
+        activate |= (block_north(cur_coord) and block_north(target_coord))
+    if block_side in ('west', 'all'):
+        activate |= (block_west(cur_coord) and block_west(target_coord))
+    if block_side in ('south', 'all'):
+        activate |= (block_south(cur_coord) and block_south(target_coord))
+
+    x,y,z = barrier_coord
+    barriers = [[x+dx,y-dy,z] for dy in range(height) for dx in range(width)]
+    if activate:
+        client.minimap.add_barrier_coords(barriers)
+    else:
+        client.minimap.remove_barrier_coords(barriers)
+
+# Add barriers if char is inside area defined by top_left, bottom_right
+# Careful not to overlap barriers with other calls of this function
+def dynamic_barrier(client, top_left, bottom_right, coords_barrier, monster_count=2):
+    if not client.battle_list.is_targetting():
+        return
+    m_count = client.battle_list.get_monster_count()
+    cur_coord = client.minimap.get_current_coord()
+    if cur_coord not in ('Unreachable', 'Out of range'):
+        x,y,z = cur_coord
+        if z == top_left[2] and (top_left[0] < x < bottom_right[0]) and (top_left[1] < y < bottom_right[1]) and m_count >= monster_count:
+            client.minimap.add_barrier_coords(coords_barrier)
+        else:
+            client.minimap.remove_barrier_coords(coords_barrier)
+
+# Add barriers that activate given monster count
+# Careful not to overlap barriers with other calls of this function
+def dynamic_barrier_coords(client, coords_barrier, monster_count=2):
+    if not client.battle_list.is_targetting():
+        return
+    m_count = client.battle_list.get_monster_count()
+    cur_coord = client.minimap.get_current_coord()
+    if m_count >= monster_count:
+        client.minimap.add_barrier_coords(coords_barrier)
+    else:
+        client.minimap.remove_barrier_coords(coords_barrier)
+
+# Add barriers in the border of the rectangles. rectangles is a list with top left and bottom right of the rectangles.
+def dynamic_barrier_rectangles(client, rectangles, monster_count=2, allow_in=False):
+    cur_coord = client.minimap.get_current_coord()
+    if cur_coord in ('Unreachable', 'Out of range'):
+        return
+
+    monster_list = client.battle_list.get_monster_list(filter_by=client.target_conf.keys())
+    m_count = len(monster_list)
+
+    def inside_barrier(top_left, bottom_right):
+        char_inside = (cur_coord[0] > top_left[0] and cur_coord[0] < bottom_right[0] and cur_coord[1] > top_left[1] and cur_coord[1] < bottom_right[1])
+        return char_inside
+
+    activate = False
+    coords_barrier = []
+    for top_left, bottom_right in rectangles:
+        if cur_coord[2] != top_left[2]:
+            continue
+
+        # Activate barrier if allow_in is disabled
+        if inside_barrier(top_left, bottom_right) or not allow_in:
+            activate = True
+        z = top_left[2]
+        for x in range(top_left[0], bottom_right[0] + 1):
+            for y in (top_left[1], bottom_right[1]):
+                coords_barrier.append((x,y,z))
+        for y in range(top_left[1], bottom_right[1] + 1):
+            for x in (top_left[0], bottom_right[0]):
+                coords_barrier.append((x,y,z))
+
+    if client.battle_list.is_targetting() and m_count >= monster_count and activate:
+        client.minimap.add_barrier_coords(coords_barrier)
+    else:
+        client.minimap.remove_barrier_coords(coords_barrier)
+
+# Market functions
+def find_locker(client):
+    print('Finding locker')
+    client.reach_locker()
+
+# Create sell offers for list of items
+# Item dict: {"name": <name of item>, "min_offer": <do not sell below this value>, "max_offer":<do not sell above this value>, "amount":<default all>]}, 
+# example:
+#call create_sell_offers("items_sell":[{"name":"skull staff", "min_offer":4500, "max_offer":6000}, {"name":"demon armor", "min_offer":200000, "max_offer":300000}])
+def create_sell_offers(client, items_sell=[]):
+    market = client.start_market()
+    for item in items_sell:
+        name = item['name']
+        print(f'[Market] Check sell offers {name}')
+        stats = market.get_offers_item(name)
+        print(f'[Market] Sell offers: {stats["sell"]}')
+
+        smallest_sell_price = 0
+        if stats['sell']['smallest_price'] is not None:
+            smallest_sell_price = stats['sell']['smallest_price'] 
+
+        amount = item.get('amount', 'max')
+        min_price = item.get('min_offer', 0)
+        max_price = item.get('max_offer', 1e12)
+        if smallest_sell_price == 0:
+            # No offers, create max sell price
+            market.create_sell_offer_current_item(max_price, amount=amount)
+        elif smallest_sell_price >= min_price:
+            sell_price = smallest_sell_price - 1
+            market.create_sell_offer_current_item(sell_price, amount=amount)
+        else:
+            print(f'[Market] Skip sell {name} : smallest sell price offer {smallest_sell_price}')
+
+
+# Create buy offers for list of items
+# Item dict: {"name": <name of item>, "min_offer": <do not buy below this value>, "max_offer":<do not buy above this value>, "amount":<default 1>} 
+# example:
+#call create_buy_offers("items_buy":[{"name":"skull staff", "min_offer":2000, "max_offer":4500, "amount":10}, {"name":"demon armor", "min_offer":50000, "max_offer":100000}])
+def create_buy_offers(client, items_buy=[]):
+    market = client.start_market()
+    for item in items_buy:
+        name = item['name']
+        print(f'[Market] Check buy offers {name}')
+        stats = market.get_offers_item(name)
+        print(f'[Market] Buy offers: {stats["buy"]}')
+
+        highest_buy_price = 0
+        if stats['buy']['highest_price'] is not None:
+            highest_buy_price = stats['buy']['highest_price'] 
+
+        amount = item.get('amount', 1)
+        min_price = item.get('min_offer', 0)
+        max_price = item.get('max_offer', 1e12)
+        if highest_buy_price == 0:
+            # No offers, create min buy price
+            market.create_buy_offer_current_item(min_price, amount=amount)
+        elif highest_buy_price <= max_price:
+            buy_price = highest_buy_price + 1
+            market.create_buy_offer_current_item(buy_price, amount=amount)
+        else:
+            print(f'[Market] Skip buy {name} : highest buy price offer {highest_buy_price}')
+
+# Cancel obsolete buy offers
+# example:
+#[
+#  {"name":"skull staff"}, 
+#  {"name":"demon armor"} 
+#]
+def cancel_obsolete_buy_offers(client, items):
+    market = client.start_market()
+    buy_offers = market.get_list_buy_offers()
+    buy_offers_to_cancel = []
+    set_items = list(map(lambda x: ''.join([c.lower() for c in x['name'] if c.isalpha()]), items))
+    print(set_items)
+    for item, _, price in buy_offers:
+        if item not in set_items:
+            print(f'[Market] Skip {item}')
+            continue
+        name = items[set_items.index(item)]['name']
+        stats = market.get_offers_item(name)
+        highest_buy_price = 0
+        if stats['buy']['highest_price'] is not None:
+            highest_buy_price = stats['buy']['highest_price'] 
+        print(highest_buy_price)
+        if higest_buy_price > price:
+            buy_offers_to_cancel.append(name)
+    print(buy_offers_to_cancel)
+    market.cancel_buy_offers(buy_offers_to_cancel)
+
+# Cancel obsolete sell offers
+# example:
+#[
+#  {"name":"skull staff"}, 
+#  {"name":"demon armor"} 
+#]
+def cancel_obsolete_sell_offers(client, items):
+    market = client.start_market()
+    sell_offers = market.get_list_sell_offers()
+    sell_offers_to_cancel = []
+    set_items = list(map(lambda x: ''.join([c.lower() for c in x['name'] if c.isalpha()]), items))
+    print(set_items)
+    for item, _, price in sell_offers:
+        if item not in set_items:
+            print(f'[Market] Skip {item}')
+            continue
+        name = items[set_items.index(item)]['name']
+        stats = market.get_offers_item(name)
+        print(stats)
+        lowest_sell_price = 0
+        if stats['sell']['smallest_price'] is not None:
+            smallest_sell_price = stats['sell']['smallest_price'] 
+        print(smallest_sell_price)
+        if smallest_sell_price < price:
+            sell_offers_to_cancel.append(name)
+    print(sell_offers_to_cancel)
+    market.cancel_sell_offers(sell_offers_to_cancel)
+
+# Create sell offers for list of items defined in setup.json
+def create_sell_offers_from_setup(client, var_name='items_sell'):
+    items_sell = client.script_options.get(var_name, []) 
+    create_sell_offers(client, items_sell)
+
+# Create buy offers for list of items defined in setup.json
+def create_buy_offers_from_setup(client, var_name='items_buy'):
+    items_buy = client.script_options.get(var_name, []) 
+    create_buy_offers(client, items_buy)
+
+# Create buy offers for list of items defined in setup.json
+def cancel_obsolete_buy_offers_from_setup(client, var_name='items_buy'):
+    items_buy = client.script_options.get(var_name, []) 
+    cancel_obsolete_buy_offers(client, items_buy)
+
+# Cancel obsolete sell offers for list of items defined in setup.json
+def cancel_obsolete_sell_offers_from_setup(client, var_name='items_sell'):
+    items_sell = client.script_options.get(var_name, []) 
+    cancel_obsolete_sell_offers(client, items_sell)
+

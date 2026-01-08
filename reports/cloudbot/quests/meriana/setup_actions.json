@@ -1,0 +1,20 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": []
+}

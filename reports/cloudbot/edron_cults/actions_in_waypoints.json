@@ -1,0 +1,72 @@
+[
+  {
+    "line": 21,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 41,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 43,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 69,
+    "action": "check_down",
+    "raw": "action check_down"
+  },
+  {
+    "line": 138,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 144,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 159,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 178,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 180,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 183,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 186,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 189,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 192,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 195,
+    "action": "end",
+    "raw": "action end"
+  }
+]

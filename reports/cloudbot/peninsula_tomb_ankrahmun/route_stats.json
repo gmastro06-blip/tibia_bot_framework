@@ -1,0 +1,84 @@
+{
+  "counts": {
+    "lines": 219,
+    "pos_points": 143,
+    "labels": 15,
+    "actions": 7,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 2579,
+    "total_euclid": 2136.686824024346,
+    "max_manhattan": 112,
+    "max_jump": {
+      "from": {
+        "line_index": 199,
+        "x": 33093,
+        "y": 32823,
+        "z": 13
+      },
+      "to": {
+        "line_index": 200,
+        "x": 33027,
+        "y": 32869,
+        "z": 8
+      },
+      "dx": -66,
+      "dy": 46,
+      "dz": -5,
+      "manhattan": 112,
+      "euclid": 80.44874144447506
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 199,
+          "x": 33093,
+          "y": 32823,
+          "z": 13
+        },
+        "to": {
+          "line_index": 200,
+          "x": 33027,
+          "y": 32869,
+          "z": 8
+        },
+        "dx": -66,
+        "dy": 46,
+        "dz": -5,
+        "manhattan": 112,
+        "euclid": 80.44874144447506
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "refill_scarab_coin",
+    "withdraw_scarab_coin",
+    "go_hunt",
+    "check_scarab_coin",
+    "retry_tp",
+    "fail_tp_exit",
+    "success_tp",
+    "hunt",
+    "north",
+    "west",
+    "south",
+    "leave",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "quit",
+    "wait"
+  ]
+}

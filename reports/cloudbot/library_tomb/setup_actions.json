@@ -1,0 +1,160 @@
+{
+  "label_actions": [
+    {
+      "label": "withdraw_scarab_coin",
+      "action": "withdraw_item_from_stash",
+      "args": {
+        "item_name": "scarab coin",
+        "amount": 1,
+        "hotkey_item": "f2"
+      }
+    },
+    {
+      "label": "drop_scarab_coin",
+      "action": "drop_item_to_sqm",
+      "args": {
+        "item_name": "scarab coin",
+        "stack": true,
+        "dest_sqm": [
+          -1,
+          0
+        ]
+      }
+    },
+    {
+      "label": "check_scarab_coin",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "scarab coin",
+        "amount": 1,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "set_target_distance",
+      "action": "set_target_action",
+      "args": {
+        "action": "distance"
+      }
+    },
+    {
+      "label": "set_target_follow",
+      "action": "set_target_action",
+      "args": {
+        "action": "follow"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33157,
+              32832,
+              10
+            ],
+            [
+              33157,
+              32832,
+              10
+            ]
+          ],
+          [
+            [
+              33152,
+              32833,
+              10
+            ],
+            [
+              33155,
+              32835,
+              10
+            ]
+          ]
+        ],
+        "monster_count": 0
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Cobra",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Scarab",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Ghost",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Crypt Shambler",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": false
+    }
+  ]
+}

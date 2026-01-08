@@ -1,0 +1,47 @@
+[
+  {
+    "line": 3,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 8,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 12,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 152,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 178,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 182,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 183,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 185,
+    "action": "exit",
+    "raw": "action exit"
+  },
+  {
+    "line": 186,
+    "action": "end",
+    "raw": "action end"
+  }
+]

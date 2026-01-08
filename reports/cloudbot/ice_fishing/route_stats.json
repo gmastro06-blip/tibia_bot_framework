@@ -1,0 +1,146 @@
+{
+  "counts": {
+    "lines": 135,
+    "pos_points": 80,
+    "labels": 13,
+    "actions": 42,
+    "unique_actions": 13
+  },
+  "distance": {
+    "total_manhattan": 4180,
+    "total_euclid": 3089.1849180563318,
+    "max_manhattan": 1498,
+    "max_jump": {
+      "from": {
+        "line_index": 99,
+        "x": 32342,
+        "y": 31107,
+        "z": 6
+      },
+      "to": {
+        "line_index": 103,
+        "x": 33176,
+        "y": 31771,
+        "z": 6
+      },
+      "dx": 834,
+      "dy": 664,
+      "dz": 0,
+      "manhattan": 1498,
+      "euclid": 1066.0450271916286
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 94,
+          "x": 32271,
+          "y": 31160,
+          "z": 7
+        },
+        "to": {
+          "line_index": 95,
+          "x": 32294,
+          "y": 31133,
+          "z": 7
+        },
+        "dx": 23,
+        "dy": -27,
+        "dz": 0,
+        "manhattan": 50,
+        "euclid": 35.4682957019364
+      },
+      {
+        "from": {
+          "line_index": 99,
+          "x": 32342,
+          "y": 31107,
+          "z": 6
+        },
+        "to": {
+          "line_index": 103,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": 834,
+        "dy": 664,
+        "dz": 0,
+        "manhattan": 1498,
+        "euclid": 1066.0450271916286
+      },
+      {
+        "from": {
+          "line_index": 128,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 131,
+          "x": 32341,
+          "y": 31111,
+          "z": 6
+        },
+        "dx": -835,
+        "dy": -653,
+        "dz": 0,
+        "manhattan": 1488,
+        "euclid": 1060.0160376145259
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32323,
+          "y": 31114,
+          "z": 7
+        },
+        "first_line": 8,
+        "again_line": 11
+      },
+      {
+        "pos": {
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "first_line": 127,
+        "again_line": 128
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "skip_worms",
+    "go_hunt",
+    "hunt",
+    "leave",
+    "train",
+    "go_train_edron",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "buy_worms",
+    "check",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "check_worms",
+    "deposit",
+    "end",
+    "fish_south",
+    "travel_edron",
+    "travel_svargrond",
+    "travel_venore",
+    "wait"
+  ]
+}

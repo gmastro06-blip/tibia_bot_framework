@@ -1,0 +1,47 @@
+{
+  "label_actions": [
+    {
+      "label": "start",
+      "action": "jump_to_label",
+      "args": {
+        "label": "start_rashid_liberty_bay"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 40,
+      "max_interval": 100,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "min_interval": 30,
+      "max_interval": 70,
+      "action": "eat_food"
+    },
+    {
+      "min_interval": 40,
+      "max_interval": 70,
+      "action": "haste"
+    }
+  ],
+  "target_monsters": []
+}

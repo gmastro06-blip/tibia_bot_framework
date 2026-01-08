@@ -1,0 +1,140 @@
+label start
+load scripts/general/refill_oramond.in
+label gohunt
+node (33626, 31897, 6)
+node (33621, 31914, 6)
+node (33603,31915,6)
+node (33584,31914,6)
+label levitate_down
+stand (33574,31915,6)
+call levitate("direction":"south", "hotkey":"-")
+call set_persistent_args("persistent_alias": "lure", "key": "count", "value": 15)
+call set_persistent_args("persistent_alias": "lure", "key": "wait", "value": False)
+node (33568,31917,7)
+node (33558,31911,7)
+node (33557,31910,7)
+node (33539,31906,7)
+node (33526,31906,7)
+stand (33517,31906,7)
+node (33512,31892,8)
+stand (33505,31888,8)
+call set_persistent_args("persistent_alias": "lure", "key": "count", "value": 5)
+call set_persistent_args("persistent_alias": "lure", "key": "wait", "value": True)
+node (33487,31890,9)
+node (33466,31889,9)
+label hunt
+node (33510,31883,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task1")
+use (33510,31883,9)
+use (33501,31884,9)
+label skip_task1
+node (33491,31889,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task2")
+use (33481,31886,9)
+label skip_task2
+node (33474,31891,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task3")
+use (33473,31896,9)
+use (33471,31885,9)
+label skip_task3
+node (33464,31893,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task4")
+use (33452,31890,9)
+label skip_task4
+node (33475,31903,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task5")
+use (33478,31908,9)
+label skip_task5
+node (33483,31898,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task6")
+use (33489,31903,9)
+label skip_task6
+node (33475,31914,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task7")
+use (33470,31916,9)
+use (33458,31915,9)
+label skip_task7
+node (33450,31925,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task8")
+use (33448,31921,9)
+use (33435,31923,9)
+use (33430,31931,9)
+label skip_task8
+node (33450,31929,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task9")
+use (33467,31929,9)
+use (33483,31927,9)
+label skip_task9
+node (33479,31939,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task10")
+use (33478,31944,9)
+use (33495,31949,9)
+label skip_task10
+node (33489,31950,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task11")
+use (33487,31960,9)
+use (33498,31961,9)
+label skip_task11
+node (33479,31961,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task12")
+use (33452,31966,9)
+use (33462,31962,9)
+label skip_task12
+node (33461,31953,9)
+call conditional_jump_script_options("var_name":"oramond_task" , "label_skip":"skip_task13")
+use (33454,31953,9)
+use (33462,31945,9)
+label skip_task13
+node (33472,31932,9)
+node (33497,31916,9)
+node (33501,31901,9)
+action check
+label anti_trap
+rope (33464, 31920, 10)
+rope (33466, 31895, 10)
+rope (33500, 31893, 10)
+label leave
+node (33491,31889,9)
+rope (33505,31888,9)
+call set_persistent_args("persistent_alias": "lure", "key": "count", "value": 15)
+call set_persistent_args("persistent_alias": "lure", "key": "wait", "value": False)
+node (33514,31899,8)
+rope (33517,31906,8)
+node (33544,31906,7)
+node (33565,31910,7)
+label levitate_up
+stand (33574,31916,7)
+call levitate("direction":"north", "hotkey":"=")
+node (33594,31916,6)
+node (33609,31914,6)
+node (33621,31904,6)
+node (33631,31897,6)
+node (33631, 31897, 6)
+action check_time
+label train
+node (33620,31899,6)
+stand (33610,31899,6)
+node (33602,31898,7)
+action check_time
+label train
+label train_oramond
+action check_train
+label magic
+ladder (33603,31901,7)
+action end
+label distance
+ladder (33600,31901,7)
+action end
+label club
+ladder (33603,31896,7)
+action end
+label sword
+ladder (33600,31896,7)
+action end
+label axe
+ladder (33598,31898,7)
+action end
+label start_train
+node (33606,31899,7)
+stand (33609,31899,7)
+stand (33610,31899,7)

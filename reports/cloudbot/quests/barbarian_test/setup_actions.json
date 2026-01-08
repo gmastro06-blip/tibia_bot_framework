@@ -1,0 +1,109 @@
+{
+  "label_actions": [
+    {
+      "label": "pegleg",
+      "action": "talk_npc",
+      "args": {
+        "list_words": [
+          "pegleg",
+          "yes"
+        ]
+      }
+    },
+    {
+      "label": "check_down",
+      "action": "conditional_jump_script_options",
+      "args": {
+        "var_name": "hunt_down",
+        "label_jump": "continue_down",
+        "label_skip": "skip_down"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 60
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 5
+      }
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 4,
+      "args": {
+        "mana": true,
+        "health": false,
+        "cap": true,
+        "rune": true,
+        "ammo": false,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Ancient Scarab",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Thornback Tortoise",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Tarantula",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": false
+    },
+    {
+      "name": "Gargoyle",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "follow_below_hp_percentage": 20,
+      "loot": false
+    },
+    {
+      "name": "Stone Golem",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": false
+    },
+    {
+      "name": "Blood Crab",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": true
+    }
+  ]
+}

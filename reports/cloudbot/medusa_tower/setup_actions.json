@@ -1,0 +1,251 @@
+{
+  "label_actions": [
+    {
+      "label": "withdraw_amulet",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "garlic necklace",
+        "depot_num": 4,
+        "backpack_name": "Blue Backpack",
+        "amount": 8,
+        "stack": false
+      }
+    },
+    {
+      "label": "wait_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 80,
+        "monster_count_below": 2
+      }
+    },
+    {
+      "label": "withdraw_amulet",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "garlic necklace",
+        "depot_num": 6,
+        "backpack_name": "Backpack",
+        "amount": 8,
+        "stack": false
+      }
+    },
+    {
+      "label": "wait_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 80,
+        "monster_count_below": 2
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_poison",
+      "interval": 4,
+      "args": [
+        "f10"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 20,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "alias": "swap_amulet",
+      "enabled": false,
+      "action": "swap_equip",
+      "interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "item_equip": "garlic necklace",
+        "item_unequip": "foxtail amulet",
+        "selected_monsters": [
+          "Serpent Spawn",
+          "Medusa"
+        ],
+        "amount": 3,
+        "slot": "amulet"
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 30,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "6",
+        "amount": 1,
+        "selected_monsters": [
+          "Serpent Spawn",
+          "Medusa",
+          "Behemoth"
+        ],
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "cast_spell_if_monsters",
+      "interval": 5,
+      "args": {
+        "min_mp": 50,
+        "spell_hotkey": "4",
+        "monster_count": 5,
+        "selected_monsters": [
+          "Clay Guardian",
+          "Omnivora",
+          "Stone Golem"
+        ],
+        "dist": 2,
+        "use_with_target_off": true
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "use_in_battle": true,
+      "interval": 0.7,
+      "args": {
+        "count": 7,
+        "min_count": 2,
+        "drop_above_hp_perc": 80
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 40,
+      "max_interval": 70,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "k"
+      }
+    },
+    {
+      "action": "haste",
+      "min_interval": 30,
+      "max_interval": 60,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "min_interval": 1,
+      "max_interval": 3,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "anti_poison",
+      "interval": 4,
+      "args": [
+        "f10"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "min_interval": 60,
+      "max_interval": 80,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "alias": "swap_amulet",
+      "enabled": false,
+      "action": "swap_equip",
+      "interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "item_equip": "garlic necklace",
+        "item_unequip": "foxtail amulet",
+        "selected_monsters": [
+          "Serpent Spawn",
+          "Medusa"
+        ],
+        "amount": 3,
+        "slot": "amulet"
+      }
+    },
+    {
+      "alias": "rune_thrower",
+      "action": "throw_rune_if_monsters",
+      "min_interval": 2,
+      "max_interval": 2.2,
+      "args": {
+        "min_mp": 40,
+        "rune_name": "thunderstorm rune"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 8,
+        "min_count": 2,
+        "drop_above_hp_perc": 70
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Medusa",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Behemoth",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Serpent Spawn",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Omnivora",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Medusa",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Behemoth",
+      "action": "follow",
+      "loot": true,
+      "#use_item": "obsidian knife"
+    },
+    {
+      "name": "Serpent Spawn",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Omnivora",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Clay Guardian",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

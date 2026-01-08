@@ -1,0 +1,99 @@
+{
+"general": 
+{
+	"loot_type":"auto",
+	"loot_priority":"after",
+	"anti_trap":"weapon",
+	"steps":2
+},
+"script_options": {
+	"hours_leave": [9.5],
+	"skill_train":"sword",
+	"imbuements":[
+		{"equip_slot":"armor", "name":"Intricate Vampirism", "type":"Life Leech"},
+		{"equip_slot":"helmet", "name":"Intricate Void", "type":"Mana Leech"}
+	],
+	"summon":false,
+	"sort_deposit": {"alexander":6, "lailene":6, "esrik":7, "tamoril":8, "rashid": 9, "blue_djinn": 10}
+},
+"containers": 
+{
+	"loot_bp":"Red Backpack"
+},
+"tools":
+{
+	"rope": {"name":"rope"},
+	"shovel": {"name":"shovel"}
+},
+"items":
+{
+	"strong mana potion": { "hotkey": "e", "use": "self" },
+	"great health potion": { "hotkey": "f3", "use": "self" },
+	"supreme health potion": { "hotkey": "F", "use": "self" },
+	"brown mushroom": { "hotkey": "f11", "use": "use" },
+	"sword ring": { "hotkey": "f9", "use": "equip" }
+},
+"spells":
+{
+	"utani hur": "v",
+	"utura gran": "R",
+	"utito tempo": "X",
+	"exeta res": "x",
+	"exura ico": "r",
+	"exura med ico": "g",
+	"exura gran ico": "f",
+	"exori": "1",
+	"exori min": "2",
+	"exori hur": "3",
+	"utevo gran res eq":"f3",
+	"exori gran": "4",
+	"exori ico": "q"
+},
+"healing":
+[
+	{"type": "hp", "below_percent": 30, "use_spell": "exura gran ico", "min_mana_percent": 20, "priority": 7, "cooldown": 600},
+	{"type": "hp", "below_percent": 40, "use_item": "supreme health potion", "priority": 6},
+	{"type": "hp", "below_percent": 75, "use_item": "great health potion", "priority": 5},
+	{"type": "hp", "below_percent": 95, "use_spell": "exura ico", "min_mana_percent": 5, "priority": 3},
+	{"type": "mp", "below_percent": 90, "use_item": "strong mana potion", "priority": 2},
+	{"type": "hp", "below_percent": 95, "use_spell": "utura gran", "min_mana_percent": 20, "priority": 1, "cooldown": 60}
+],
+"hunt_config": {
+	"cap_leave": 10,
+	"mana_name": "strong mana potion",
+	"take_mana": 1300,
+	"mana_leave": 250,
+	"health_name": "great health potion",
+	"take_health": 300,
+	"health_leave": 40,
+	"health_name2": "supreme health potion",
+	"take_health2": 20,
+	"health_leave2": 10
+},
+"persistent_actions": [
+	{"action":"haste", "interval":40, "args":["v"]},
+	{"action":"lure_monsters", "interval":0.5, "args":[7]},
+	{"action": "equip_item", "interval": 300, "use_in_battle": true, "args": {"hotkey": "f9", "amount": 0, "slot":"ring"}},
+	{"action":"blacklist_coords", "interval":3, "args":{"coords_barrier":[[33159, 31902, 8] ,[33159, 31903, 8] ,[33171, 31897, 8] ,[33163, 31913, 8] ,[33163, 31914, 8] ,[33150, 31915, 8] ,[33150, 31916, 8] ,[33150, 31917, 8] ,[33150, 31918, 8] ,[33154, 31932, 8] ,[33154, 31933, 8]]}}, 
+	{"action":"eat_food", "interval":30, "args":["f11"]}
+],
+"target_monsters": 
+[
+	{"name":"Orc Cult Fanatic", "action":"follow", "loot":true}, 
+	{"name":"Orc Cult Inquisitor", "action":"follow", "loot":true}, 
+	{"name":"Orc Cultist", "action":"follow", "loot":true}, 
+	{"name":"Orc Cult Minion", "action":"follow", "loot":true}, 
+	{"name":"Orclops Doomhauler", "action":"follow", "loot":true}, 
+	{"name":"Orc Cult Priest", "priority":3, "action":"follow", "loot":true}
+],
+"target_spells":
+[
+	{"name":"exori hur", "min_mana_percent":10, "priority":1, "cooldown":5, "monsters":["Orc Cult Fanatic", "Orc Cult Inquisitor", "Orc Cultist", "Orc Cult Minion", "Orc Cult Priest"]},
+	{"name":"exori ico", "min_mana_percent":10, "priority":1, "cooldown":5, "monsters":["Orc Cult Fanatic", "Orc Cult Inquisitor", "Orc Cultist", "Orc Cult Minion", "Orc Cult Priest"]},
+	{"name":"exori", "min_mana_percent":10, "priority":5, "cooldown": 4, "min_monster_count":2},
+	{"name":"exori gran", "min_mana_percent":30, "priority":4, "cooldown": 6,  "min_monster_count":2},
+	{"name":"exori min", "min_mana_percent":20, "priority":3, "cooldown": 6, "min_monster_count":2},
+	{"name":"utito tempo", "min_mana_percent":60, "priority":5, "cooldown": 15,  "min_monster_count":3, "group":"support"}
+],
+"loot": []
+}

@@ -1,0 +1,204 @@
+{
+  "label_actions": [
+    {
+      "label": "check_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 4,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "check_low_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 2,
+        "label_jump": "leave"
+      }
+    },
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Backpack",
+        "amount": 6,
+        "stack": false
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "equip_item",
+      "interval": 2,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "V",
+        "amount": 3,
+        "selected_monsters": [
+          "Orc Berserker",
+          "Orc Leader",
+          "Orc Warlord",
+          "Orc Rider"
+        ],
+        "slot": "ring"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Orc Leader",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Berserker",
+      "action": "follow",
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Orc Warrior",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Shaman",
+      "action": "follow",
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Orc Spearman",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Warlord",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Rider",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Rorc",
+      "action": "follow",
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Bear",
+      "action": "follow",
+      "priority": 2,
+      "loot": false
+    },
+    {
+      "name": "Wolf",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Hunter",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Cyclops",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Bonelord",
+      "action": "follow",
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Dragon",
+      "action": "follow",
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Amazon",
+      "action": "follow",
+      "priority": 2,
+      "loot": false
+    },
+    {
+      "name": "War Wolf",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Bat",
+      "action": "follow",
+      "priority": 2,
+      "loot": false
+    },
+    {
+      "name": "Slime",
+      "action": "follow",
+      "priority": 3,
+      "loot": false
+    },
+    {
+      "name": "Wyvern",
+      "action": "follow",
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Snake",
+      "action": "follow",
+      "priority": 0,
+      "loot": false
+    }
+  ]
+}

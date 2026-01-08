@@ -1,0 +1,94 @@
+{
+  "counts": {
+    "lines": 96,
+    "pos_points": 73,
+    "labels": 12,
+    "actions": 11,
+    "unique_actions": 11
+  },
+  "distance": {
+    "total_manhattan": 806,
+    "total_euclid": 682.1962126993039,
+    "max_manhattan": 27,
+    "max_jump": {
+      "from": {
+        "line_index": 15,
+        "x": 32337,
+        "y": 32232,
+        "z": 7
+      },
+      "to": {
+        "line_index": 16,
+        "x": 32348,
+        "y": 32216,
+        "z": 7
+      },
+      "dx": 11,
+      "dy": -16,
+      "dz": 0,
+      "manhattan": 27,
+      "euclid": 19.4164878389476
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32400,
+          "y": 32217,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 26
+      },
+      {
+        "pos": {
+          "x": 32349,
+          "y": 32225,
+          "z": 8
+        },
+        "first_line": 2,
+        "again_line": 90
+      },
+      {
+        "pos": {
+          "x": 32349,
+          "y": 32225,
+          "z": 8
+        },
+        "first_line": 2,
+        "again_line": 93
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "refill",
+    "skip_ammo",
+    "go_hunt",
+    "hunt",
+    "downcave",
+    "upcave",
+    "count",
+    "continue",
+    "leave",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check_ammo",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

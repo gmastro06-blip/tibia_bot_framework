@@ -1,0 +1,112 @@
+[
+  {
+    "line": 6,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 12,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 13,
+    "action": "refill",
+    "raw": "action refill"
+  },
+  {
+    "line": 16,
+    "action": "check_imbuements",
+    "raw": "action check_imbuements"
+  },
+  {
+    "line": 19,
+    "action": "use_imbuing_shrine",
+    "raw": "action use_imbuing_shrine"
+  },
+  {
+    "line": 22,
+    "action": "check_ammo",
+    "raw": "action check_ammo"
+  },
+  {
+    "line": 24,
+    "action": "buy_ammo",
+    "raw": "action buy_ammo"
+  },
+  {
+    "line": 28,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 29,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 33,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 49,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 116,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 121,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 135,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 141,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 149,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 152,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 155,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 158,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 161,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 164,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 173,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  }
+]

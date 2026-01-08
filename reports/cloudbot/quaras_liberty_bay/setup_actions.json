@@ -1,0 +1,67 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "use_in_battle": true,
+      "args": {
+        "count": 7,
+        "min_count": 2,
+        "drop_above_hp_perc": 80
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Quara Hydromancer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Mantassin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Pincher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Constrictor",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Predator",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

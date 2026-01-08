@@ -1,0 +1,59 @@
+{
+"general": 
+{
+	"loot_type":"manual",
+	"beta":true
+},
+"script_options": {},
+"containers": 
+{
+	"gold_bp":"Backpack"
+},
+"tools":
+{
+	"rope": {"name":"rope"}
+},
+"items":
+{
+	"mana potion": {"hotkey":"f1", "use":"self"},
+	"small health potion": {"hotkey":"f2", "use":"self"}
+},
+"spells":
+{
+	"exura infir ico":"f3"
+},
+"healing":
+[
+	{"type":"hp", "below_percent":50, "use_item":"small health potion", "priority":3},
+	{"type":"hp", "below_percent":85, "use_spell":"exura infir ico", "min_mana_percent":20, "priority":2},
+	{"type":"mp", "below_percent":30, "use_item":"mana potion", "priority":1}
+],
+"hunt_config": {
+	"mana_name": "mana potion",
+	"take_mana": 20,
+	"mana_leave": 5
+},
+"persistent_actions": [],
+"target_monsters": 
+[
+	{"name":"Mountain Troll", "action":"follow", "loot":true},
+	{"name":"Troll Marauder", "action":"follow", "loot":true},
+	{"name":"Trolltrained Salamander", "action":"follow", "loot":true},
+	{"name":"Woodling", "action":"follow", "loot":true},
+	{"name":"Meadow Strider", "action":"follow", "loot":true},
+	{"name":"Bear", "action":"follow", "loot":true},
+	{"name":"Dawnfly", "action":"follow", "loot":true}
+],
+"target_spells": [],
+"loot": 
+[
+	{"name":"gold coins", "action":"loot", "dest":"gold_bp"},
+	{"name":"gold coin", "action":"loot", "dest":"gold_bp"},
+	{"name":"mana potion", "action":"loot", "dest":"gold_bp"},
+	{"name":"insectoid eggs", "action":"use"},
+	{"name":"insectoid egg", "action":"use"},
+	{"name":"meat", "action":"use"},
+	{"name":"ham", "action":"use"},
+	{"name":"fish", "action":"use"}
+]
+}

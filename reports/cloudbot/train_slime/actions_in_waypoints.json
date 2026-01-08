@@ -1,0 +1,62 @@
+[
+  {
+    "line": 5,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 8,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 15,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 16,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 19,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 37,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 45,
+    "action": "target_on",
+    "raw": "action target_on"
+  },
+  {
+    "line": 53,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 58,
+    "action": "check2",
+    "raw": "action check2"
+  },
+  {
+    "line": 59,
+    "action": "leave2",
+    "raw": "action leave2"
+  },
+  {
+    "line": 75,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 77,
+    "action": "exit",
+    "raw": "action exit"
+  }
+]

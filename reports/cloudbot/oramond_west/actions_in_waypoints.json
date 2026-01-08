@@ -1,0 +1,52 @@
+[
+  {
+    "line": 9,
+    "action": "levitate_down",
+    "raw": "action levitate_down"
+  },
+  {
+    "line": 74,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 78,
+    "action": "levitate_up",
+    "raw": "action levitate_up"
+  },
+  {
+    "line": 84,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 90,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 93,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 96,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 99,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 102,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 105,
+    "action": "end",
+    "raw": "action end"
+  }
+]

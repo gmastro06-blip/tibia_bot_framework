@@ -1,0 +1,87 @@
+[
+  {
+    "line": 3,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 4,
+    "action": "refill",
+    "raw": "action refill"
+  },
+  {
+    "line": 8,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 9,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 13,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 41,
+    "action": "travel_cemetery",
+    "raw": "action travel_cemetery"
+  },
+  {
+    "line": 47,
+    "action": "travel_alchemist",
+    "raw": "action travel_alchemist"
+  },
+  {
+    "line": 106,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 109,
+    "action": "travel_cemetery",
+    "raw": "action travel_cemetery"
+  },
+  {
+    "line": 115,
+    "action": "travel_magician",
+    "raw": "action travel_magician"
+  },
+  {
+    "line": 140,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 145,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 150,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 153,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 156,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 159,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 162,
+    "action": "wait",
+    "raw": "action wait"
+  }
+]

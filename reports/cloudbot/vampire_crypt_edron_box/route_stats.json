@@ -1,0 +1,278 @@
+{
+  "counts": {
+    "lines": 175,
+    "pos_points": 130,
+    "labels": 12,
+    "actions": 8,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 1857,
+    "total_euclid": 1536.643124321189,
+    "max_manhattan": 150,
+    "max_jump": {
+      "from": {
+        "line_index": 118,
+        "x": 33019,
+        "y": 31605,
+        "z": 11
+      },
+      "to": {
+        "line_index": 119,
+        "x": 33072,
+        "y": 31702,
+        "z": 8
+      },
+      "dx": 53,
+      "dy": 97,
+      "dz": -3,
+      "manhattan": 150,
+      "euclid": 110.5350623105628
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 118,
+          "x": 33019,
+          "y": 31605,
+          "z": 11
+        },
+        "to": {
+          "line_index": 119,
+          "x": 33072,
+          "y": 31702,
+          "z": 8
+        },
+        "dx": 53,
+        "dy": 97,
+        "dz": -3,
+        "manhattan": 150,
+        "euclid": 110.5350623105628
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33242,
+          "y": 31767,
+          "z": 7
+        },
+        "first_line": 7,
+        "again_line": 8
+      },
+      {
+        "pos": {
+          "x": 33012,
+          "y": 31634,
+          "z": 11
+        },
+        "first_line": 54,
+        "again_line": 57
+      },
+      {
+        "pos": {
+          "x": 33004,
+          "y": 31617,
+          "z": 11
+        },
+        "first_line": 60,
+        "again_line": 63
+      },
+      {
+        "pos": {
+          "x": 33005,
+          "y": 31611,
+          "z": 11
+        },
+        "first_line": 65,
+        "again_line": 68
+      },
+      {
+        "pos": {
+          "x": 32991,
+          "y": 31624,
+          "z": 12
+        },
+        "first_line": 75,
+        "again_line": 78
+      },
+      {
+        "pos": {
+          "x": 32977,
+          "y": 31611,
+          "z": 11
+        },
+        "first_line": 87,
+        "again_line": 90
+      },
+      {
+        "pos": {
+          "x": 32976,
+          "y": 31634,
+          "z": 11
+        },
+        "first_line": 92,
+        "again_line": 95
+      },
+      {
+        "pos": {
+          "x": 32990,
+          "y": 31634,
+          "z": 11
+        },
+        "first_line": 96,
+        "again_line": 99
+      },
+      {
+        "pos": {
+          "x": 33011,
+          "y": 31634,
+          "z": 11
+        },
+        "first_line": 100,
+        "again_line": 101
+      },
+      {
+        "pos": {
+          "x": 33011,
+          "y": 31634,
+          "z": 11
+        },
+        "first_line": 100,
+        "again_line": 104
+      },
+      {
+        "pos": {
+          "x": 33034,
+          "y": 31635,
+          "z": 11
+        },
+        "first_line": 105,
+        "again_line": 108
+      },
+      {
+        "pos": {
+          "x": 33018,
+          "y": 31611,
+          "z": 11
+        },
+        "first_line": 114,
+        "again_line": 117
+      },
+      {
+        "pos": {
+          "x": 33136,
+          "y": 31699,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 123
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31717,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 127
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31723,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 128
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31728,
+          "z": 7
+        },
+        "first_line": 19,
+        "again_line": 129
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31735,
+          "z": 7
+        },
+        "first_line": 18,
+        "again_line": 130
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31742,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 131
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31748,
+          "z": 7
+        },
+        "first_line": 16,
+        "again_line": 132
+      },
+      {
+        "pos": {
+          "x": 33234,
+          "y": 31768,
+          "z": 6
+        },
+        "first_line": 10,
+        "again_line": 137
+      },
+      {
+        "pos": {
+          "x": 33250,
+          "y": 31775,
+          "z": 7
+        },
+        "first_line": 6,
+        "again_line": 141
+      },
+      {
+        "pos": {
+          "x": 33247,
+          "y": 31787,
+          "z": 7
+        },
+        "first_line": 5,
+        "again_line": 143
+      }
+    ],
+    "repeat_positions": 21
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "enterspawn",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end"
+  ]
+}

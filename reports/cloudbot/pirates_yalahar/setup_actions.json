@@ -1,0 +1,69 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 300
+    },
+    {
+      "action": "cast_spell_if_monsters",
+      "use_in_battle": true,
+      "interval": 5,
+      "args": {
+        "spell_hotkey": "x",
+        "min_mp": 20,
+        "monsters_count": 1,
+        "selected_monsters": [
+          "Pirate Marauder"
+        ]
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": {
+        "hotkey": "f1"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Pirate Buccaneer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Pirate Corsair",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Pirate Cutthroat",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Pirate Marauder",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

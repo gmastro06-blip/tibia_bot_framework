@@ -1,0 +1,78 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": [
+        8
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Necromancer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Demon Skeleton",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Mummy",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Vampire",
+      "action": "follow",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Viscount",
+      "action": "follow",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Bride",
+      "action": "follow",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    }
+  ]
+}

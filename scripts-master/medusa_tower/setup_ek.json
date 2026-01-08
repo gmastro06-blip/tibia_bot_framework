@@ -1,0 +1,113 @@
+{
+"general": 
+{
+	"loot_type":"auto",
+	"loot_priority":"after",
+	"loot_box_after":true
+},
+"script_options": {
+	"duration_hours": 6,
+	"skill_train":"sword",
+	"imbuements":[
+		{"equip_slot":"weapon", "name":"Intricate Void", "type":"Mana Leech"},
+		{"equip_slot":"weapon", "name":"Intricate Vampirism", "type":"Life Leech"},
+		{"equip_slot":"helmet", "name":"Intricate Void", "type":"Mana Leech"}
+	],
+	"use_necklace": true,
+	"refill_from_stash": false,
+	"#summon":"F3",
+	"#sort_deposit": {"alexander":6, "lailene":6, "esrik":7, "tamoril":8, "rashid": 9, "green_djinn": 10}
+},
+"containers": {
+	"loot_bp":"Red Backpack"
+},
+"tools": {
+	"rope": {"name":"rope"},
+	"shovel": {"name":"shovel"}
+},
+"items": {
+	"strong mana potion": {"hotkey":"e", "use":"self"},
+        "great health potion": {"hotkey":"f7", "use":"self"},
+	"supreme health potion": {"hotkey":"F", "use":"self"},
+	"obsidian knife": {"hotkey":"y", "use":"crosshair"},
+	"sword ring": {"hotkey":"6", "use":"equip"},
+	"garlic necklace": {"hotkey":"8", "use":"equip"},
+	"foxtail amulet": {"hotkey":"9", "use":"equip"},
+	"brown mushroom": {"hotkey":"f11", "use":"use"}
+},
+"spells":
+{
+	"utani hur": "v",
+	"utura gran": "R",
+	"exana pox": "f10",
+	"utito tempo": "X",
+	"exeta res": "x",
+	"exura med ico":"g",
+	"exura ico":"r",
+	"exura gran ico":"f",
+	"exori":"1",
+	"exori min":"2",
+	"exori hur":"3",
+	"exori gran":"4",
+	"exori ico":"q"
+},
+"healing":
+[
+        {"type":"hp", "below_percent":30, "use_spell":"exura gran ico", "min_mana_percent":20, "priority":6, "cooldown": 600},
+        {"type":"hp", "below_percent":40, "use_item":"supreme health potion",  "priority":5},
+        {"type":"hp", "below_percent":70, "use_item":"great health potion",  "priority":4},
+        {"type":"hp", "below_percent":85, "use_spell":"exura med ico", "min_mana_percent":15, "priority":3},
+        {"type":"mp", "below_percent":40, "use_item":"strong mana potion", "priority":3},
+        {"type":"hp", "below_percent":95, "use_spell":"exura ico", "min_mana_percent":5, "priority":2},
+        {"type":"mp", "below_percent":80, "use_item":"strong mana potion", "priority":1},
+        {"type":"hp", "below_percent":96, "use_spell":"utura gran", "min_mana_percent":60, "priority":1, "cooldown":60}
+],
+"hunt_config": {
+	"cap_leave": 150,
+	"mana_name": "strong mana potion",
+	"take_mana": 1500,
+	"mana_leave": 450,
+	"health_name": "great health potion",
+	"take_health": 300,
+	"health_leave": 80,
+        "health_name2": "supreme health potion",
+        "take_health2": 50,
+        "health_leave2": 20
+},
+"label_actions": 
+[
+	{"label":"withdraw_amulet", "action":"withdraw_item_from_depot_to_backpack", "args": {
+		"item_name":"garlic necklace", "depot_num":4, "backpack_name":"Blue Backpack", "amount":8, "stack":false}},
+	{"label":"wait_mana", "action":"wait_mana_percentage_below", "args": {"mana_perc":80, "monster_count_below":2}}
+],
+"persistent_actions": [
+	{"action":"drop_vials", "interval":60},
+	{"action":"anti_paralyze", "interval":1, "args":["v"]},
+	{"action":"anti_poison", "interval":4, "args":["f10"]},
+	{"action":"eat_food", "interval":20, "args":{"hotkey":"f11"}},
+	{"alias":"swap_amulet", "enabled": false, "action":"swap_equip", "interval":3, "use_in_battle":true, "args":{
+		"item_equip":"garlic necklace", "item_unequip":"foxtail amulet", "selected_monsters":["Serpent Spawn", "Medusa"], "amount":3, "slot":"amulet"}},
+	{"action":"equip_item", "interval":30, "use_in_battle":true, "args":{"hotkey":"6", "amount":1, "selected_monsters":["Serpent Spawn", "Medusa", "Behemoth"], "slot":"ring"}},
+	{"action":"cast_spell_if_monsters", "interval":5, "args":{"min_mp":50, "spell_hotkey":"4", "monster_count":5, "selected_monsters":["Clay Guardian", "Omnivora", "Stone Golem"], "dist":2, "use_with_target_off":true}},
+	{"action":"lure_monsters", "use_in_battle":true, "interval":0.7, "args":{"count":7, "min_count":2, "drop_above_hp_perc":80}}
+],
+"target_monsters": 
+[
+	{"name":"Medusa", "action":"follow", "loot":true},
+	{"name":"Behemoth", "action":"follow", "loot":true},
+	{"name":"Serpent Spawn", "action":"follow", "loot":true},
+	{"name":"Omnivora", "action":"follow", "loot":true}
+],
+"target_spells":
+[ 
+	{"name":"utito tempo", "min_mana_percent":40, "priority":6, "cooldown": 15,  "min_monster_count":4, "group":"support"},
+	{"name":"exeta res", "min_mana_percent":10, "priority":5, "cooldown": 5,  "min_monster_count":2, "group":"support"},
+	{"name":"exeta res", "min_mana_percent":10, "priority":5, "cooldown": 5, "distance":1, "monsters":["Medusa", "Serpent Spawn"], "group":"support"},
+	{"name":"exori gran", "min_mana_percent":20, "priority":4, "cooldown": 6,  "min_monster_count":3},
+	{"name":"exori", "min_mana_percent":2, "priority":3, "cooldown": 4, "min_monster_count":2},
+	{"name":"exori min", "min_mana_percent":10, "priority":2, "cooldown": 6, "min_monster_count":2},
+	{"name":"exori hur", "min_mana_percent":8, "priority":1, "cooldown":5, "monsters":["Medusa", "Behemoth", "Serpent Spawn"]},
+	{"name":"exori ico", "min_mana_percent":8, "priority":1, "cooldown":5, "monsters":["Medusa", "Behemoth", "Serpent Spawn"]}
+],
+"loot": []
+}

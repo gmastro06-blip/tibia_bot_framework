@@ -1,0 +1,94 @@
+{
+  "counts": {
+    "lines": 45,
+    "pos_points": 23,
+    "labels": 10,
+    "actions": 7,
+    "unique_actions": 2
+  },
+  "distance": {
+    "total_manhattan": 2580,
+    "total_euclid": 1932.284349183097,
+    "max_manhattan": 1181,
+    "max_jump": {
+      "from": {
+        "line_index": 35,
+        "x": 33181,
+        "y": 31787,
+        "z": 7
+      },
+      "to": {
+        "line_index": 38,
+        "x": 32412,
+        "y": 32199,
+        "z": 6
+      },
+      "dx": -769,
+      "dy": 412,
+      "dz": -1,
+      "manhattan": 1181,
+      "euclid": 872.4133194764968
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 19,
+          "x": 32412,
+          "y": 32200,
+          "z": 6
+        },
+        "to": {
+          "line_index": 23,
+          "x": 33181,
+          "y": 31793,
+          "z": 7
+        },
+        "dx": 769,
+        "dy": -407,
+        "dz": 1,
+        "manhattan": 1176,
+        "euclid": 870.0632160940951
+      },
+      {
+        "from": {
+          "line_index": 35,
+          "x": 33181,
+          "y": 31787,
+          "z": 7
+        },
+        "to": {
+          "line_index": 38,
+          "x": 32412,
+          "y": 32199,
+          "z": 6
+        },
+        "dx": -769,
+        "dy": 412,
+        "dz": -1,
+        "manhattan": 1181,
+        "euclid": 872.4133194764968
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "cancel obsolete offers",
+    "create new offers",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_trainer"
+  ],
+  "actions": [
+    "check_train",
+    "end"
+  ]
+}

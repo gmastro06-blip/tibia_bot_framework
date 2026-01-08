@@ -1,0 +1,223 @@
+{
+  "label_actions": [
+    {
+      "label": "check_infernalist",
+      "action": "conditional_jump_script_options",
+      "args": {
+        "var_name": "infernalist",
+        "label_jump": "go_infernalist",
+        "label_skip": "skip_infernalist"
+      }
+    },
+    {
+      "label": "disable_distance",
+      "action": "set_target_action",
+      "args": {
+        "action": "follow"
+      }
+    },
+    {
+      "label": "activate_distance",
+      "action": "set_target_action",
+      "args": {
+        "action": "distance"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "cast_spell_if_monsters",
+      "interval": 4,
+      "args": {
+        "min_mp": 50,
+        "spell_hotkey": "1",
+        "monster_count": 5,
+        "dist": 4,
+        "use_with_target_off": true
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_priority_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "priority_ammo_name": "spectral bolt",
+        "regular_ammo_name": "infernal bolt"
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33141,
+              31700,
+              15
+            ],
+            [
+              33145,
+              31704,
+              15
+            ]
+          ],
+          [
+            [
+              33065,
+              31716,
+              12
+            ],
+            [
+              33066,
+              31723,
+              12
+            ]
+          ],
+          [
+            [
+              33065,
+              31716,
+              13
+            ],
+            [
+              33066,
+              31723,
+              13
+            ]
+          ],
+          [
+            [
+              33065,
+              31716,
+              14
+            ],
+            [
+              33066,
+              31723,
+              14
+            ]
+          ],
+          [
+            [
+              33065,
+              31716,
+              15
+            ],
+            [
+              33066,
+              31723,
+              15
+            ]
+          ],
+          [
+            [
+              33083,
+              31695,
+              15
+            ],
+            [
+              33122,
+              31702,
+              15
+            ]
+          ],
+          [
+            [
+              33108,
+              31714,
+              15
+            ],
+            [
+              33123,
+              31727,
+              15
+            ]
+          ],
+          [
+            [
+              33083,
+              31722,
+              15
+            ],
+            [
+              33103,
+              31726,
+              15
+            ]
+          ],
+          [
+            [
+              33063,
+              31703,
+              15
+            ],
+            [
+              33087,
+              31722,
+              15
+            ]
+          ]
+        ],
+        "monster_count": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Infernalist",
+      "action": "distance",
+      "min_dist": 4,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Massive Fire Elemental",
+      "action": "distance",
+      "min_dist": 4,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Demon",
+      "action": "distance",
+      "min_dist": 4,
+      "max_dist": 6,
+      "follow_below_hp_percentage": 5,
+      "loot": true
+    }
+  ]
+}

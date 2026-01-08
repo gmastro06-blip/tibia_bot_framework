@@ -1,0 +1,208 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 1,
+      "args": {
+        "hotkey": "e"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 3
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33030,
+              31590,
+              11
+            ],
+            [
+              33046,
+              31601,
+              11
+            ]
+          ],
+          [
+            [
+              33028,
+              31609,
+              11
+            ],
+            [
+              33048,
+              31623,
+              11
+            ]
+          ],
+          [
+            [
+              33028,
+              31628,
+              11
+            ],
+            [
+              33047,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              33006,
+              31626,
+              11
+            ],
+            [
+              33023,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32987,
+              31628,
+              11
+            ],
+            [
+              33002,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32967,
+              31628,
+              11
+            ],
+            [
+              32984,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32967,
+              31601,
+              11
+            ],
+            [
+              32983,
+              31622,
+              11
+            ]
+          ],
+          [
+            [
+              32991,
+              31601,
+              11
+            ],
+            [
+              33009,
+              31621,
+              11
+            ]
+          ],
+          [
+            [
+              32995,
+              31609,
+              12
+            ],
+            [
+              33010,
+              31623,
+              12
+            ]
+          ],
+          [
+            [
+              32980,
+              31609,
+              12
+            ],
+            [
+              32994,
+              31624,
+              12
+            ]
+          ],
+          [
+            [
+              32997,
+              31621,
+              12
+            ],
+            [
+              33011,
+              31635,
+              12
+            ]
+          ]
+        ],
+        "monster_count": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Bonebeast",
+      "action": "distance",
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "action": "distance",
+      "loot": true
+    },
+    {
+      "name": "Vampire Viscount",
+      "action": "distance",
+      "loot": true
+    },
+    {
+      "name": "Vampire Bride",
+      "action": "distance",
+      "loot": true
+    }
+  ]
+}

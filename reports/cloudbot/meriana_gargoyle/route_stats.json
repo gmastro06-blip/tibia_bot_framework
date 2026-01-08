@@ -1,0 +1,222 @@
+{
+  "counts": {
+    "lines": 193,
+    "pos_points": 156,
+    "labels": 18,
+    "actions": 19,
+    "unique_actions": 13
+  },
+  "distance": {
+    "total_manhattan": 2023,
+    "total_euclid": 1679.0742589223792,
+    "max_manhattan": 249,
+    "max_jump": {
+      "from": {
+        "line_index": 22,
+        "x": 32347,
+        "y": 32856,
+        "z": 7
+      },
+      "to": {
+        "line_index": 24,
+        "x": 32352,
+        "y": 32612,
+        "z": 7
+      },
+      "dx": 5,
+      "dy": -244,
+      "dz": 0,
+      "manhattan": 249,
+      "euclid": 244.05122413132864
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 22,
+          "x": 32347,
+          "y": 32856,
+          "z": 7
+        },
+        "to": {
+          "line_index": 24,
+          "x": 32352,
+          "y": 32612,
+          "z": 7
+        },
+        "dx": 5,
+        "dy": -244,
+        "dz": 0,
+        "manhattan": 249,
+        "euclid": 244.05122413132864
+      },
+      {
+        "from": {
+          "line_index": 130,
+          "x": 32350,
+          "y": 32624,
+          "z": 7
+        },
+        "to": {
+          "line_index": 132,
+          "x": 32312,
+          "y": 32737,
+          "z": 7
+        },
+        "dx": -38,
+        "dy": 113,
+        "dz": 0,
+        "manhattan": 151,
+        "euclid": 119.21828718783037
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32424,
+          "y": 32560,
+          "z": 8
+        },
+        "first_line": 76,
+        "again_line": 80
+      },
+      {
+        "pos": {
+          "x": 32406,
+          "y": 32605,
+          "z": 8
+        },
+        "first_line": 32,
+        "again_line": 121
+      },
+      {
+        "pos": {
+          "x": 32398,
+          "y": 32604,
+          "z": 8
+        },
+        "first_line": 31,
+        "again_line": 122
+      },
+      {
+        "pos": {
+          "x": 32381,
+          "y": 32603,
+          "z": 7
+        },
+        "first_line": 28,
+        "again_line": 125
+      },
+      {
+        "pos": {
+          "x": 32373,
+          "y": 32604,
+          "z": 7
+        },
+        "first_line": 27,
+        "again_line": 126
+      },
+      {
+        "pos": {
+          "x": 32368,
+          "y": 32607,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 127
+      },
+      {
+        "pos": {
+          "x": 32361,
+          "y": 32610,
+          "z": 7
+        },
+        "first_line": 25,
+        "again_line": 128
+      },
+      {
+        "pos": {
+          "x": 32352,
+          "y": 32612,
+          "z": 7
+        },
+        "first_line": 24,
+        "again_line": 129
+      },
+      {
+        "pos": {
+          "x": 32345,
+          "y": 32810,
+          "z": 7
+        },
+        "first_line": 13,
+        "again_line": 136
+      },
+      {
+        "pos": {
+          "x": 32340,
+          "y": 32826,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 144
+      },
+      {
+        "pos": {
+          "x": 32395,
+          "y": 32815,
+          "z": 2
+        },
+        "first_line": 162,
+        "again_line": 181
+      },
+      {
+        "pos": {
+          "x": 32402,
+          "y": 32811,
+          "z": 3
+        },
+        "first_line": 160,
+        "again_line": 183
+      }
+    ],
+    "repeat_positions": 12
+  },
+  "labels": [
+    "start",
+    "refill",
+    "go_hunt",
+    "pegleg",
+    "hunt",
+    "check_down",
+    "continue_down",
+    "hunt2",
+    "skip_down",
+    "leave2",
+    "leave",
+    "train",
+    "sword",
+    "axe",
+    "club",
+    "distance",
+    "magic",
+    "start trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "buy_runes",
+    "check",
+    "check2",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "refill",
+    "sell",
+    "travel_liberty_bay"
+  ]
+}

@@ -1,0 +1,187 @@
+{
+  "counts": {
+    "lines": 100,
+    "pos_points": 74,
+    "labels": 13,
+    "actions": 10,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 8038,
+    "total_euclid": 5971.527763261116,
+    "max_manhattan": 1926,
+    "max_jump": {
+      "from": {
+        "line_index": 59,
+        "x": 33341,
+        "y": 31167,
+        "z": 7
+      },
+      "to": {
+        "line_index": 60,
+        "x": 32340,
+        "y": 32092,
+        "z": 7
+      },
+      "dx": -1001,
+      "dy": 925,
+      "dz": 0,
+      "manhattan": 1926,
+      "euclid": 1362.9475411768422
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 7,
+          "x": 33176,
+          "y": 31763,
+          "z": 6
+        },
+        "to": {
+          "line_index": 9,
+          "x": 32321,
+          "y": 32211,
+          "z": 6
+        },
+        "dx": -855,
+        "dy": 448,
+        "dz": 0,
+        "manhattan": 1303,
+        "euclid": 965.2611045722292
+      },
+      {
+        "from": {
+          "line_index": 22,
+          "x": 32334,
+          "y": 32087,
+          "z": 7
+        },
+        "to": {
+          "line_index": 24,
+          "x": 33339,
+          "y": 31171,
+          "z": 7
+        },
+        "dx": 1005,
+        "dy": -916,
+        "dz": 0,
+        "manhattan": 1921,
+        "euclid": 1359.8091777892955
+      },
+      {
+        "from": {
+          "line_index": 32,
+          "x": 33334,
+          "y": 31150,
+          "z": 5
+        },
+        "to": {
+          "line_index": 34,
+          "x": 33511,
+          "y": 31105,
+          "z": 8
+        },
+        "dx": 177,
+        "dy": -45,
+        "dz": 3,
+        "manhattan": 222,
+        "euclid": 182.6307750626931
+      },
+      {
+        "from": {
+          "line_index": 52,
+          "x": 33515,
+          "y": 31102,
+          "z": 8
+        },
+        "to": {
+          "line_index": 53,
+          "x": 33335,
+          "y": 31158,
+          "z": 5
+        },
+        "dx": -180,
+        "dy": 56,
+        "dz": -3,
+        "manhattan": 236,
+        "euclid": 188.50994668717087
+      },
+      {
+        "from": {
+          "line_index": 59,
+          "x": 33341,
+          "y": 31167,
+          "z": 7
+        },
+        "to": {
+          "line_index": 60,
+          "x": 32340,
+          "y": 32092,
+          "z": 7
+        },
+        "dx": -1001,
+        "dy": 925,
+        "dz": 0,
+        "manhattan": 1926,
+        "euclid": 1362.9475411768422
+      },
+      {
+        "from": {
+          "line_index": 70,
+          "x": 32310,
+          "y": 32209,
+          "z": 6
+        },
+        "to": {
+          "line_index": 72,
+          "x": 33175,
+          "y": 31775,
+          "z": 6
+        },
+        "dx": 865,
+        "dy": -434,
+        "dz": 0,
+        "manhattan": 1299,
+        "euclid": 967.7711506342808
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32340,
+          "y": 32092,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 60
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "north_thais",
+    "muggy_plains",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "travel_edron",
+    "travel_thais"
+  ]
+}

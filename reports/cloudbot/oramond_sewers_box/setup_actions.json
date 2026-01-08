@@ -1,0 +1,277 @@
+{
+  "label_actions": [
+    {
+      "label": "refill_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 50,
+        "hotkey": "e",
+        "monster_count_below": 2
+      }
+    },
+    {
+      "label": "refill_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 50,
+        "hotkey": "e",
+        "monster_count_below": 2
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "use_in_battle": true,
+      "args": {
+        "count": 7,
+        "min_count": 2,
+        "drop_above_hp_perc": 80
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "coords_barrier": [
+          [
+            33624,
+            31976,
+            7
+          ],
+          [
+            33633,
+            31976,
+            7
+          ],
+          [
+            33631,
+            31972,
+            7
+          ],
+          [
+            33640,
+            31963,
+            7
+          ],
+          [
+            33647,
+            31947,
+            7
+          ],
+          [
+            33640,
+            31945,
+            7
+          ]
+        ]
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 2,
+      "use_in_battle": true,
+      "args": {
+        "save_single_target": true
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters_diamond_arrow",
+      "interval": 0.5,
+      "args": {
+        "count": 8
+      }
+    },
+    {
+      "action": "dynamic_barrier_coords",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "coords_barrier": [
+          [
+            33624,
+            31976,
+            7
+          ],
+          [
+            33633,
+            31976,
+            7
+          ],
+          [
+            33631,
+            31972,
+            7
+          ],
+          [
+            33640,
+            31963,
+            7
+          ],
+          [
+            33647,
+            31947,
+            7
+          ],
+          [
+            33640,
+            31945,
+            7
+          ]
+        ],
+        "monster_count": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Metal Gargoyle",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rustheap Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Blood Beast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Walker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Metal Gargoyle",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rustheap Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Blood Beast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Walker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

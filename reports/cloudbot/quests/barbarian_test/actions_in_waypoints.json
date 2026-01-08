@@ -1,0 +1,47 @@
+[
+  {
+    "line": 5,
+    "action": "get_mission",
+    "raw": "action get_mission"
+  },
+  {
+    "line": 7,
+    "action": "mead",
+    "raw": "action mead"
+  },
+  {
+    "line": 9,
+    "action": "drink",
+    "raw": "action drink"
+  },
+  {
+    "line": 12,
+    "action": "fill_mead",
+    "raw": "action fill_mead"
+  },
+  {
+    "line": 22,
+    "action": "use_mead_bear",
+    "raw": "action use_mead_bear"
+  },
+  {
+    "line": 30,
+    "action": "bear_complete",
+    "raw": "action bear_complete"
+  },
+  {
+    "line": 42,
+    "action": "mamooth",
+    "raw": "action mamooth"
+  },
+  {
+    "line": 52,
+    "action": "mamooth_complete",
+    "raw": "action mamooth_complete"
+  },
+  {
+    "line": 53,
+    "action": "end",
+    "raw": "action end"
+  }
+]

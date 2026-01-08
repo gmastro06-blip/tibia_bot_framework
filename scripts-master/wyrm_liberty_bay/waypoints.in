@@ -1,0 +1,38 @@
+label start
+load scripts/general/refill_liberty_bay.in
+label go_hunt
+node (32360,32836,7)
+node (32379,32837,7)
+stand (32388,32841,7)
+node (32389,32846,8)
+stand (32388,32848,8)
+label walk_keys
+label hunt
+node (32388, 32852, 9)
+node (32378, 32849, 9)
+node (32360, 32852, 9)
+node (32377, 32850, 9)
+node (32382, 32838, 9)
+node (32390, 32832, 9)
+node (32399, 32842, 9)
+node (32409, 32839, 9)
+node (32424, 32837, 9)
+node (32427, 32824, 9)
+node (32438, 32837, 9)
+node (32440, 32851, 9)
+node (32422, 32850, 9)
+node (32412, 32857, 9)
+action check
+label leave
+label walk_mouse
+stand (32389,32849,9)
+stand (32389,32848,9)
+stand (32389,32842,8)
+stand (32389,32841,8)
+node (32363,32831,7)
+node (32336,32841,7)
+action check_time
+label train
+load scripts/general/dp_to_train_liberty_bay.in
+label start trainer
+load scripts/general/train_to_dp_liberty_bay.in

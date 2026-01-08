@@ -1,0 +1,42 @@
+[
+  {
+    "line": 3,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 21,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 30,
+    "action": "target_on",
+    "raw": "action target_on"
+  },
+  {
+    "line": 31,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 54,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 56,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 57,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 82,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

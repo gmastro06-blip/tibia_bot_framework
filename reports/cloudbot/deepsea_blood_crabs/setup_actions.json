@@ -1,0 +1,129 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 30,
+      "args": {
+        "cap": 4000,
+        "drop_stacks": 2
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f10"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 30,
+      "args": {
+        "hotkey": "f9",
+        "amount": 0,
+        "slot": "ring"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Sea Serpent",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Young Sea Serpent",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Deepsea Blood Crab",
+      "priority": 2,
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Sea Serpent",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Young Sea Serpent",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 6,
+      "follow_below_hp_percentage": 30,
+      "loot": true
+    },
+    {
+      "name": "Deepsea Blood Crab",
+      "priority": 2,
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 6,
+      "loot": true
+    }
+  ]
+}

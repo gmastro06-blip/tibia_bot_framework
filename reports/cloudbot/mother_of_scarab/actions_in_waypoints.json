@@ -1,0 +1,22 @@
+[
+  {
+    "line": 3,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 60,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 88,
+    "action": "check2",
+    "raw": "action check2"
+  },
+  {
+    "line": 124,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

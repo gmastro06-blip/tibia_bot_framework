@@ -1,0 +1,398 @@
+{
+  "label_actions": [
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Backpack",
+        "amount": 6,
+        "stack": false
+      }
+    },
+    {
+      "label": "check_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 4,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "check_low_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 2,
+        "label_jump": "leave"
+      }
+    },
+    {
+      "label": "leave",
+      "action": "equip_item",
+      "args": {
+        "hotkey": "V",
+        "amount": 100
+      }
+    },
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Backpack",
+        "amount": 4,
+        "stack": false
+      }
+    },
+    {
+      "label": "check_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 4,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "check_low_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 2,
+        "label_jump": "leave"
+      }
+    },
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Backpack",
+        "amount": 6,
+        "stack": false
+      }
+    },
+    {
+      "label": "check_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 4,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "check_low_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 2,
+        "label_jump": "leave"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f1"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "eat_food",
+      "interval": 50,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f1"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "min_interval": 60,
+      "max_interval": 120
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f1"
+      ]
+    },
+    {
+      "action": "cast_spell",
+      "min_interval": 20,
+      "max_interval": 50,
+      "args": {
+        "hotkey": "f1",
+        "min_mp": 90
+      }
+    },
+    {
+      "alias": "stealth_persistent",
+      "action": "equip_item",
+      "min_interval": 1,
+      "max_interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "V",
+        "amount": 1,
+        "selected_monsters": [
+          "Forest Fury",
+          "Wilting Leaf Golem"
+        ],
+        "slot": "ring",
+        "unequip": false
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "V",
+        "amount": 1,
+        "selected_monsters": [
+          "Forest Fury",
+          "Wilting Leaf Golem"
+        ],
+        "slot": "ring",
+        "unequip": false
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "cast_spell",
+      "interval": 140,
+      "args": {
+        "hotkey": "r"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 40,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f1"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 140,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f2"
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "V",
+        "amount": 1,
+        "selected_monsters": [
+          "Forest Fury",
+          "Wilting Leaf Golem"
+        ],
+        "slot": "ring",
+        "unequip": false
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wilting Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Forest Fury",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dryad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Goblin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wilting Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Forest Fury",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dryad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Goblin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Forest Fury",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dryad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Goblin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Leaf Golem",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Forest Fury",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dryad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Goblin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Leaf Golem",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Forest Fury",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 5,
+      "follow_below_hp_percentage": 30,
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Dryad",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Goblin",
+      "action": "distance",
+      "min_dist": 1,
+      "max_dist": 5,
+      "loot": true
+    }
+  ]
+}

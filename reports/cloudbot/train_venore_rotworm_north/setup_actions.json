@@ -1,0 +1,79 @@
+{
+  "label_actions": [
+    {
+      "label": "activate_stop_target_low",
+      "action": "set_persistent_interval",
+      "args": {
+        "persistent_alias": "stop_target_low",
+        "interval": 2
+      }
+    },
+    {
+      "label": "deactivate_stop_target_low",
+      "action": "set_persistent_interval",
+      "args": {
+        "persistent_alias": "stop_target_low",
+        "interval": 99999
+      }
+    },
+    {
+      "label": "equip_strong_weapon",
+      "action": "swap_equip",
+      "use_in_battle": true,
+      "args": {
+        "item_equip": "jagged sword",
+        "item_unequip": "knife",
+        "selected_monsters": "all",
+        "amount": 0,
+        "slot": "weapon"
+      }
+    },
+    {
+      "label": "equip_weak_weapon",
+      "action": "swap_equip",
+      "use_in_battle": true,
+      "args": {
+        "item_equip": "knife",
+        "item_unequip": "jagged sword",
+        "selected_monsters": "all",
+        "amount": 0,
+        "slot": "weapon"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "alias": "stop_target_low",
+      "action": "stop_target_no_supplies",
+      "interval": 4,
+      "args": {
+        "mana": false,
+        "cap": false,
+        "health": true
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 2,
+        "min_count": 2
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Rotworm",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

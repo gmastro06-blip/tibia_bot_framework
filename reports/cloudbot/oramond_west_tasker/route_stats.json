@@ -1,0 +1,73 @@
+{
+  "counts": {
+    "lines": 79,
+    "pos_points": 53,
+    "labels": 13,
+    "actions": 12,
+    "unique_actions": 7
+  },
+  "distance": {
+    "total_manhattan": 666,
+    "total_euclid": 536.2639042622802,
+    "max_manhattan": 26,
+    "max_jump": {
+      "from": {
+        "line_index": 36,
+        "x": 33564,
+        "y": 31965,
+        "z": 7
+      },
+      "to": {
+        "line_index": 37,
+        "x": 33573,
+        "y": 31948,
+        "z": 7
+      },
+      "dx": 9,
+      "dy": -17,
+      "dz": 0,
+      "manhattan": 26,
+      "euclid": 19.235384061671343
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33631,
+          "y": 31897,
+          "z": 6
+        },
+        "first_line": 49,
+        "again_line": 50
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "leave",
+    "train",
+    "train",
+    "train_oramond",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "levitate_down",
+    "levitate_up",
+    "walk_keys"
+  ]
+}

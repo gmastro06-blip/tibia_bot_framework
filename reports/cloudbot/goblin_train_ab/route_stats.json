@@ -1,0 +1,54 @@
+{
+  "counts": {
+    "lines": 64,
+    "pos_points": 53,
+    "labels": 4,
+    "actions": 7,
+    "unique_actions": 7
+  },
+  "distance": {
+    "total_manhattan": 937,
+    "total_euclid": 751.5379735637656,
+    "max_manhattan": 35,
+    "max_jump": {
+      "from": {
+        "line_index": 20,
+        "x": 32663,
+        "y": 31693,
+        "z": 7
+      },
+      "to": {
+        "line_index": 21,
+        "x": 32641,
+        "y": 31706,
+        "z": 7
+      },
+      "dx": -22,
+      "dy": 13,
+      "dz": 0,
+      "manhattan": 35,
+      "euclid": 25.553864678361276
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "refill",
+    "go_hunt",
+    "leave"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell"
+  ]
+}

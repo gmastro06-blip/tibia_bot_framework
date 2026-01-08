@@ -1,0 +1,254 @@
+{
+  "counts": {
+    "lines": 155,
+    "pos_points": 137,
+    "labels": 9,
+    "actions": 6,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 5670,
+    "total_euclid": 4328.931178559434,
+    "max_manhattan": 1666,
+    "max_jump": {
+      "from": {
+        "line_index": 13,
+        "x": 32530,
+        "y": 32784,
+        "z": 6
+      },
+      "to": {
+        "line_index": 15,
+        "x": 33175,
+        "y": 31763,
+        "z": 6
+      },
+      "dx": 645,
+      "dy": -1021,
+      "dz": 0,
+      "manhattan": 1666,
+      "euclid": 1207.669656818453
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 4,
+          "x": 32630,
+          "y": 32770,
+          "z": 7
+        },
+        "to": {
+          "line_index": 6,
+          "x": 32557,
+          "y": 32780,
+          "z": 7
+        },
+        "dx": -73,
+        "dy": 10,
+        "dz": 0,
+        "manhattan": 83,
+        "euclid": 73.68174807915459
+      },
+      {
+        "from": {
+          "line_index": 13,
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "to": {
+          "line_index": 15,
+          "x": 33175,
+          "y": 31763,
+          "z": 6
+        },
+        "dx": 645,
+        "dy": -1021,
+        "dz": 0,
+        "manhattan": 1666,
+        "euclid": 1207.669656818453
+      },
+      {
+        "from": {
+          "line_index": 98,
+          "x": 33019,
+          "y": 31605,
+          "z": 11
+        },
+        "to": {
+          "line_index": 99,
+          "x": 33072,
+          "y": 31702,
+          "z": 8
+        },
+        "dx": 53,
+        "dy": 97,
+        "dz": -3,
+        "manhattan": 150,
+        "euclid": 110.5350623105628
+      },
+      {
+        "from": {
+          "line_index": 139,
+          "x": 33177,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 141,
+          "x": 32543,
+          "y": 32783,
+          "z": 6
+        },
+        "dx": -634,
+        "dy": 1019,
+        "dz": 0,
+        "manhattan": 1653,
+        "euclid": 1200.1320760649637
+      },
+      {
+        "from": {
+          "line_index": 146,
+          "x": 32558,
+          "y": 32781,
+          "z": 7
+        },
+        "to": {
+          "line_index": 148,
+          "x": 32629,
+          "y": 32764,
+          "z": 7
+        },
+        "dx": 71,
+        "dy": -17,
+        "dz": 0,
+        "manhattan": 88,
+        "euclid": 73.00684899377592
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33242,
+          "y": 31767,
+          "z": 7
+        },
+        "first_line": 31,
+        "again_line": 32
+      },
+      {
+        "pos": {
+          "x": 33136,
+          "y": 31699,
+          "z": 7
+        },
+        "first_line": 50,
+        "again_line": 103
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31717,
+          "z": 7
+        },
+        "first_line": 45,
+        "again_line": 107
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31723,
+          "z": 7
+        },
+        "first_line": 44,
+        "again_line": 108
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31728,
+          "z": 7
+        },
+        "first_line": 43,
+        "again_line": 109
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31735,
+          "z": 7
+        },
+        "first_line": 42,
+        "again_line": 110
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31742,
+          "z": 7
+        },
+        "first_line": 41,
+        "again_line": 111
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31748,
+          "z": 7
+        },
+        "first_line": 40,
+        "again_line": 112
+      },
+      {
+        "pos": {
+          "x": 33234,
+          "y": 31768,
+          "z": 6
+        },
+        "first_line": 34,
+        "again_line": 117
+      },
+      {
+        "pos": {
+          "x": 33250,
+          "y": 31775,
+          "z": 7
+        },
+        "first_line": 30,
+        "again_line": 121
+      },
+      {
+        "pos": {
+          "x": 33247,
+          "y": 31787,
+          "z": 7
+        },
+        "first_line": 29,
+        "again_line": 123
+      }
+    ],
+    "repeat_positions": 11
+  },
+  "labels": [
+    "start",
+    "port_hope_to_edron",
+    "go_hunt",
+    "enterspawn",
+    "hunt",
+    "leave",
+    "edron_to_port_hope",
+    "train",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "travel_center",
+    "travel_edron",
+    "travel_port_hope",
+    "travel_west"
+  ]
+}

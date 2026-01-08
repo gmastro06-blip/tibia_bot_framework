@@ -1,0 +1,111 @@
+{
+  "counts": {
+    "lines": 115,
+    "pos_points": 80,
+    "labels": 22,
+    "actions": 12,
+    "unique_actions": 7
+  },
+  "distance": {
+    "total_manhattan": 1825,
+    "total_euclid": 1408.4068844794983,
+    "max_manhattan": 314,
+    "max_jump": {
+      "from": {
+        "line_index": 11,
+        "x": 33175,
+        "y": 31764,
+        "z": 6
+      },
+      "to": {
+        "line_index": 13,
+        "x": 33293,
+        "y": 31960,
+        "z": 6
+      },
+      "dx": 118,
+      "dy": 196,
+      "dz": 0,
+      "manhattan": 314,
+      "euclid": 228.77936969928035
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 11,
+          "x": 33175,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 13,
+          "x": 33293,
+          "y": 31960,
+          "z": 6
+        },
+        "dx": 118,
+        "dy": 196,
+        "dz": 0,
+        "manhattan": 314,
+        "euclid": 228.77936969928035
+      },
+      {
+        "from": {
+          "line_index": 87,
+          "x": 33288,
+          "y": 31956,
+          "z": 6
+        },
+        "to": {
+          "line_index": 90,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": -112,
+        "dy": -185,
+        "dz": 0,
+        "manhattan": 297,
+        "euclid": 216.26141588364763
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "hunt2",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "leave2",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check2",
+    "check_time",
+    "check_train",
+    "end",
+    "travel_cormaya",
+    "travel_edron"
+  ]
+}

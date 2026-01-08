@@ -1,0 +1,63 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "ammo_name": "onyx arrow",
+        "equip_slot": "ammunition",
+        "min_amount": 15
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Elf Arcanist",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Dragon",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "priority": 3,
+      "loot": true
+    }
+  ]
+}

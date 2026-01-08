@@ -1,0 +1,118 @@
+{
+  "counts": {
+    "lines": 92,
+    "pos_points": 67,
+    "labels": 14,
+    "actions": 10,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 835,
+    "total_euclid": 648.4688047933109,
+    "max_manhattan": 37,
+    "max_jump": {
+      "from": {
+        "line_index": 62,
+        "x": 33175,
+        "y": 31883,
+        "z": 7
+      },
+      "to": {
+        "line_index": 63,
+        "x": 33159,
+        "y": 31862,
+        "z": 7
+      },
+      "dx": -16,
+      "dy": -21,
+      "dz": 0,
+      "manhattan": 37,
+      "euclid": 26.40075756488817
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33159,
+          "y": 31854,
+          "z": 9
+        },
+        "first_line": 10,
+        "again_line": 11
+      },
+      {
+        "pos": {
+          "x": 33151,
+          "y": 31849,
+          "z": 8
+        },
+        "first_line": 12,
+        "again_line": 13
+      },
+      {
+        "pos": {
+          "x": 33186,
+          "y": 31916,
+          "z": 8
+        },
+        "first_line": 20,
+        "again_line": 59
+      },
+      {
+        "pos": {
+          "x": 33173,
+          "y": 31843,
+          "z": 9
+        },
+        "first_line": 67,
+        "again_line": 68
+      },
+      {
+        "pos": {
+          "x": 33177,
+          "y": 31842,
+          "z": 8
+        },
+        "first_line": 7,
+        "again_line": 69
+      },
+      {
+        "pos": {
+          "x": 33191,
+          "y": 31845,
+          "z": 7
+        },
+        "first_line": 5,
+        "again_line": 71
+      }
+    ],
+    "repeat_positions": 6
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "go_deeper",
+    "hunt2",
+    "check2",
+    "leave2",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

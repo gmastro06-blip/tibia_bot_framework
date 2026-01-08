@@ -1,0 +1,128 @@
+{
+  "counts": {
+    "lines": 88,
+    "pos_points": 72,
+    "labels": 8,
+    "actions": 5,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 1170,
+    "total_euclid": 970.9260920329962,
+    "max_manhattan": 37,
+    "max_jump": {
+      "from": {
+        "line_index": 42,
+        "x": 32418,
+        "y": 32758,
+        "z": 7
+      },
+      "to": {
+        "line_index": 43,
+        "x": 32396,
+        "y": 32743,
+        "z": 6
+      },
+      "dx": -22,
+      "dy": -15,
+      "dz": -1,
+      "manhattan": 37,
+      "euclid": 26.627053911388696
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32414,
+          "y": 32743,
+          "z": 6
+        },
+        "first_line": 44,
+        "again_line": 45
+      },
+      {
+        "pos": {
+          "x": 32394,
+          "y": 32729,
+          "z": 8
+        },
+        "first_line": 18,
+        "again_line": 65
+      },
+      {
+        "pos": {
+          "x": 32386,
+          "y": 32727,
+          "z": 8
+        },
+        "first_line": 15,
+        "again_line": 69
+      },
+      {
+        "pos": {
+          "x": 32359,
+          "y": 32720,
+          "z": 7
+        },
+        "first_line": 12,
+        "again_line": 73
+      },
+      {
+        "pos": {
+          "x": 32359,
+          "y": 32719,
+          "z": 7
+        },
+        "first_line": 11,
+        "again_line": 74
+      },
+      {
+        "pos": {
+          "x": 32359,
+          "y": 32718,
+          "z": 7
+        },
+        "first_line": 10,
+        "again_line": 75
+      },
+      {
+        "pos": {
+          "x": 32350,
+          "y": 32765,
+          "z": 7
+        },
+        "first_line": 6,
+        "again_line": 79
+      },
+      {
+        "pos": {
+          "x": 32340,
+          "y": 32796,
+          "z": 7
+        },
+        "first_line": 4,
+        "again_line": 81
+      }
+    ],
+    "repeat_positions": 8
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "conditional-jump",
+    "skip_mountain",
+    "leave",
+    "train",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "target_off",
+    "target_on"
+  ]
+}

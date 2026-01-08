@@ -1,0 +1,173 @@
+{
+  "counts": {
+    "lines": 53,
+    "pos_points": 41,
+    "labels": 3,
+    "actions": 9,
+    "unique_actions": 9
+  },
+  "distance": {
+    "total_manhattan": 948,
+    "total_euclid": 746.8604429750063,
+    "max_manhattan": 46,
+    "max_jump": {
+      "from": {
+        "line_index": 45,
+        "x": 32217,
+        "y": 31090,
+        "z": 5
+      },
+      "to": {
+        "line_index": 46,
+        "x": 32247,
+        "y": 31106,
+        "z": 5
+      },
+      "dx": 30,
+      "dy": 16,
+      "dz": 0,
+      "manhattan": 46,
+      "euclid": 34.0
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32202,
+          "y": 31154,
+          "z": 7
+        },
+        "first_line": 3,
+        "again_line": 7
+      },
+      {
+        "pos": {
+          "x": 32202,
+          "y": 31154,
+          "z": 7
+        },
+        "first_line": 3,
+        "again_line": 10
+      },
+      {
+        "pos": {
+          "x": 32224,
+          "y": 31154,
+          "z": 7
+        },
+        "first_line": 12,
+        "again_line": 30
+      },
+      {
+        "pos": {
+          "x": 32240,
+          "y": 31135,
+          "z": 7
+        },
+        "first_line": 13,
+        "again_line": 31
+      },
+      {
+        "pos": {
+          "x": 32245,
+          "y": 31116,
+          "z": 7
+        },
+        "first_line": 14,
+        "again_line": 32
+      },
+      {
+        "pos": {
+          "x": 32245,
+          "y": 31112,
+          "z": 7
+        },
+        "first_line": 15,
+        "again_line": 33
+      },
+      {
+        "pos": {
+          "x": 32246,
+          "y": 31106,
+          "z": 6
+        },
+        "first_line": 16,
+        "again_line": 34
+      },
+      {
+        "pos": {
+          "x": 32236,
+          "y": 31097,
+          "z": 5
+        },
+        "first_line": 17,
+        "again_line": 35
+      },
+      {
+        "pos": {
+          "x": 32247,
+          "y": 31106,
+          "z": 5
+        },
+        "first_line": 24,
+        "again_line": 46
+      },
+      {
+        "pos": {
+          "x": 32245,
+          "y": 31112,
+          "z": 6
+        },
+        "first_line": 25,
+        "again_line": 47
+      },
+      {
+        "pos": {
+          "x": 32239,
+          "y": 31133,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 48
+      },
+      {
+        "pos": {
+          "x": 32224,
+          "y": 31158,
+          "z": 7
+        },
+        "first_line": 27,
+        "again_line": 49
+      },
+      {
+        "pos": {
+          "x": 32201,
+          "y": 31153,
+          "z": 7
+        },
+        "first_line": 28,
+        "again_line": 50
+      }
+    ],
+    "repeat_positions": 12
+  },
+  "labels": [
+    "start_svargrond_depot",
+    "mead",
+    "second_test"
+  ],
+  "actions": [
+    "bear_complete",
+    "drink",
+    "end",
+    "fill_mead",
+    "get_mission",
+    "mamooth",
+    "mamooth_complete",
+    "mead",
+    "use_mead_bear"
+  ]
+}

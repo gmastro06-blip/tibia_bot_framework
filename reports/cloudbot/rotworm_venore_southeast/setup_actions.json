@@ -1,0 +1,21 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Rotworm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Carrion Worm",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "counts": {
+    "lines": 116,
+    "pos_points": 86,
+    "labels": 16,
+    "actions": 12,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 996,
+    "total_euclid": 846.5163952721745,
+    "max_manhattan": 39,
+    "max_jump": {
+      "from": {
+        "line_index": 106,
+        "x": 32375,
+        "y": 31748,
+        "z": 7
+      },
+      "to": {
+        "line_index": 107,
+        "x": 32341,
+        "y": 31743,
+        "z": 7
+      },
+      "dx": -34,
+      "dy": -5,
+      "dz": 0,
+      "manhattan": 39,
+      "euclid": 34.36568055487916
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32341,
+          "y": 31743,
+          "z": 7
+        },
+        "first_line": 41,
+        "again_line": 107
+      },
+      {
+        "pos": {
+          "x": 32341,
+          "y": 31769,
+          "z": 7
+        },
+        "first_line": 39,
+        "again_line": 108
+      },
+      {
+        "pos": {
+          "x": 32341,
+          "y": 31769,
+          "z": 7
+        },
+        "first_line": 39,
+        "again_line": 111
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "withdraw_ring",
+    "withdraw_mushrooms",
+    "skip_ammo",
+    "check_stealth",
+    "go_hunt",
+    "hunt",
+    "upper",
+    "skip_floor",
+    "lower",
+    "skip_lower",
+    "check_low_stealth",
+    "leave",
+    "train",
+    "exit",
+    "avoid_trap_depot"
+  ],
+  "actions": [
+    "bank",
+    "buy_ammo",
+    "buy_potions",
+    "buy_runes",
+    "check",
+    "check_ammo",
+    "check_floor",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell"
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "line": 9,
+    "action": "levitate_down",
+    "raw": "action levitate_down"
+  },
+  {
+    "line": 10,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 42,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 46,
+    "action": "levitate_up",
+    "raw": "action levitate_up"
+  },
+  {
+    "line": 52,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 57,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 60,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 63,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 66,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 69,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 72,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 75,
+    "action": "end",
+    "raw": "action end"
+  }
+]

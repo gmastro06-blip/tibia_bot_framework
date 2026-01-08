@@ -1,0 +1,103 @@
+label start
+load scripts/general/refill_port_hope.in
+call conditional_jump_script_options("var_name": "use_garlic_necklace", "label_jump": "go_withdraw_amulet", "label_skip": "skip_withdraw_amulet")
+label go_withdraw_amulet
+node (32622, 32742, 7)
+label call_withdraw_garlic_necklace
+label skip_withdraw_amulet
+node (32622, 32742, 7)
+random [(32625, 32749, 7), (32629, 32749, 7)]
+call conditional_jump_item_count_below("item_name":"small ruby", "amount":2, "label_skip":"has_gems")
+random [(32623, 32739, 6), (32623, 32738, 6)]
+call buy_items_npc("item_list_name":["small ruby"], "item_list_count":[20])
+label has_gems
+label go_feyrist
+ladder (32626, 32742, 6)
+stand (32628, 32746, 5)
+stand (32632, 32740, 4)
+call conditional_jump_item_count_below("item_name":"small ruby", "amount":1, "label_skip":"use_gems")
+label exit_no_gems
+action end
+label use_gems
+label activate_lure
+call set_persistent_enabled("persistent_alias":"lure")
+action target_off
+call jump_to_label("label":"after_portal")
+label red_portal_1
+stand (32342,32271,11)
+label use_gem_north
+call use_item_at_sqm("item_name":"small ruby", "sqm":[0,1])
+call jump_to_label("label":"after_portal")
+label red_portal_2
+stand (32908,32338,15)
+label use_gem_north
+call use_item_at_sqm("item_name":"small ruby", "sqm":[0,1])
+label after_portal
+action wait
+call use_hotkey("hotkey": "a")
+action wait
+call use_hotkey("hotkey": "a")
+node (33579,32262,7)
+call conditional_jump_script_options("var_name": "use_garlic_necklace", "label_skip": "skip_equip_amulet")
+call set_persistent_enabled("persistent_alias": "equip_amulet_alias")
+label skip_equip_amulet
+label hunt
+call drop_vials()
+call conditional_jump_night("label_jump_night":"set_higher_lure", "label_jump_day":"set_lower_lure")
+label set_higher_lure
+call set_persistent_args("persistent_alias":"lure", "key":"count", "value": 5)
+call jump_to_label("label":"after_set_lure")
+label set_lower_lure
+call set_persistent_args("persistent_alias":"lure", "key":"count", "value": 3)
+call jump_to_label("label":"after_set_lure")
+label after_set_lure
+node (33563,32268,7)
+node (33559,32281,7)
+node (33550,32294,7)
+node (33550,32279,7)
+node (33546,32300,7)
+node (33537,32307,7)
+node (33528,32324,7)
+node (33518,32323,7)
+call wait_lure("direction_movement":"away", "lure_amount":2, "dist":2, "min_left_behind":1)
+node (33534,32308,7)
+call jump_to_label("label":"after_mountain")
+walk (33534,32306,7)
+stand (33533,32306,7)
+walk (33529,32310,6)
+stand (33528,32310,6)
+node (33526,32306,5)
+stand (33524,32306,5)
+node (33520,32299,6)
+node (33517,32311,6)
+walk (33523,32306,6)
+stand (33524,32306,6)
+stand (33528,32310,5)
+stand (33533,32306,6)
+label after_mountain
+node (33544,32299,7)
+walk (33551,32278,7)
+call wait_lure("direction_movement":"away", "lure_amount":2, "dist":2, "min_left_behind":1)
+walk (33564, 32268, 7)
+call wait_lure("direction_movement":"away", "lure_amount":2, "dist":2, "min_left_behind":1)
+node (33572,32265,7)
+node (33582,32262,7)
+action check
+label leave
+call set_persistent_disabled("persistent_alias": "equip_amulet_alias")
+ladder (33586,32262,7)
+call jump_to_label("label":"after_portal_2")
+label red_portal_1
+stand (32905,32340,15)
+call jump_to_label("label":"after_portal_2")
+label red_portal_2
+stand (32339,32272,11)
+label after_portal_2
+random [(32628, 32746, 4), (32629, 32746, 4)]
+random [(32630, 32742, 5), (32626, 32742, 5)]
+random [(32625, 32749, 6), (32629, 32749, 6)]
+action check_time
+label train
+load scripts/general/dp_to_train_port_hope.in
+label start_trainer
+load scripts/general/train_to_dp_port_hope.in

@@ -1,0 +1,22 @@
+[
+  {
+    "line": 5,
+    "action": "travel_east",
+    "raw": "action travel_east"
+  },
+  {
+    "line": 43,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 54,
+    "action": "travel_center",
+    "raw": "action travel_center"
+  },
+  {
+    "line": 57,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

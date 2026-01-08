@@ -1,0 +1,108 @@
+{
+"general": 
+{
+	"loot_type":"auto",
+	"loot_priority":"after"
+},
+"script_options": {
+	"hours_leave": [9.5],
+	"duration_hours": 8,
+	"skill_train":"distance",
+	"use_necklace": true,
+	"#imbuements":[
+		{"equip_slot":"weapon", "name":"Intricate Vampirism", "type":"Life Leech"},
+		{"equip_slot":"weapon", "name":"Intricate Void", "type":"Mana Leech"},
+		{"equip_slot":"helmet", "name":"Intricate Void", "type":"Mana Leech"},
+		{"equip_slot":"weapon", "name":"Intricate Strike", "type":"Critical Hit"}
+	],
+	"#summon":"F3",
+	"refill_from_stash": true,
+	"#sort_deposit": {"flint":5, "alexander":6, "lailene":6, "esrik":7, "tamoril":8, "rashid": 9, "green_djinn": 10}
+},
+"containers": {
+	"loot_bp":"Shopping Bag"
+},
+"tools":
+{
+	"rope": {"name":"rope"},
+	"shovel": {"name":"shovel"}
+},
+"items":
+{
+	"great mana potion": { "hotkey": "e", "id": 238, "use": "self" },
+	"thunderstorm rune": {"hotkey":"g", "id":3202, "use":"target"},
+	"ultimate spirit potion": {"hotkey":"f", "id":23374, "use":"self"},
+	"diamond arrow": {"hotkey":"k", "use":"equip"},
+	"obsidian knife": {"hotkey":"y", "use":"crosshair"},
+	"garlic necklace": {"hotkey":"8", "use":"equip"},
+	"foxtail amulet": {"hotkey":"9", "use":"equip"},
+	"brown mushroom": {"hotkey":"f11", "use":"use"}
+},
+"spells":
+{
+	"utani hur": "v",
+	"utura gran": "R",
+	"exana pox": "f10",
+	"utevo gran res sac": "f3",
+	"exura gran san":"r",
+	"exevo mas san":"1",
+	"exori san":"q"
+},
+"healing":
+[
+	{"type":"mp", "below_percent":20, "use_item":"ultimate spirit potion",      "priority":5},
+	{"type":"hp", "below_percent":85, "use_spell":"exura gran san", "min_mana_percent":10,  "priority":4},
+	{"type":"hp", "below_percent":50, "use_item":"ultimate spirit potion",      "priority":3},
+	{"type":"mp", "below_percent":80, "use_item":"great mana potion", "priority":2},
+	{"type":"hp", "below_percent":98, "use_spell":"utura gran", "min_mana_percent":50, "priority":1, "cooldown":60}
+],
+"hunt_config": {
+	"cap_leave": 80,
+	"mana_name": "great mana potion",
+	"take_mana": 1000,
+	"mana_leave": 250,
+	"health_name": "ultimate spirit potion",
+	"take_health": 150,
+	"health_leave": 50,
+	"rune_name": "thunderstorm rune",
+	"take_rune": 500,
+	"rune_leave": 120,
+	"ammo_name": "diamond arrow",
+	"take_ammo": 1200,
+	"ammo_leave": 250
+},
+"label_actions": 
+[
+	{"label":"withdraw_amulet", "action":"withdraw_item_from_depot_to_backpack", "args": {
+		"item_name":"garlic necklace", "depot_num":6, "backpack_name":"Backpack", "amount":8, "stack":false}},
+	{"label":"wait_mana", "action":"wait_mana_percentage_below", "args": {"mana_perc":80, "monster_count_below":2}}
+],
+"persistent_actions": [
+	{"action":"use_hotkey", "min_interval":40, "max_interval":70, "use_in_battle":true, "args":{"hotkey":"k"}},
+	{"action":"haste", "min_interval":30, "max_interval":60, "args":{"hotkey":"v"}},
+	{"action":"anti_paralyze", "min_interval":1, "max_interval":3, "args":["r"]},
+	{"action":"anti_poison", "interval":4, "args":["f10"]},
+	{"action":"eat_food", "min_interval":60, "max_interval": 80, "args":{"hotkey":"f11"}},
+	{"alias":"swap_amulet", "enabled": false, "action":"swap_equip", "interval":3, "use_in_battle":true, "args":{
+		"item_equip":"garlic necklace", "item_unequip":"foxtail amulet", "selected_monsters":["Serpent Spawn", "Medusa"], "amount":3, "slot":"amulet"}},
+	{"alias": "rune_thrower", "action": "throw_rune_if_monsters", "min_interval": 2, "max_interval":2.2, "args": {"min_mp": 40, "rune_name":"thunderstorm rune"}},
+	{"action":"lure_monsters", "interval":1, "args":{"count":8, "min_count":2, "drop_above_hp_perc":70}}
+],
+"target_monsters": 
+[
+	{"name":"Medusa", "action":"follow", "loot":true},
+	{"name":"Behemoth", "action":"follow", "loot":true, "#use_item":"obsidian knife"},
+	{"name":"Serpent Spawn", "action":"follow", "loot":true},
+	{"name":"Omnivora", "action":"follow", "loot":true},
+	{"name":"Clay Guardian", "action":"follow", "loot":false}
+],
+"target_spells":
+[
+	{"name":"exori san", "min_mana_percent":20, "priority":1, "cooldown":2,
+		"monsters":["Medusa", "Behemoth", "Serpent Spawn", "Clay Guardian", "Omnivora", "Stone Golem"]},
+	{"name":"exevo mas san", "min_mana_percent":30, "priority":3, "min_monster_count":3, "cooldown":4},
+	{"name":"thunderstorm rune", "min_mana_percent":20, "priority":2, "cooldown":2,
+		"monsters":["Medusa", "Behemoth", "Serpent Spawn", "Clay Guardian", "Omnivora", "Stone Golem"]}
+],
+"loot": []
+}

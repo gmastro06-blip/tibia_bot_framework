@@ -1,0 +1,121 @@
+{
+  "label_actions": [
+    {
+      "label": "count",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "honeycomb",
+        "amount": 5,
+        "label_jump": "continue",
+        "label_skip": "leave"
+      }
+    },
+    {
+      "label": "count",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "honeycomb",
+        "amount": 50,
+        "label_jump": "continue",
+        "label_skip": "leave"
+      }
+    },
+    {
+      "label": "count",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "honeycomb",
+        "amount": 5,
+        "label_jump": "continue",
+        "label_skip": "leave"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f12"
+      }
+    },
+    {
+      "action": "eat_food",
+      "min_interval": 60,
+      "max_interval": 100,
+      "args": {
+        "hotkey": "f12"
+      }
+    },
+    {
+      "action": "eat_food",
+      "min_interval": 70,
+      "max_interval": 120,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wolf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Deer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Starving Wolf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Deer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wolf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Starving Wolf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Deer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

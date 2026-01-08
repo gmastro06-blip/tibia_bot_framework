@@ -1,0 +1,64 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "count": 6,
+        "min_count": 2
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 2,
+      "args": {
+        "hotkey": "e",
+        "monster_count_below": 2
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Nightmare",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Nightmare Scion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Undead Gladiator",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

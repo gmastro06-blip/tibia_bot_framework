@@ -1,0 +1,359 @@
+{
+  "label_actions": [
+    {
+      "label": "refill_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 95,
+        "hotkey": "e"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 2,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 3
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40
+    },
+    {
+      "action": "eat_food",
+      "interval": 40
+    },
+    {
+      "alias": "gfb_thrower",
+      "action": "throw_rune_if_monsters",
+      "interval": 2,
+      "args": {
+        "min_mp": 20,
+        "rune_name": "great fireball rune"
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33403,
+              32019,
+              9
+            ],
+            [
+              33406,
+              32022,
+              9
+            ]
+          ]
+        ],
+        "monster_count": 0
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33405,
+              32014,
+              9
+            ],
+            [
+              33421,
+              32026,
+              9
+            ]
+          ],
+          [
+            [
+              33400,
+              32034,
+              9
+            ],
+            [
+              33414,
+              32044,
+              9
+            ]
+          ],
+          [
+            [
+              33379,
+              32045,
+              9
+            ],
+            [
+              33394,
+              32056,
+              9
+            ]
+          ],
+          [
+            [
+              33387,
+              32076,
+              9
+            ],
+            [
+              33396,
+              32086,
+              9
+            ]
+          ],
+          [
+            [
+              33405,
+              32061,
+              9
+            ],
+            [
+              33419,
+              32074,
+              9
+            ]
+          ],
+          [
+            [
+              33434,
+              32050,
+              9
+            ],
+            [
+              33445,
+              32064,
+              9
+            ]
+          ]
+        ],
+        "monster_count": 1,
+        "allow_in": true
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 5,
+      "use_in_battle": true
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters_diamond_arrow",
+      "interval": 0.5,
+      "args": {
+        "count": 5
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33405,
+              32014,
+              9
+            ],
+            [
+              33421,
+              32026,
+              9
+            ]
+          ],
+          [
+            [
+              33400,
+              32034,
+              9
+            ],
+            [
+              33414,
+              32044,
+              9
+            ]
+          ],
+          [
+            [
+              33379,
+              32045,
+              9
+            ],
+            [
+              33394,
+              32056,
+              9
+            ]
+          ],
+          [
+            [
+              33387,
+              32076,
+              9
+            ],
+            [
+              33396,
+              32086,
+              9
+            ]
+          ],
+          [
+            [
+              33405,
+              32061,
+              9
+            ],
+            [
+              33419,
+              32074,
+              9
+            ]
+          ],
+          [
+            [
+              33434,
+              32050,
+              9
+            ],
+            [
+              33445,
+              32064,
+              9
+            ]
+          ]
+        ],
+        "monster_count": 1,
+        "allow_in": true
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Werebadger",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Werefox",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Wereboar",
+      "action": "distance",
+      "priority": 3,
+      "min_dist": 4,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Werebear",
+      "action": "distance",
+      "priority": 3,
+      "min_dist": 4,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Werewolf",
+      "action": "distance",
+      "priority": 3,
+      "min_dist": 4,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Werebadger",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Wereboar",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Werebear",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Werefox",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Werewolf",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    }
+  ]
+}

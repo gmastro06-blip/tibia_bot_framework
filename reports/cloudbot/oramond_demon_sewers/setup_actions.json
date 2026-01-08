@@ -1,0 +1,171 @@
+{
+  "label_actions": [
+    {
+      "label": "check_down",
+      "action": "conditional_jump_position",
+      "args": {
+        "coords": [
+          [
+            33564,
+            31992,
+            7
+          ]
+        ],
+        "label_jump": "open_hole",
+        "label_skip": "went_down"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_priority_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "priority_ammo_name": "spectral bolt",
+        "regular_ammo_name": "infernal bolt"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33498,
+              31988,
+              10
+            ],
+            [
+              33511,
+              32001,
+              10
+            ]
+          ],
+          [
+            [
+              33515,
+              32047,
+              10
+            ],
+            [
+              33521,
+              32053,
+              10
+            ]
+          ]
+        ],
+        "monster_count": 0
+      }
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33500,
+              32021,
+              10
+            ],
+            [
+              33523,
+              32028,
+              10
+            ]
+          ],
+          [
+            [
+              33513,
+              31998,
+              10
+            ],
+            [
+              33526,
+              32012,
+              10
+            ]
+          ],
+          [
+            [
+              33482,
+              31990,
+              10
+            ],
+            [
+              33493,
+              31990,
+              10
+            ]
+          ]
+        ],
+        "allow_in": true,
+        "monster_count": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Grim Reaper",
+      "action": "distance",
+      "min_dist": 4,
+      "max_dist": 5,
+      "follow_below_hp_percentage": 5,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Demon",
+      "action": "distance",
+      "min_dist": 4,
+      "max_dist": 5,
+      "follow_below_hp_percentage": 5,
+      "use_item": "blessed wooden stake",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Metal Gargoyle",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 5,
+      "loot": true
+    }
+  ]
+}

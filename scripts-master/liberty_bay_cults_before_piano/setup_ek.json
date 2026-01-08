@@ -1,0 +1,206 @@
+ {
+  "general": {
+    "loot_type": "auto",
+    "anti_trap": "weapon",
+    "walk_type": "keys"
+  },
+  "script_options": {
+    "duration_hours": 8,
+    "hours_leave": [
+      9.5
+    ],
+    "skill_train": "sword"
+  },
+  "containers": {
+    "loot_bp": "Red Backpack"
+  },
+  "tools": {
+    "rope": {
+      "name": "rope",
+      "id": 3003
+    },
+    "shovel": {
+      "name": "shovel",
+      "id": 3457
+    }
+  },
+  "items": {
+    "mana potion": {
+      "hotkey": "e",
+      "use": "self"
+    },
+    "health potion": {
+      "hotkey": "f2",
+      "use": "self"
+    },
+    "brown mushroom": {
+      "hotkey": "f11",
+      "id": 3725,
+      "use": "use"
+    },
+    "life ring": {
+      "hotkey": "f9",
+      "use": "equip"
+    }
+  },
+  "spells": {
+    "utani hur": "v",
+    "utura": "R",
+    "exura ico": "r",
+    "exori hur": "3",
+    "exori": "1",
+    "exori ico": "q",
+    "exani hur up": "=",
+    "exani hur down": "-"
+  },
+  "healing": [
+    {
+      "type": "hp",
+      "below_percent": 60,
+      "use_item": "health potion",
+      "priority": 3
+    },
+    {
+      "type": "hp",
+      "below_percent": 85,
+      "use_spell": "exura ico",
+      "min_mana_percent": 10,
+      "priority": 2
+    },
+    {
+      "type": "hp",
+      "below_percent": 95,
+      "use_spell": "utura",
+      "min_mana_percent": 20,
+      "priority": 1,
+      "cooldown": 60
+    },
+    {
+      "type": "mp",
+      "below_percent": 60,
+      "use_item": "mana potion",
+      "priority": 1
+    }
+  ],
+  "hunt_config": {
+    "cap_leave": 10,
+    "mana_name": "mana potion",
+    "take_mana": 200,
+    "mana_leave": 75,
+    "health_name": "health potion",
+    "take_health": 40,
+    "health_leave": 20
+  },
+  "persistent_actions": [
+    {
+      "action": "anti_paralyze",
+      "use_in_battle": true,
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 60
+    },
+    {
+      "action": "equip_item",
+      "interval": 30,
+      "args": {
+        "hotkey": "f9",
+        "amount": 0,
+        "slot": "ring"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Tarantula",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonelord",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elder Bonelord",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": true
+    }
+  ],
+  "target_spells": [
+    {
+      "name": "exori hur",
+      "min_mana_percent": 10,
+      "priority": 1,
+      "cooldown": 6,
+      "monsters": [
+        "Vampire",
+        "Elder Bonelord",
+        "Witch",
+        "Acolyte Of The Cult"
+      ]
+    },
+    {
+      "name": "exori ico",
+      "min_mana_percent": 10,
+      "priority": 2,
+      "cooldown": 6,
+      "monsters": [
+        "Vampire",
+        "Elder Bonelord"
+      ]
+    },
+    {
+      "name": "exori",
+      "min_mana_percent": 10,
+      "priority": 2,
+      "cooldown": 4,
+      "min_monster_count": 4
+    }
+  ],
+  "loot": []
+}

@@ -1,0 +1,100 @@
+{
+  "label_actions": [
+    {
+      "label": "count",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "medicine pouch",
+        "amount": 5,
+        "label_jump": "continue",
+        "label_skip": "leave"
+      }
+    },
+    {
+      "label": "count",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "medicine pouch",
+        "amount": 5,
+        "label_jump": "continue",
+        "label_skip": "leave"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "refill_priority_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "priority_ammo_name": "spear",
+        "regular_ammo_name": "spike sword",
+        "equip_slot": "weapon",
+        "min_amount": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Swamp Troll",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Marsh Stalker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Swampling",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rotworm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bat",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Swamp Troll",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "follow_below_hp_percentage": 10,
+      "loot": true
+    },
+    {
+      "name": "Marsh Stalker",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Swampling",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Rotworm",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Bat",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": false
+    }
+  ]
+}

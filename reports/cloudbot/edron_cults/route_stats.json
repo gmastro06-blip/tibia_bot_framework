@@ -1,0 +1,442 @@
+{
+  "counts": {
+    "lines": 195,
+    "pos_points": 116,
+    "labels": 17,
+    "actions": 14,
+    "unique_actions": 9
+  },
+  "distance": {
+    "total_manhattan": 1449,
+    "total_euclid": 1168.22523433016,
+    "max_manhattan": 128,
+    "max_jump": {
+      "from": {
+        "line_index": 136,
+        "x": 33111,
+        "y": 31844,
+        "z": 11
+      },
+      "to": {
+        "line_index": 139,
+        "x": 33153,
+        "y": 31930,
+        "z": 10
+      },
+      "dx": 42,
+      "dy": 86,
+      "dz": -1,
+      "manhattan": 128,
+      "euclid": 95.70788891204319
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 136,
+          "x": 33111,
+          "y": 31844,
+          "z": 11
+        },
+        "to": {
+          "line_index": 139,
+          "x": 33153,
+          "y": 31930,
+          "z": 10
+        },
+        "dx": 42,
+        "dy": 86,
+        "dz": -1,
+        "manhattan": 128,
+        "euclid": 95.70788891204319
+      },
+      {
+        "from": {
+          "line_index": 139,
+          "x": 33153,
+          "y": 31930,
+          "z": 10
+        },
+        "to": {
+          "line_index": 141,
+          "x": 33130,
+          "y": 31846,
+          "z": 11
+        },
+        "dx": -23,
+        "dy": -84,
+        "dz": 1,
+        "manhattan": 107,
+        "euclid": 87.09190547921202
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33159,
+          "y": 31854,
+          "z": 9
+        },
+        "first_line": 10,
+        "again_line": 11
+      },
+      {
+        "pos": {
+          "x": 33151,
+          "y": 31849,
+          "z": 8
+        },
+        "first_line": 12,
+        "again_line": 13
+      },
+      {
+        "pos": {
+          "x": 33135,
+          "y": 31848,
+          "z": 11
+        },
+        "first_line": 43,
+        "again_line": 46
+      },
+      {
+        "pos": {
+          "x": 33124,
+          "y": 31848,
+          "z": 11
+        },
+        "first_line": 48,
+        "again_line": 51
+      },
+      {
+        "pos": {
+          "x": 33122,
+          "y": 31856,
+          "z": 11
+        },
+        "first_line": 52,
+        "again_line": 55
+      },
+      {
+        "pos": {
+          "x": 33122,
+          "y": 31864,
+          "z": 11
+        },
+        "first_line": 56,
+        "again_line": 59
+      },
+      {
+        "pos": {
+          "x": 33114,
+          "y": 31878,
+          "z": 11
+        },
+        "first_line": 60,
+        "again_line": 63
+      },
+      {
+        "pos": {
+          "x": 33134,
+          "y": 31880,
+          "z": 11
+        },
+        "first_line": 64,
+        "again_line": 67
+      },
+      {
+        "pos": {
+          "x": 33141,
+          "y": 31895,
+          "z": 12
+        },
+        "first_line": 73,
+        "again_line": 76
+      },
+      {
+        "pos": {
+          "x": 33151,
+          "y": 31884,
+          "z": 12
+        },
+        "first_line": 77,
+        "again_line": 80
+      },
+      {
+        "pos": {
+          "x": 33161,
+          "y": 31886,
+          "z": 12
+        },
+        "first_line": 81,
+        "again_line": 84
+      },
+      {
+        "pos": {
+          "x": 33161,
+          "y": 31897,
+          "z": 12
+        },
+        "first_line": 85,
+        "again_line": 88
+      },
+      {
+        "pos": {
+          "x": 33177,
+          "y": 31896,
+          "z": 12
+        },
+        "first_line": 89,
+        "again_line": 92
+      },
+      {
+        "pos": {
+          "x": 33181,
+          "y": 31908,
+          "z": 12
+        },
+        "first_line": 93,
+        "again_line": 96
+      },
+      {
+        "pos": {
+          "x": 33162,
+          "y": 31909,
+          "z": 12
+        },
+        "first_line": 97,
+        "again_line": 100
+      },
+      {
+        "pos": {
+          "x": 33147,
+          "y": 31908,
+          "z": 12
+        },
+        "first_line": 101,
+        "again_line": 104
+      },
+      {
+        "pos": {
+          "x": 33133,
+          "y": 31893,
+          "z": 11
+        },
+        "first_line": 107,
+        "again_line": 110
+      },
+      {
+        "pos": {
+          "x": 33135,
+          "y": 31879,
+          "z": 11
+        },
+        "first_line": 112,
+        "again_line": 115
+      },
+      {
+        "pos": {
+          "x": 33122,
+          "y": 31880,
+          "z": 11
+        },
+        "first_line": 117,
+        "again_line": 120
+      },
+      {
+        "pos": {
+          "x": 33114,
+          "y": 31878,
+          "z": 11
+        },
+        "first_line": 60,
+        "again_line": 121
+      },
+      {
+        "pos": {
+          "x": 33114,
+          "y": 31878,
+          "z": 11
+        },
+        "first_line": 60,
+        "again_line": 124
+      },
+      {
+        "pos": {
+          "x": 33109,
+          "y": 31871,
+          "z": 11
+        },
+        "first_line": 125,
+        "again_line": 128
+      },
+      {
+        "pos": {
+          "x": 33110,
+          "y": 31855,
+          "z": 11
+        },
+        "first_line": 129,
+        "again_line": 132
+      },
+      {
+        "pos": {
+          "x": 33111,
+          "y": 31844,
+          "z": 11
+        },
+        "first_line": 133,
+        "again_line": 136
+      },
+      {
+        "pos": {
+          "x": 33130,
+          "y": 31846,
+          "z": 11
+        },
+        "first_line": 141,
+        "again_line": 142
+      },
+      {
+        "pos": {
+          "x": 33135,
+          "y": 31859,
+          "z": 10
+        },
+        "first_line": 37,
+        "again_line": 144
+      },
+      {
+        "pos": {
+          "x": 33133,
+          "y": 31866,
+          "z": 10
+        },
+        "first_line": 36,
+        "again_line": 145
+      },
+      {
+        "pos": {
+          "x": 33129,
+          "y": 31889,
+          "z": 10
+        },
+        "first_line": 35,
+        "again_line": 146
+      },
+      {
+        "pos": {
+          "x": 33129,
+          "y": 31906,
+          "z": 10
+        },
+        "first_line": 34,
+        "again_line": 147
+      },
+      {
+        "pos": {
+          "x": 33123,
+          "y": 31919,
+          "z": 10
+        },
+        "first_line": 148,
+        "again_line": 149
+      },
+      {
+        "pos": {
+          "x": 33134,
+          "y": 31919,
+          "z": 9
+        },
+        "first_line": 32,
+        "again_line": 150
+      },
+      {
+        "pos": {
+          "x": 33164,
+          "y": 31932,
+          "z": 9
+        },
+        "first_line": 152,
+        "again_line": 153
+      },
+      {
+        "pos": {
+          "x": 33171,
+          "y": 31897,
+          "z": 8
+        },
+        "first_line": 19,
+        "again_line": 157
+      },
+      {
+        "pos": {
+          "x": 33172,
+          "y": 31896,
+          "z": 8
+        },
+        "first_line": 23,
+        "again_line": 160
+      },
+      {
+        "pos": {
+          "x": 33173,
+          "y": 31843,
+          "z": 9
+        },
+        "first_line": 170,
+        "again_line": 171
+      },
+      {
+        "pos": {
+          "x": 33177,
+          "y": 31842,
+          "z": 8
+        },
+        "first_line": 7,
+        "again_line": 172
+      },
+      {
+        "pos": {
+          "x": 33191,
+          "y": 31845,
+          "z": 7
+        },
+        "first_line": 5,
+        "again_line": 174
+      }
+    ],
+    "repeat_positions": 35
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "enter_gate",
+    "inside",
+    "hunt",
+    "go_down",
+    "skip_down",
+    "anti_trap_fall_hole",
+    "leave",
+    "exit_gate",
+    "outside",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe"
+  ],
+  "actions": [
+    "check",
+    "check_down",
+    "check_time",
+    "check_train",
+    "end",
+    "summon",
+    "wait",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

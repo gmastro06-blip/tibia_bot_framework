@@ -1,0 +1,125 @@
+{
+  "label_actions": [
+    {
+      "label": "check_hunt_down",
+      "action": "conditional_jump_script_options",
+      "args": {
+        "var_name": "hunt_down",
+        "label_jump": "continue_down",
+        "label_skip": "skip_down"
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "equip_item",
+      "interval": 40,
+      "args": {
+        "hotkey": "h",
+        "amount": 0,
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "count": 4,
+        "min_count": 2,
+        "drop_above_hp_perc": 50
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 30,
+      "max_interval": 80,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 5
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Minotaur Cult Follower",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Cult Zealot",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Cult Prophet",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Cult Follower",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Cult Zealot",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Cult Prophet",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "line": 19,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 57,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 61,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 75,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 77,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 80,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 83,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 86,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 89,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 92,
+    "action": "end",
+    "raw": "action end"
+  }
+]

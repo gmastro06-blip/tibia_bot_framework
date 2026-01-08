@@ -1,0 +1,92 @@
+[
+  {
+    "line": 11,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 25,
+    "action": "travel_farmine",
+    "raw": "action travel_farmine"
+  },
+  {
+    "line": 30,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 35,
+    "action": "levitate_east_down",
+    "raw": "action levitate_east_down"
+  },
+  {
+    "line": 54,
+    "action": "check_down",
+    "raw": "action check_down"
+  },
+  {
+    "line": 68,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 81,
+    "action": "levitate_west_up",
+    "raw": "action levitate_west_up"
+  },
+  {
+    "line": 85,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 89,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 96,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 110,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 115,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 119,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 122,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 125,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 128,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 131,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 134,
+    "action": "end",
+    "raw": "action end"
+  }
+]

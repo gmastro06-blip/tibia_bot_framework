@@ -1,0 +1,105 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Carrion Worm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Hunter",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Tarantula",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Rotworm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wild Warrior",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Smuggler",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bandit",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Apprentice",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Assassin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bandit",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Boar",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

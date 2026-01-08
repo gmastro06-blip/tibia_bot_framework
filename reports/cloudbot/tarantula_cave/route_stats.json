@@ -1,0 +1,200 @@
+{
+  "counts": {
+    "lines": 61,
+    "pos_points": 40,
+    "labels": 9,
+    "actions": 4,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 1108,
+    "total_euclid": 872.8029762435017,
+    "max_manhattan": 70,
+    "max_jump": {
+      "from": {
+        "line_index": 3,
+        "x": 32627,
+        "y": 32771,
+        "z": 7
+      },
+      "to": {
+        "line_index": 5,
+        "x": 32690,
+        "y": 32778,
+        "z": 7
+      },
+      "dx": 63,
+      "dy": 7,
+      "dz": 0,
+      "manhattan": 70,
+      "euclid": 63.387695966961914
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 3,
+          "x": 32627,
+          "y": 32771,
+          "z": 7
+        },
+        "to": {
+          "line_index": 5,
+          "x": 32690,
+          "y": 32778,
+          "z": 7
+        },
+        "dx": 63,
+        "dy": 7,
+        "dz": 0,
+        "manhattan": 70,
+        "euclid": 63.387695966961914
+      },
+      {
+        "from": {
+          "line_index": 19,
+          "x": 32699,
+          "y": 32789,
+          "z": 7
+        },
+        "to": {
+          "line_index": 20,
+          "x": 32728,
+          "y": 32812,
+          "z": 7
+        },
+        "dx": 29,
+        "dy": 23,
+        "dz": 0,
+        "manhattan": 52,
+        "euclid": 37.013511046643494
+      },
+      {
+        "from": {
+          "line_index": 21,
+          "x": 32752,
+          "y": 32832,
+          "z": 7
+        },
+        "to": {
+          "line_index": 22,
+          "x": 32784,
+          "y": 32852,
+          "z": 7
+        },
+        "dx": 32,
+        "dy": 20,
+        "dz": 0,
+        "manhattan": 52,
+        "euclid": 37.73592452822641
+      },
+      {
+        "from": {
+          "line_index": 45,
+          "x": 32851,
+          "y": 32870,
+          "z": 8
+        },
+        "to": {
+          "line_index": 46,
+          "x": 32812,
+          "y": 32856,
+          "z": 7
+        },
+        "dx": -39,
+        "dy": -14,
+        "dz": -1,
+        "manhattan": 53,
+        "euclid": 41.43669871020132
+      },
+      {
+        "from": {
+          "line_index": 46,
+          "x": 32812,
+          "y": 32856,
+          "z": 7
+        },
+        "to": {
+          "line_index": 47,
+          "x": 32776,
+          "y": 32835,
+          "z": 7
+        },
+        "dx": -36,
+        "dy": -21,
+        "dz": 0,
+        "manhattan": 57,
+        "euclid": 41.677331968349414
+      },
+      {
+        "from": {
+          "line_index": 47,
+          "x": 32776,
+          "y": 32835,
+          "z": 7
+        },
+        "to": {
+          "line_index": 48,
+          "x": 32733,
+          "y": 32817,
+          "z": 7
+        },
+        "dx": -43,
+        "dy": -18,
+        "dz": 0,
+        "manhattan": 61,
+        "euclid": 46.61544808322666
+      },
+      {
+        "from": {
+          "line_index": 52,
+          "x": 32679,
+          "y": 32776,
+          "z": 7
+        },
+        "to": {
+          "line_index": 54,
+          "x": 32630,
+          "y": 32759,
+          "z": 7
+        },
+        "dx": -49,
+        "dy": -17,
+        "dz": 0,
+        "manhattan": 66,
+        "euclid": 51.86520991955976
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32694,
+          "y": 32772,
+          "z": 6
+        },
+        "first_line": 16,
+        "again_line": 17
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "go_task",
+    "repeat_task",
+    "skip_task",
+    "hunt",
+    "leave",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "travel_center",
+    "travel_east"
+  ]
+}

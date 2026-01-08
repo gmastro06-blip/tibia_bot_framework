@@ -1,0 +1,77 @@
+{
+  "counts": {
+    "lines": 54,
+    "pos_points": 35,
+    "labels": 9,
+    "actions": 8,
+    "unique_actions": 5
+  },
+  "distance": {
+    "total_manhattan": 601,
+    "total_euclid": 496.0686526506159,
+    "max_manhattan": 62,
+    "max_jump": {
+      "from": {
+        "line_index": 7,
+        "x": 32619,
+        "y": 31899,
+        "z": 9
+      },
+      "to": {
+        "line_index": 9,
+        "x": 32631,
+        "y": 31949,
+        "z": 7
+      },
+      "dx": 12,
+      "dy": 50,
+      "dz": -2,
+      "manhattan": 62,
+      "euclid": 51.419840528729765
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 7,
+          "x": 32619,
+          "y": 31899,
+          "z": 9
+        },
+        "to": {
+          "line_index": 9,
+          "x": 32631,
+          "y": 31949,
+          "z": 7
+        },
+        "dx": 12,
+        "dy": 50,
+        "dz": -2,
+        "manhattan": 62,
+        "euclid": 51.419840528729765
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "after_portal",
+    "hunt",
+    "skip_upper_floor",
+    "leave",
+    "wagon",
+    "wagon",
+    "exit"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "end",
+    "exit",
+    "wait"
+  ]
+}

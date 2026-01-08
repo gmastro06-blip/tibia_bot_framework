@@ -1,0 +1,51 @@
+{
+  "label_actions": [],
+  "persistent_actions": [],
+  "target_monsters": [
+    {
+      "name": "Marsh Stalker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Emerald Damselfly",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Swampling",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Salamander",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Marsh Stalker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Emerald Damselfly",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Swampling",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Salamander",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Marsh Stalker",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "counts": {
+    "lines": 110,
+    "pos_points": 86,
+    "labels": 11,
+    "actions": 10,
+    "unique_actions": 10
+  },
+  "distance": {
+    "total_manhattan": 1483,
+    "total_euclid": 1206.9025036891348,
+    "max_manhattan": 38,
+    "max_jump": {
+      "from": {
+        "line_index": 31,
+        "x": 32242,
+        "y": 32811,
+        "z": 7
+      },
+      "to": {
+        "line_index": 32,
+        "x": 32222,
+        "y": 32793,
+        "z": 7
+      },
+      "dx": -20,
+      "dy": -18,
+      "dz": 0,
+      "manhattan": 38,
+      "euclid": 26.90724809414742
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32130,
+          "y": 32829,
+          "z": 8
+        },
+        "first_line": 43,
+        "again_line": 50
+      },
+      {
+        "pos": {
+          "x": 32080,
+          "y": 32791,
+          "z": 9
+        },
+        "first_line": 65,
+        "again_line": 81
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "buy_distance",
+    "go_hunt",
+    "hunt",
+    "hunt_down",
+    "hunt2",
+    "skip_hunt_down",
+    "leave2",
+    "leave",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check2",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "refill",
+    "sell"
+  ]
+}

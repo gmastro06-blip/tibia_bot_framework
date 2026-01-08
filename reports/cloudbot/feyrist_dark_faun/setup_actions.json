@@ -1,0 +1,113 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 7,
+        "min_count": 1,
+        "drop_above_hp_perc": 80
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 30,
+      "max_interval": 80,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 7,
+        "min_count": 2,
+        "drop_above_hp_perc": 80
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Twisted Pooka",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Boogy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Twisted Pooka",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Boogy",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

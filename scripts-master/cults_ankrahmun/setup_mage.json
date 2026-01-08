@@ -1,0 +1,78 @@
+{
+"general": {
+	"loot_type": "auto",
+	"loot_priority": "skip",
+	"track_loot": true,
+	"scan_distance": true,
+	"beta":true
+},
+"script_options": {
+	"duration_hours": 8,
+	"hours_leave":[9.5],
+	"skill_train": "magic",
+	"sort_deposit": {"alexander":6, "lailene":6, "tamoril":8, "rashid": 9, "green_djinn": 10},
+	"hunt_down":true
+},
+"containers": {
+	"loot_bp":"Red Backpack"
+},
+"tools": {
+  	"rope": {"name":"rope"},
+	"shovel": {"name":"shovel"}
+},
+"items": {
+    	"great mana potion": {"hotkey":"e", "use":"self"},
+    	"brown mushroom": {"hotkey":"f11", "use":"use"},
+	"great fireball rune": {"hotkey":"1", "use":"crosshair"}
+},
+"spells": {
+    	"exura": "f4",
+    	"exura gran": "r",
+	"exori vis": "f3",
+	"exori flam": "f6",
+    	"exori amp vis": "f5",
+    	"exevo gran mas vis": "f10",
+	"utani hur": "v"
+},
+"healing": [
+    	{"type": "hp", "below_percent":97, "use_spell":"exura", "min_mana_percent": 5, "priority": 1},
+    	{"type": "hp", "below_percent":75, "use_spell":"exura gran", "min_mana_percent": 5, "priority": 3},
+    	{"type": "mp", "below_percent":50, "use_item":"great mana potion", "priority": 2}
+],
+"hunt_config": {
+   	"cap_leave": 0,
+    	"mana_name": "great mana potion",
+    	"take_mana": 200,
+    	"mana_leave": 40,
+	"rune_name": "great fireball rune",
+	"take_rune": 800,
+	"rune_leave": 200
+},
+"label_actions": [],
+"persistent_actions": [
+	{"action":"drop_vials", "interval":60},
+	{"action":"lure_monsters", "interval":1, "args":{"count":2}}, 
+	{"action":"scan_bodies", "interval": 30000},
+	{"action":"swap_target_action", "interval":3, "args":{"count":4, "action_below":"distance" , "action_above":"stand", "only_monsters":["Adept Of The Cult", "Acolyte Of The Cult", "Novice Of The Cult", "Enlightened Of The Cult"]}},
+	{"action":"use_hotkey_if_condition", "interval":1, "args":{"condition":"paralyzed", "hotkey":"f4"}},
+	{"action":"eat_food", "interval":40, "args":{"hotkey":"f11"}},
+	{"action":"blacklist_coords", "interval":30, "args":{"coords_barrier":[[33334, 32696, 9], [33334, 32697, 9],[33334, 32698, 9],[33334, 32699, 9],[33334, 32700, 9],[33334, 32701, 9],[33334, 32702, 9],[33334, 32703, 9]]}},
+	{"action":"haste", "interval":40, "args":["v"]}
+],
+"target_monsters": [
+	{"name": "Lizard Sentinel", "action": "distance", "min_dist":0, "max_dist":3, "priority": 1, "loot": false},
+	{"name": "Lizard Snakecharmer", "action": "distance", "min_dist":0, "max_dist":3, "priority": 2, "loot": true},
+	{"name": "Lizard Templar", "action": "follow", "priority": 1, "loot": false},
+	{"name": "Novice Of The Cult", "action": "follow", "priority": 2, "loot": true},
+	{"name": "Acolyte Of The Cult", "action": "distance", "min_dist":0, "max_dist":3, "priority": 3, "loot": true},
+    	{"name": "Adept Of The Cult", "action": "distance", "min_dist":0, "max_dist":3, "priority": 4, "loot": true},
+	{"name": "Enlightened Of The Cult", "action": "distance", "min_dist":0, "max_dist":3, "priority": 4, "loot": true}	
+],
+"target_spells": [
+	{"name":"exevo gran mas vis", "min_mana_percent":60, "priority":5, "cooldown": 40,  "min_monster_count":5},
+	{"name":"great fireball rune", "min_mana_percent": 20, "priority": 3, "cooldown": 1, "min_monster_count": 2},
+   	{"name":"exori vis", "min_mana_percent": 3, "priority": 2, "distance":3, "cooldown": 2, "monsters": ["Adept Of The Cult", "Acolyte Of The Cult", "Novice Of The Cult", "Enlightened Of The Cult"]},
+   	{"name":"exori flam", "min_mana_percent": 3, "priority": 1, "distance":3, "cooldown": 2, "monsters": ["Lizard Sentinel", "Lizard Templar", "Lizard Snakecharmer"]}
+],
+"loot": []
+}

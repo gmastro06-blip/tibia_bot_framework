@@ -1,0 +1,181 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "ammo_name": "assassin star",
+        "equip_slot": "weapon",
+        "min_amount": 10
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 20,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "count": 4
+      }
+    },
+    {
+      "action": "refill_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "ammo_name": "assassin star",
+        "equip_slot": "weapon",
+        "min_amount": 10
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Necromancer",
+      "priority": 4,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "priority": 3,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "priority": 2,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Demon Skeleton",
+      "priority": 1,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "priority": 1,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Necromancer",
+      "priority": 4,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "priority": 3,
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "priority": 2,
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Demon Skeleton",
+      "priority": 1,
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "priority": 1,
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

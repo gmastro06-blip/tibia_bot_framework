@@ -1,0 +1,83 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "anti_paralyze",
+      "use_in_battle": true,
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 60
+    },
+    {
+      "action": "equip_item",
+      "interval": 30,
+      "args": {
+        "hotkey": "f9",
+        "amount": 0,
+        "slot": "ring"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Tarantula",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonelord",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elder Bonelord",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Monk",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

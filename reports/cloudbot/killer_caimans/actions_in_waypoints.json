@@ -1,0 +1,132 @@
+[
+  {
+    "line": 11,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 25,
+    "action": "travel_farmine",
+    "raw": "action travel_farmine"
+  },
+  {
+    "line": 26,
+    "action": "gohunt_14",
+    "raw": "action gohunt_14"
+  },
+  {
+    "line": 32,
+    "action": "jump_elevator_gohunt",
+    "raw": "action jump_elevator_gohunt"
+  },
+  {
+    "line": 34,
+    "action": "gohunt_12",
+    "raw": "action gohunt_12"
+  },
+  {
+    "line": 40,
+    "action": "jump_elevator_gohunt",
+    "raw": "action jump_elevator_gohunt"
+  },
+  {
+    "line": 47,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 52,
+    "action": "levitate_east_down",
+    "raw": "action levitate_east_down"
+  },
+  {
+    "line": 71,
+    "action": "check_down",
+    "raw": "action check_down"
+  },
+  {
+    "line": 85,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 98,
+    "action": "levitate_west_up",
+    "raw": "action levitate_west_up"
+  },
+  {
+    "line": 102,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 106,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 107,
+    "action": "back_14",
+    "raw": "action back_14"
+  },
+  {
+    "line": 114,
+    "action": "jump_travel_back",
+    "raw": "action jump_travel_back"
+  },
+  {
+    "line": 116,
+    "action": "back_12",
+    "raw": "action back_12"
+  },
+  {
+    "line": 123,
+    "action": "jump_travel_back",
+    "raw": "action jump_travel_back"
+  },
+  {
+    "line": 131,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 145,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 150,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 154,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 157,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 160,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 163,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 166,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 169,
+    "action": "end",
+    "raw": "action end"
+  }
+]

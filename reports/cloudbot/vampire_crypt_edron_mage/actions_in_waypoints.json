@@ -1,0 +1,32 @@
+[
+  {
+    "line": 6,
+    "action": "travel_west",
+    "raw": "action travel_west"
+  },
+  {
+    "line": 15,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 96,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 141,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 148,
+    "action": "travel_center",
+    "raw": "action travel_center"
+  },
+  {
+    "line": 151,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

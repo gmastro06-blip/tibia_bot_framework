@@ -1,0 +1,142 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 5
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 5,
+      "use_in_battle": true
+    },
+    {
+      "action": "lure_monsters_diamond_arrow",
+      "interval": 1,
+      "args": [
+        5
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Bonebeast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Necromancer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vicious Squire",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Hero",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Blood Priest",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lich",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Renegade Knight",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vile Grandmaster",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Necromancer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vicious Squire",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Hero",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Blood Priest",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lich",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Renegade Knight",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Vile Grandmaster",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

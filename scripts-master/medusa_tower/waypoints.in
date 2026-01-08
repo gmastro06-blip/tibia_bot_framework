@@ -1,0 +1,122 @@
+label start
+load scripts/general/refill_port_hope.in
+call conditional_jump_script_options("var_name":"use_necklace", "label_skip":"gohunt")
+node (32622, 32746, 7)
+label withdraw_amulet
+label gohunt
+node (32622, 32746, 7)
+random [(32628,32771,7), (32626,32771,7), (32627,32771,7)]
+action travel_east
+node (32684,32783,7)
+node (32696,32797,7)
+node (32721,32809,7)
+node (32746,32820,7)
+node (32773,32819,7)
+node (32800,32825,7)
+node (32827,32822,7)
+node (32848,32815,7)
+shovel (32853,32814,7)
+node (32859,32829,8)
+node (32869,32830,8)
+stand (32865,32830,8)
+node (32868,32837,7)
+node (32860,32826,7)
+stand (32872,32834,7)
+node (32867,32824,6)
+node (32866,32830,6)
+stand (32871,32827,6)
+call conditional_jump_script_options("var_name":"use_necklace", "label_skip":"hunt")
+call set_persistent_enabled("persistent_alias":"swap_amulet")
+label hunt
+action walk_keys
+action summon
+node (32867, 32825, 5)
+walk (32867, 32825, 5)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32860, 32832, 5)
+walk (32866, 32835, 5)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32869, 32833, 5)
+label wait_mana
+stand (32872, 32830, 5)
+walk (32866, 32825, 4)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32863, 32827, 4)
+node (32861, 32833, 4)
+walk (32866, 32838, 4)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32867, 32833, 4)
+label wait_mana
+stand (32867, 32830, 4)
+walk (32861, 32831, 3)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32863, 32834, 3)
+label wait_mana
+stand (32866, 32836, 3)
+walk (32863, 32831, 2)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32864, 32833, 2)
+action loot_monsters
+stand (32866, 32836, 2)
+node (32861, 32831, 3)
+stand (32867, 32830, 3)
+node (32870, 32837, 4)
+node (32863, 32837, 4)
+walk (32862, 32833, 4)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32862, 32833, 4)
+walk (32865, 32826, 4)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32865, 32826, 4)
+label wait_mana
+stand (32872, 32830, 4)
+walk (32869, 32833, 5)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32869, 32833, 5)
+call wait_lure("lure_amount":4, "dist":2, "direction_movement":"away", "min_left_behind":1)
+node (32866, 32835, 5)
+walk (32866, 32835, 5)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+node (32860, 32834, 5)
+walk (32866, 32825, 5)
+call wait_lure("lure_amount":4, "dist":1, "direction_movement":"away", "min_left_behind":1)
+call lure_monsters("count":4)
+action check
+label leave
+action walk_mouse
+stand (32871,32827,5)
+node (32865,32832,6)
+node (32863, 32841, 6)
+node (32869,32823,6)
+stand (32872,32833,6)
+call set_persistent_disabled("persistent_alias":"swap_amulet")
+node (32861,32825,7)
+node (32869,32840,7)
+stand (32864,32830,7)
+node (32865,32824,8)
+node (32850,32816,8)
+rope (32853,32814,8)
+node (32821,32822,7)
+node (32786,32822,7)
+node (32750,32814,7)
+node (32717,32802,7)
+node (32696,32789,7)
+stand (32679,32777,7)
+label go_center
+action travel_center
+node (32629,32760,7)
+action check_time
+label train
+load scripts/general/dp_to_train_port_hope.in
+label start_train
+load scripts/general/train_to_dp_port_hope.in

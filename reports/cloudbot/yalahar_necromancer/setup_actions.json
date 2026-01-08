@@ -1,0 +1,145 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f10"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "stop_target_no_supplies",
+      "interval": 15,
+      "args": {
+        "mana": false,
+        "health": false,
+        "cap": false,
+        "rune": false,
+        "ammo": true,
+        "time": false
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f10"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Necromancer",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Priestess",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Dark Apprentice",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Dark Magician",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Necromancer",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Priestess",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Dark Apprentice",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Dark Magician",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "loot": true
+    }
+  ]
+}

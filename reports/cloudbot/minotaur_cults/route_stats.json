@@ -1,0 +1,226 @@
+{
+  "counts": {
+    "lines": 184,
+    "pos_points": 155,
+    "labels": 13,
+    "actions": 14,
+    "unique_actions": 9
+  },
+  "distance": {
+    "total_manhattan": 11186,
+    "total_euclid": 8594.91110645192,
+    "max_manhattan": 1851,
+    "max_jump": {
+      "from": {
+        "line_index": 101,
+        "x": 33185,
+        "y": 31894,
+        "z": 15
+      },
+      "to": {
+        "line_index": 102,
+        "x": 31942,
+        "y": 32502,
+        "z": 8
+      },
+      "dx": -1243,
+      "dy": 608,
+      "dz": -7,
+      "manhattan": 1851,
+      "euclid": 1383.7315491091472
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 7,
+          "x": 33176,
+          "y": 31763,
+          "z": 6
+        },
+        "to": {
+          "line_index": 9,
+          "x": 32321,
+          "y": 32211,
+          "z": 6
+        },
+        "dx": -855,
+        "dy": 448,
+        "dz": 0,
+        "manhattan": 1303,
+        "euclid": 965.2611045722292
+      },
+      {
+        "from": {
+          "line_index": 57,
+          "x": 32496,
+          "y": 32102,
+          "z": 15
+        },
+        "to": {
+          "line_index": 58,
+          "x": 31939,
+          "y": 32502,
+          "z": 8
+        },
+        "dx": -557,
+        "dy": 400,
+        "dz": -7,
+        "manhattan": 957,
+        "euclid": 685.7470379082946
+      },
+      {
+        "from": {
+          "line_index": 99,
+          "x": 31959,
+          "y": 32420,
+          "z": 9
+        },
+        "to": {
+          "line_index": 100,
+          "x": 33181,
+          "y": 31894,
+          "z": 15
+        },
+        "dx": 1222,
+        "dy": -526,
+        "dz": 6,
+        "manhattan": 1748,
+        "euclid": 1330.3984365595143
+      },
+      {
+        "from": {
+          "line_index": 101,
+          "x": 33185,
+          "y": 31894,
+          "z": 15
+        },
+        "to": {
+          "line_index": 102,
+          "x": 31942,
+          "y": 32502,
+          "z": 8
+        },
+        "dx": -1243,
+        "dy": 608,
+        "dz": -7,
+        "manhattan": 1851,
+        "euclid": 1383.7315491091472
+      },
+      {
+        "from": {
+          "line_index": 116,
+          "x": 31922,
+          "y": 32503,
+          "z": 8
+        },
+        "to": {
+          "line_index": 117,
+          "x": 32484,
+          "y": 32101,
+          "z": 15
+        },
+        "dx": 562,
+        "dy": -402,
+        "dz": 7,
+        "manhattan": 964,
+        "euclid": 690.9761211503621
+      },
+      {
+        "from": {
+          "line_index": 154,
+          "x": 32310,
+          "y": 32209,
+          "z": 6
+        },
+        "to": {
+          "line_index": 156,
+          "x": 33175,
+          "y": 31775,
+          "z": 6
+        },
+        "dx": 865,
+        "dy": -434,
+        "dz": 0,
+        "manhattan": 1299,
+        "euclid": 967.7711506342808
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 31950,
+          "y": 32501,
+          "z": 8
+        },
+        "first_line": 59,
+        "again_line": 103
+      },
+      {
+        "pos": {
+          "x": 31950,
+          "y": 32501,
+          "z": 8
+        },
+        "first_line": 59,
+        "again_line": 114
+      },
+      {
+        "pos": {
+          "x": 32555,
+          "y": 32193,
+          "z": 13
+        },
+        "first_line": 34,
+        "again_line": 126
+      },
+      {
+        "pos": {
+          "x": 32355,
+          "y": 32142,
+          "z": 9
+        },
+        "first_line": 19,
+        "again_line": 142
+      },
+      {
+        "pos": {
+          "x": 32358,
+          "y": 32172,
+          "z": 7
+        },
+        "first_line": 14,
+        "again_line": 148
+      }
+    ],
+    "repeat_positions": 4
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "check_hunt_down",
+    "skip_down",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "summon",
+    "travel_edron",
+    "travel_thais",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

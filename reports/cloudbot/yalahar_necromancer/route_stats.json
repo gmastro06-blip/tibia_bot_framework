@@ -1,0 +1,91 @@
+{
+  "counts": {
+    "lines": 107,
+    "pos_points": 95,
+    "labels": 7,
+    "actions": 2,
+    "unique_actions": 2
+  },
+  "distance": {
+    "total_manhattan": 1058,
+    "total_euclid": 830.9755925624202,
+    "max_manhattan": 51,
+    "max_jump": {
+      "from": {
+        "line_index": 80,
+        "x": 32886,
+        "y": 31069,
+        "z": 3
+      },
+      "to": {
+        "line_index": 81,
+        "x": 32927,
+        "y": 31079,
+        "z": 3
+      },
+      "dx": 41,
+      "dy": 10,
+      "dz": 0,
+      "manhattan": 51,
+      "euclid": 42.20189569201838
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 80,
+          "x": 32886,
+          "y": 31069,
+          "z": 3
+        },
+        "to": {
+          "line_index": 81,
+          "x": 32927,
+          "y": 31079,
+          "z": 3
+        },
+        "dx": 41,
+        "dy": 10,
+        "dz": 0,
+        "manhattan": 51,
+        "euclid": 42.20189569201838
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32902,
+          "y": 31096,
+          "z": 7
+        },
+        "first_line": 49,
+        "again_line": 50
+      },
+      {
+        "pos": {
+          "x": 32834,
+          "y": 31149,
+          "z": 5
+        },
+        "first_line": 11,
+        "again_line": 94
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "anti_trap",
+    "leave",
+    "train",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time"
+  ]
+}

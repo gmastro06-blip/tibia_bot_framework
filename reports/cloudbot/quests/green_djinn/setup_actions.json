@@ -1,0 +1,86 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 60
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Scarab",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ancient Scarab",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Nomad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Hyaena",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Blue Djinn",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Marid",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Stone Golem",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Orc",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Orc Berserker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Warlord",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Leader",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Shaman",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Spearman",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Dragon",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Fire Elemental",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

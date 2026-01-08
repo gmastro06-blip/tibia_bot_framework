@@ -1,0 +1,135 @@
+ {
+  "general": {
+    "loot_type": "auto",
+    "loot_priority": "after",
+    "anti_trap":"weapon"
+  },
+  "script_options": {
+    "duration_hours": 8,
+    "hours_leave": [9.5],
+    "skill_train": "sword",
+    "#imbuements": [
+      {"equip_slot": "weapon", "name": "Intricate Vampirism", "type": "Life Leech"}
+    ],
+    "#sort_deposit": {"rashid": 9, "green_djinn": 10},
+    "use_garlic_necklace": false
+  },
+  "containers": {
+    "loot_bp": "Red Backpack"
+  },
+  "tools": {},
+  "items": {
+    "strong mana potion": {"hotkey": "e", "use": "self"},
+    "supreme health potion": {"hotkey": "F", "use": "self"},
+    "great health potion": {"hotkey":"f7", "use":"self"},
+    "brown mushroom": {"hotkey": "f11", "use": "use"},
+    "small ruby": {"hotkey": "f10", "id": 3030, "use": "crosshair"},
+    "garlic necklace": {"hotkey": "f12", "use": "equip"}
+  },
+  "spells": {
+    "utani hur": "v",
+    "utura gran": "R",
+    "utito tempo": "X",
+    "exeta res": "x",
+    "exura ico": "r",
+    "exura gran ico": "f",
+    "exori": "1",
+    "exori min": "2",
+    "exori hur": "3",
+    "exori gran": "4",
+    "exori ico": "q"
+  },
+  "healing": [
+    {"type": "hp", "below_percent": 20, "use_spell": "exura gran ico", "min_mana_percent": 20, "priority": 5, "cooldown": 900},
+    {"type": "hp", "below_percent": 40, "use_item": "supreme health potion", "priority": 4},
+    {"type": "hp", "below_percent":70, "use_item":"great health potion", "priority":3},
+    {"type": "hp", "below_percent": 85, "use_spell": "exura ico", "min_mana_percent": 20, "priority": 3},
+    {"type": "mp", "below_percent": 80, "use_item": "strong mana potion", "priority": 2},
+    {"type": "hp", "below_percent": 95, "use_spell": "utura gran", "min_mana_percent": 20, "priority": 1, "cooldown": 60}
+  ],
+  "hunt_config": {
+    "cap_leave": 20,
+    "gem_name": "small ruby",
+    "take_gem": 2,
+    "mana_name": "strong mana potion",
+    "take_mana": 1000,
+    "mana_leave": 300,
+    "health_name": "supreme health potion",
+    "take_health": 50,
+    "health_leave": 20,
+    "health_name2": "great health potion",
+    "take_health2": 400,
+    "health_leave2": 150
+  },
+  "label_actions": [
+	  {"label": "call_withdraw_garlic_necklace", "action": "withdraw_item_from_depot_to_backpack",
+		  "args": { "item_name": "garlic necklace", "depot_num": 4, "backpack_name": "Blue Backpack", "amount": 8, "stack": false}}
+  ],
+  "persistent_actions": [
+    {"action": "haste", "interval": 40, "args": [ "v" ]},
+    {"action": "eat_food", "interval": 30, "args": [ "f11" ]},
+    {"enabled": false, "alias": "equip_amulet_alias", "action": "equip_item", "interval": 10, "use_in_battle": true, "args": { "hotkey": "f12", "amount": 0, "slot": "amulet"}},
+    {"enabled": false, "alias": "lure", "action": "lure_monsters", "interval": 1, "args": { "count": 4, "min_count": 2, "drop_above_hp_perc": 80}}
+  ],
+  "target_monsters": [
+    {"name": "Faun", "action": "follow", "loot": true },
+    {"name": "Dark Faun", "action": "follow", "loot": true },
+    {"name": "Weakened Frazzlemaw", "action": "follow", "loot": true },
+    {"name": "Enfeebled Silencer", "action": "follow", "loot": true }
+  ],
+  "target_spells": [
+    {
+      "name": "exori hur",
+      "min_mana_percent": 10,
+      "priority": 1,
+      "cooldown": 5,
+      "monsters": [
+        "Faun",
+        "Dark Faun",
+        "Weakened Frazzlemaw",
+        "Enfeebled Silencer"
+      ]
+    },
+    {
+      "name": "exori ico",
+      "min_mana_percent": 10,
+      "priority": 1,
+      "cooldown": 5,
+      "monsters": [
+        "Faun",
+        "Dark Faun",
+        "Weakened Frazzlemaw",
+        "Enfeebled Silencer"
+      ]
+    },
+    {
+      "name": "exori min",
+      "min_mana_percent": 20,
+      "priority": 2,
+      "cooldown": 6,
+      "min_monster_count": 2
+    },
+    {
+      "name": "exori",
+      "min_mana_percent": 10,
+      "priority": 3,
+      "cooldown": 4,
+      "min_monster_count": 3
+    },
+    {
+      "name": "exori gran",
+      "min_mana_percent": 30,
+      "priority": 4,
+      "cooldown": 6,
+      "min_monster_count": 3
+    },
+    {
+      "name": "utito tempo",
+      "min_mana_percent": 70,
+      "priority": 5,
+      "cooldown": 10,
+      "min_monster_count": 4
+    }
+  ],
+  "loot": []
+}

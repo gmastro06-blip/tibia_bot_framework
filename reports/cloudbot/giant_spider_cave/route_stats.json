@@ -1,0 +1,225 @@
+{
+  "counts": {
+    "lines": 119,
+    "pos_points": 85,
+    "labels": 16,
+    "actions": 16,
+    "unique_actions": 13
+  },
+  "distance": {
+    "total_manhattan": 1890,
+    "total_euclid": 1459.4302185508843,
+    "max_manhattan": 70,
+    "max_jump": {
+      "from": {
+        "line_index": 15,
+        "x": 32627,
+        "y": 32771,
+        "z": 7
+      },
+      "to": {
+        "line_index": 17,
+        "x": 32690,
+        "y": 32778,
+        "z": 7
+      },
+      "dx": 63,
+      "dy": 7,
+      "dz": 0,
+      "manhattan": 70,
+      "euclid": 63.387695966961914
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 15,
+          "x": 32627,
+          "y": 32771,
+          "z": 7
+        },
+        "to": {
+          "line_index": 17,
+          "x": 32690,
+          "y": 32778,
+          "z": 7
+        },
+        "dx": 63,
+        "dy": 7,
+        "dz": 0,
+        "manhattan": 70,
+        "euclid": 63.387695966961914
+      },
+      {
+        "from": {
+          "line_index": 28,
+          "x": 32699,
+          "y": 32789,
+          "z": 7
+        },
+        "to": {
+          "line_index": 29,
+          "x": 32728,
+          "y": 32812,
+          "z": 7
+        },
+        "dx": 29,
+        "dy": 23,
+        "dz": 0,
+        "manhattan": 52,
+        "euclid": 37.013511046643494
+      },
+      {
+        "from": {
+          "line_index": 30,
+          "x": 32752,
+          "y": 32832,
+          "z": 7
+        },
+        "to": {
+          "line_index": 31,
+          "x": 32784,
+          "y": 32852,
+          "z": 7
+        },
+        "dx": 32,
+        "dy": 20,
+        "dz": 0,
+        "manhattan": 52,
+        "euclid": 37.73592452822641
+      },
+      {
+        "from": {
+          "line_index": 40,
+          "x": 32891,
+          "y": 32877,
+          "z": 9
+        },
+        "to": {
+          "line_index": 42,
+          "x": 32913,
+          "y": 32909,
+          "z": 9
+        },
+        "dx": 22,
+        "dy": 32,
+        "dz": 0,
+        "manhattan": 54,
+        "euclid": 38.8329756778952
+      },
+      {
+        "from": {
+          "line_index": 78,
+          "x": 32851,
+          "y": 32870,
+          "z": 8
+        },
+        "to": {
+          "line_index": 79,
+          "x": 32812,
+          "y": 32856,
+          "z": 7
+        },
+        "dx": -39,
+        "dy": -14,
+        "dz": -1,
+        "manhattan": 53,
+        "euclid": 41.43669871020132
+      },
+      {
+        "from": {
+          "line_index": 79,
+          "x": 32812,
+          "y": 32856,
+          "z": 7
+        },
+        "to": {
+          "line_index": 80,
+          "x": 32776,
+          "y": 32835,
+          "z": 7
+        },
+        "dx": -36,
+        "dy": -21,
+        "dz": 0,
+        "manhattan": 57,
+        "euclid": 41.677331968349414
+      },
+      {
+        "from": {
+          "line_index": 80,
+          "x": 32776,
+          "y": 32835,
+          "z": 7
+        },
+        "to": {
+          "line_index": 81,
+          "x": 32733,
+          "y": 32817,
+          "z": 7
+        },
+        "dx": -43,
+        "dy": -18,
+        "dz": 0,
+        "manhattan": 61,
+        "euclid": 46.61544808322666
+      },
+      {
+        "from": {
+          "line_index": 85,
+          "x": 32679,
+          "y": 32776,
+          "z": 7
+        },
+        "to": {
+          "line_index": 87,
+          "x": 32630,
+          "y": 32759,
+          "z": 7
+        },
+        "dx": -49,
+        "dy": -17,
+        "dz": 0,
+        "manhattan": 66,
+        "euclid": 51.86520991955976
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "go_bank",
+    "refill",
+    "go_hunt",
+    "go_get_task",
+    "get_task",
+    "skip_get_task",
+    "hunt",
+    "leave",
+    "deposit",
+    "train",
+    "sword",
+    "club",
+    "axe",
+    "distance",
+    "start trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_task",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "refill",
+    "sell",
+    "travel_center",
+    "travel_east"
+  ]
+}

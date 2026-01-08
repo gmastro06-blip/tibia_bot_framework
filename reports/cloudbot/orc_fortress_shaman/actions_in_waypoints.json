@@ -1,0 +1,22 @@
+[
+  {
+    "line": 3,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 96,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 142,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 145,
+    "action": "end",
+    "raw": "action end"
+  }
+]

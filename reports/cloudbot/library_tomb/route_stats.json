@@ -1,0 +1,65 @@
+{
+  "counts": {
+    "lines": 68,
+    "pos_points": 41,
+    "labels": 17,
+    "actions": 9,
+    "unique_actions": 5
+  },
+  "distance": {
+    "total_manhattan": 487,
+    "total_euclid": 372.1114439751977,
+    "max_manhattan": 32,
+    "max_jump": {
+      "from": {
+        "line_index": 36,
+        "x": 33126,
+        "y": 32849,
+        "z": 7
+      },
+      "to": {
+        "line_index": 39,
+        "x": 33139,
+        "y": 32830,
+        "z": 7
+      },
+      "dx": 13,
+      "dy": -19,
+      "dz": 0,
+      "manhattan": 32,
+      "euclid": 23.021728866442675
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "depot",
+    "withdraw_scarab_coin",
+    "check_scarab_coin",
+    "go_hunt",
+    "set_target_follow",
+    "drop_scarab_coin",
+    "hunt",
+    "set_target_distance",
+    "leave",
+    "train",
+    "distance",
+    "sword",
+    "axe",
+    "club",
+    "magic",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end"
+  ]
+}

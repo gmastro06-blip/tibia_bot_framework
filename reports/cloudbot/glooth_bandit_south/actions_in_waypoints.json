@@ -1,0 +1,72 @@
+[
+  {
+    "line": 5,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 19,
+    "action": "target_on",
+    "raw": "action target_on"
+  },
+  {
+    "line": 25,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 31,
+    "action": "check_teleport",
+    "raw": "action check_teleport"
+  },
+  {
+    "line": 46,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 58,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 61,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 77,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 79,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 84,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 87,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 90,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 93,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 96,
+    "action": "end",
+    "raw": "action end"
+  }
+]

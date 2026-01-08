@@ -1,0 +1,109 @@
+{
+  "counts": {
+    "lines": 94,
+    "pos_points": 72,
+    "labels": 11,
+    "actions": 10,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 1978,
+    "total_euclid": 1637.7057097686313,
+    "max_manhattan": 379,
+    "max_jump": {
+      "from": {
+        "line_index": 64,
+        "x": 33491,
+        "y": 31712,
+        "z": 6
+      },
+      "to": {
+        "line_index": 66,
+        "x": 33175,
+        "y": 31775,
+        "z": 6
+      },
+      "dx": -316,
+      "dy": 63,
+      "dz": 0,
+      "manhattan": 379,
+      "euclid": 322.21886971436044
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 7,
+          "x": 33176,
+          "y": 31763,
+          "z": 6
+        },
+        "to": {
+          "line_index": 9,
+          "x": 33498,
+          "y": 31710,
+          "z": 6
+        },
+        "dx": 322,
+        "dy": -53,
+        "dz": 0,
+        "manhattan": 375,
+        "euclid": 326.3326523656497
+      },
+      {
+        "from": {
+          "line_index": 64,
+          "x": 33491,
+          "y": 31712,
+          "z": 6
+        },
+        "to": {
+          "line_index": 66,
+          "x": 33175,
+          "y": 31775,
+          "z": 6
+        },
+        "dx": -316,
+        "dy": 63,
+        "dz": 0,
+        "manhattan": 379,
+        "euclid": 322.21886971436044
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33657,
+          "y": 31759,
+          "z": 9
+        },
+        "first_line": 46,
+        "again_line": 47
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "travel_edron",
+    "travel_krailos"
+  ]
+}

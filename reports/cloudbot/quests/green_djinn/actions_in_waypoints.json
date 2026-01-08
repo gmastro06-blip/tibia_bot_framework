@@ -1,0 +1,117 @@
+[
+  {
+    "line": 1,
+    "action": "debug",
+    "raw": "action debug"
+  },
+  {
+    "line": 9,
+    "action": "talk_melfar",
+    "raw": "action talk_melfar"
+  },
+  {
+    "line": 11,
+    "action": "talk_melfar",
+    "raw": "action talk_melfar"
+  },
+  {
+    "line": 13,
+    "action": "talk_melfar",
+    "raw": "action talk_melfar"
+  },
+  {
+    "line": 15,
+    "action": "talk_melfar",
+    "raw": "action talk_melfar"
+  },
+  {
+    "line": 39,
+    "action": "talk_ubaid",
+    "raw": "action talk_ubaid"
+  },
+  {
+    "line": 44,
+    "action": "talk_baaleal",
+    "raw": "action talk_baaleal"
+  },
+  {
+    "line": 71,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 73,
+    "action": "travel_carlin",
+    "raw": "action travel_carlin"
+  },
+  {
+    "line": 81,
+    "action": "talk_shauna",
+    "raw": "action talk_shauna"
+  },
+  {
+    "line": 88,
+    "action": "travel_thais",
+    "raw": "action travel_thais"
+  },
+  {
+    "line": 100,
+    "action": "talk_partos",
+    "raw": "action talk_partos"
+  },
+  {
+    "line": 110,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 112,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 140,
+    "action": "talk_baaleal_2",
+    "raw": "action talk_baaleal_2"
+  },
+  {
+    "line": 143,
+    "action": "talk_alesar",
+    "raw": "action talk_alesar"
+  },
+  {
+    "line": 184,
+    "action": "get_item",
+    "raw": "action get_item"
+  },
+  {
+    "line": 228,
+    "action": "talk_alesar",
+    "raw": "action talk_alesar"
+  },
+  {
+    "line": 234,
+    "action": "talk_malor",
+    "raw": "action talk_malor"
+  },
+  {
+    "line": 265,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 324,
+    "action": "talk_orc",
+    "raw": "action talk_orc"
+  },
+  {
+    "line": 326,
+    "action": "talk_orc_2",
+    "raw": "action talk_orc_2"
+  },
+  {
+    "line": 380,
+    "action": "end",
+    "raw": "action end"
+  }
+]

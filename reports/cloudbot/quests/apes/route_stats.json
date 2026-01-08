@@ -1,0 +1,866 @@
+{
+  "counts": {
+    "lines": 806,
+    "pos_points": 718,
+    "labels": 32,
+    "actions": 8,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 17090,
+    "total_euclid": 13953.821922285546,
+    "max_manhattan": 1110,
+    "max_jump": {
+      "from": {
+        "line_index": 156,
+        "x": 32530,
+        "y": 32784,
+        "z": 6
+      },
+      "to": {
+        "line_index": 159,
+        "x": 32387,
+        "y": 31817,
+        "z": 6
+      },
+      "dx": -143,
+      "dy": -967,
+      "dz": 0,
+      "manhattan": 1110,
+      "euclid": 977.5162402742984
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 156,
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "to": {
+          "line_index": 159,
+          "x": 32387,
+          "y": 31817,
+          "z": 6
+        },
+        "dx": -143,
+        "dy": -967,
+        "dz": 0,
+        "manhattan": 1110,
+        "euclid": 977.5162402742984
+      },
+      {
+        "from": {
+          "line_index": 177,
+          "x": 32388,
+          "y": 31821,
+          "z": 6
+        },
+        "to": {
+          "line_index": 180,
+          "x": 32538,
+          "y": 32778,
+          "z": 6
+        },
+        "dx": 150,
+        "dy": 957,
+        "dz": 0,
+        "manhattan": 1107,
+        "euclid": 968.6841590528876
+      },
+      {
+        "from": {
+          "line_index": 245,
+          "x": 32902,
+          "y": 32853,
+          "z": 7
+        },
+        "to": {
+          "line_index": 246,
+          "x": 32933,
+          "y": 32886,
+          "z": 7
+        },
+        "dx": 31,
+        "dy": 33,
+        "dz": 0,
+        "manhattan": 64,
+        "euclid": 45.27692569068709
+      },
+      {
+        "from": {
+          "line_index": 310,
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "to": {
+          "line_index": 312,
+          "x": 33085,
+          "y": 32880,
+          "z": 6
+        },
+        "dx": 555,
+        "dy": 96,
+        "dz": 0,
+        "manhattan": 651,
+        "euclid": 563.2415112542753
+      },
+      {
+        "from": {
+          "line_index": 479,
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "to": {
+          "line_index": 481,
+          "x": 32320,
+          "y": 32216,
+          "z": 6
+        },
+        "dx": -210,
+        "dy": -568,
+        "dz": 0,
+        "manhattan": 778,
+        "euclid": 605.5774104109234
+      },
+      {
+        "from": {
+          "line_index": 577,
+          "x": 32310,
+          "y": 32210,
+          "z": 6
+        },
+        "to": {
+          "line_index": 579,
+          "x": 32534,
+          "y": 32778,
+          "z": 6
+        },
+        "dx": 224,
+        "dy": 568,
+        "dz": 0,
+        "manhattan": 792,
+        "euclid": 610.5735008989499
+      },
+      {
+        "from": {
+          "line_index": 674,
+          "x": 32674,
+          "y": 32784,
+          "z": 6
+        },
+        "to": {
+          "line_index": 675,
+          "x": 32716,
+          "y": 32818,
+          "z": 7
+        },
+        "dx": 42,
+        "dy": 34,
+        "dz": 1,
+        "manhattan": 76,
+        "euclid": 54.037024344425184
+      },
+      {
+        "from": {
+          "line_index": 734,
+          "x": 33027,
+          "y": 32580,
+          "z": 6
+        },
+        "to": {
+          "line_index": 735,
+          "x": 33005,
+          "y": 32608,
+          "z": 7
+        },
+        "dx": -22,
+        "dy": 28,
+        "dz": 1,
+        "manhattan": 50,
+        "euclid": 35.608987629529715
+      },
+      {
+        "from": {
+          "line_index": 747,
+          "x": 32926,
+          "y": 32787,
+          "z": 7
+        },
+        "to": {
+          "line_index": 748,
+          "x": 32898,
+          "y": 32809,
+          "z": 7
+        },
+        "dx": -28,
+        "dy": 22,
+        "dz": 0,
+        "manhattan": 50,
+        "euclid": 35.608987629529715
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32781,
+          "y": 32910,
+          "z": 8
+        },
+        "first_line": 68,
+        "again_line": 70
+      },
+      {
+        "pos": {
+          "x": 32782,
+          "y": 32910,
+          "z": 8
+        },
+        "first_line": 69,
+        "again_line": 71
+      },
+      {
+        "pos": {
+          "x": 32781,
+          "y": 32910,
+          "z": 8
+        },
+        "first_line": 68,
+        "again_line": 72
+      },
+      {
+        "pos": {
+          "x": 32782,
+          "y": 32910,
+          "z": 8
+        },
+        "first_line": 69,
+        "again_line": 73
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 117
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 120
+      },
+      {
+        "pos": {
+          "x": 32305,
+          "y": 31817,
+          "z": 7
+        },
+        "first_line": 165,
+        "again_line": 170
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 116,
+        "again_line": 206
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 207
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 210
+      },
+      {
+        "pos": {
+          "x": 32779,
+          "y": 32584,
+          "z": 7
+        },
+        "first_line": 113,
+        "again_line": 213
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32744,
+          "z": 7
+        },
+        "first_line": 45,
+        "again_line": 227
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 96,
+        "again_line": 229
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 95,
+        "again_line": 230
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32784,
+          "z": 6
+        },
+        "first_line": 48,
+        "again_line": 232
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32784,
+          "z": 7
+        },
+        "first_line": 92,
+        "again_line": 266
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32770,
+          "z": 6
+        },
+        "first_line": 231,
+        "again_line": 267
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 95,
+        "again_line": 268
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 96,
+        "again_line": 269
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32744,
+          "z": 6
+        },
+        "first_line": 98,
+        "again_line": 271
+      },
+      {
+        "pos": {
+          "x": 32825,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 284
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 285
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 290
+      },
+      {
+        "pos": {
+          "x": 32739,
+          "y": 32595,
+          "z": 7
+        },
+        "first_line": 280,
+        "again_line": 295
+      },
+      {
+        "pos": {
+          "x": 32731,
+          "y": 32613,
+          "z": 7
+        },
+        "first_line": 127,
+        "again_line": 296
+      },
+      {
+        "pos": {
+          "x": 32693,
+          "y": 32671,
+          "z": 7
+        },
+        "first_line": 275,
+        "again_line": 299
+      },
+      {
+        "pos": {
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "first_line": 156,
+        "again_line": 310
+      },
+      {
+        "pos": {
+          "x": 33305,
+          "y": 32861,
+          "z": 13
+        },
+        "first_line": 339,
+        "again_line": 340
+      },
+      {
+        "pos": {
+          "x": 32954,
+          "y": 32695,
+          "z": 8
+        },
+        "first_line": 394,
+        "again_line": 395
+      },
+      {
+        "pos": {
+          "x": 32954,
+          "y": 32695,
+          "z": 8
+        },
+        "first_line": 394,
+        "again_line": 396
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32784,
+          "z": 7
+        },
+        "first_line": 92,
+        "again_line": 425
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32770,
+          "z": 6
+        },
+        "first_line": 231,
+        "again_line": 427
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 95,
+        "again_line": 428
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 96,
+        "again_line": 429
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32744,
+          "z": 6
+        },
+        "first_line": 98,
+        "again_line": 431
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 116,
+        "again_line": 448
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 449
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 452
+      },
+      {
+        "pos": {
+          "x": 32815,
+          "y": 32583,
+          "z": 7
+        },
+        "first_line": 121,
+        "again_line": 453
+      },
+      {
+        "pos": {
+          "x": 32724,
+          "y": 32623,
+          "z": 7
+        },
+        "first_line": 128,
+        "again_line": 460
+      },
+      {
+        "pos": {
+          "x": 32568,
+          "y": 32766,
+          "z": 7
+        },
+        "first_line": 308,
+        "again_line": 475
+      },
+      {
+        "pos": {
+          "x": 32530,
+          "y": 32784,
+          "z": 6
+        },
+        "first_line": 156,
+        "again_line": 479
+      },
+      {
+        "pos": {
+          "x": 32181,
+          "y": 32468,
+          "z": 10
+        },
+        "first_line": 533,
+        "again_line": 534
+      },
+      {
+        "pos": {
+          "x": 32190,
+          "y": 32441,
+          "z": 9
+        },
+        "first_line": 527,
+        "again_line": 537
+      },
+      {
+        "pos": {
+          "x": 32190,
+          "y": 32432,
+          "z": 9
+        },
+        "first_line": 526,
+        "again_line": 539
+      },
+      {
+        "pos": {
+          "x": 32557,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 476,
+        "again_line": 581
+      },
+      {
+        "pos": {
+          "x": 32568,
+          "y": 32766,
+          "z": 6
+        },
+        "first_line": 182,
+        "again_line": 582
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 116,
+        "again_line": 601
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 602
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 605
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 116,
+        "again_line": 648
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 649
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 652
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32744,
+          "z": 7
+        },
+        "first_line": 45,
+        "again_line": 669
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 96,
+        "again_line": 671
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 95,
+        "again_line": 672
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32770,
+          "z": 6
+        },
+        "first_line": 231,
+        "again_line": 673
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32784,
+          "z": 6
+        },
+        "first_line": 48,
+        "again_line": 674
+      },
+      {
+        "pos": {
+          "x": 32933,
+          "y": 32495,
+          "z": 7
+        },
+        "first_line": 718,
+        "again_line": 719
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32784,
+          "z": 7
+        },
+        "first_line": 92,
+        "again_line": 764
+      },
+      {
+        "pos": {
+          "x": 32677,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 95,
+        "again_line": 767
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32767,
+          "z": 6
+        },
+        "first_line": 96,
+        "again_line": 768
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32751,
+          "z": 6
+        },
+        "first_line": 97,
+        "again_line": 769
+      },
+      {
+        "pos": {
+          "x": 32674,
+          "y": 32744,
+          "z": 6
+        },
+        "first_line": 98,
+        "again_line": 770
+      },
+      {
+        "pos": {
+          "x": 32825,
+          "y": 32579,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 783
+      },
+      {
+        "pos": {
+          "x": 32827,
+          "y": 32575,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 784
+      },
+      {
+        "pos": {
+          "x": 32826,
+          "y": 32579,
+          "z": 6
+        },
+        "first_line": 30,
+        "again_line": 787
+      },
+      {
+        "pos": {
+          "x": 32646,
+          "y": 32755,
+          "z": 7
+        },
+        "first_line": 470,
+        "again_line": 802
+      }
+    ],
+    "repeat_positions": 32
+  },
+  "labels": [
+    "start",
+    "buy_crowbar",
+    "hairycles",
+    "gate1",
+    "pass_gate1",
+    "moss_door",
+    "gate2",
+    "pass_gate2",
+    "hairycles1",
+    "brewster",
+    "padreia",
+    "hairycles6",
+    "hydra_egg",
+    "hairycles3",
+    "simon",
+    "use_well",
+    "door1",
+    "pass_door1",
+    "get_witch_cap",
+    "door2",
+    "pass_door2",
+    "hairycles",
+    "cask1",
+    "cask2",
+    "cask3",
+    "cask4",
+    "hairycles",
+    "go_forbidden",
+    "prophet",
+    "get_hair",
+    "hairycles",
+    "skip_forbidden"
+  ],
+  "actions": [
+    "bank",
+    "travel_ankrahmun",
+    "travel_carlin",
+    "travel_port_hope",
+    "travel_thais",
+    "travel_venore"
+  ]
+}

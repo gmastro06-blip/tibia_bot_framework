@@ -1,0 +1,73 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 5
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "alias": "lure",
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 5,
+        "min_count": 2,
+        "drop_above_hp_perc": 70,
+        "wait": true
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Hydra",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bog Raider",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

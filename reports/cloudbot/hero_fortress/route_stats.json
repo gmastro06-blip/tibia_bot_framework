@@ -1,0 +1,236 @@
+{
+  "counts": {
+    "lines": 150,
+    "pos_points": 124,
+    "labels": 15,
+    "actions": 10,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 1542,
+    "total_euclid": 1275.8298942592703,
+    "max_manhattan": 44,
+    "max_jump": {
+      "from": {
+        "line_index": 73,
+        "x": 33266,
+        "y": 31595,
+        "z": 9
+      },
+      "to": {
+        "line_index": 76,
+        "x": 33282,
+        "y": 31567,
+        "z": 9
+      },
+      "dx": 16,
+      "dy": -28,
+      "dz": 0,
+      "manhattan": 44,
+      "euclid": 32.2490309931942
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33242,
+          "y": 31767,
+          "z": 7
+        },
+        "first_line": 8,
+        "again_line": 9
+      },
+      {
+        "pos": {
+          "x": 33218,
+          "y": 31663,
+          "z": 7
+        },
+        "first_line": 31,
+        "again_line": 92
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31670,
+          "z": 7
+        },
+        "first_line": 30,
+        "again_line": 94
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31678,
+          "z": 7
+        },
+        "first_line": 29,
+        "again_line": 95
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31683,
+          "z": 7
+        },
+        "first_line": 28,
+        "again_line": 96
+      },
+      {
+        "pos": {
+          "x": 33211,
+          "y": 31688,
+          "z": 7
+        },
+        "first_line": 27,
+        "again_line": 97
+      },
+      {
+        "pos": {
+          "x": 33210,
+          "y": 31694,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 98
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31700,
+          "z": 7
+        },
+        "first_line": 25,
+        "again_line": 99
+      },
+      {
+        "pos": {
+          "x": 33213,
+          "y": 31706,
+          "z": 7
+        },
+        "first_line": 24,
+        "again_line": 100
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31711,
+          "z": 7
+        },
+        "first_line": 23,
+        "again_line": 101
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31717,
+          "z": 7
+        },
+        "first_line": 22,
+        "again_line": 102
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31723,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 103
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31728,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 104
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31735,
+          "z": 7
+        },
+        "first_line": 19,
+        "again_line": 105
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31742,
+          "z": 7
+        },
+        "first_line": 18,
+        "again_line": 106
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31748,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 107
+      },
+      {
+        "pos": {
+          "x": 33234,
+          "y": 31768,
+          "z": 6
+        },
+        "first_line": 11,
+        "again_line": 112
+      },
+      {
+        "pos": {
+          "x": 33250,
+          "y": 31775,
+          "z": 7
+        },
+        "first_line": 7,
+        "again_line": 116
+      },
+      {
+        "pos": {
+          "x": 33247,
+          "y": 31787,
+          "z": 7
+        },
+        "first_line": 6,
+        "again_line": 118
+      }
+    ],
+    "repeat_positions": 19
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "enterspawn",
+    "hunt",
+    "hunt2",
+    "leave2",
+    "leave",
+    "spawnexit",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check2",
+    "check_time",
+    "check_train",
+    "end",
+    "summon"
+  ]
+}

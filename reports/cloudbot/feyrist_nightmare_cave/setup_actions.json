@@ -1,0 +1,164 @@
+{
+  "label_actions": [
+    {
+      "label": "call_withdraw_garlic_necklace",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "garlic necklace",
+        "depot_num": 4,
+        "backpack_name": "Blue Backpack",
+        "amount": 8,
+        "stack": false
+      }
+    },
+    {
+      "label": "call_withdraw_garlic_necklace",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "garlic necklace",
+        "depot_num": 4,
+        "backpack_name": "Blue Backpack",
+        "amount": 8,
+        "stack": false
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": [
+        4
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "use_hotkey",
+      "min_interval": 30,
+      "max_interval": 80,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 5
+      }
+    },
+    {
+      "enabled": false,
+      "alias": "equip_amulet_alias",
+      "action": "equip_item",
+      "interval": 10,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f12",
+        "amount": 0,
+        "slot": "amulet"
+      }
+    },
+    {
+      "enabled": false,
+      "alias": "leave_player",
+      "action": "conditional_jump_player_on_screen",
+      "interval": 10,
+      "use_in_battle": true,
+      "args": {
+        "go_train": true,
+        "threshold": 10
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Weakened Frazzlemaw",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Enfeebled Silencer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Nymph",
+      "ignore": true,
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dark Faun",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Weakened Frazzlemaw",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Enfeebled Silencer",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

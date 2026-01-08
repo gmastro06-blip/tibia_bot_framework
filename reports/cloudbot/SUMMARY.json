@@ -1,0 +1,2006 @@
+{
+  "scripts_root": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master",
+  "supported_waypoint_actions": [
+    "bank",
+    "buy_ammo",
+    "buy_enhanced_bless",
+    "buy_food",
+    "buy_potions",
+    "buy_runes",
+    "buy_ticket",
+    "chat_off",
+    "check",
+    "check2",
+    "check_ammo",
+    "check_imbuements",
+    "check_level_8",
+    "check_runes",
+    "check_sell_gems",
+    "check_sell_loot",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "communication_task",
+    "confirm",
+    "debug",
+    "deposit",
+    "end",
+    "levitate_down",
+    "levitate_east_down",
+    "levitate_east_up",
+    "levitate_north_down",
+    "levitate_north_up",
+    "levitate_south_down",
+    "levitate_south_up",
+    "levitate_up",
+    "levitate_west_down",
+    "levitate_west_up",
+    "loot_monsters",
+    "loot_off",
+    "loot_on",
+    "refill",
+    "refill_gem",
+    "sell",
+    "skip_portal",
+    "skip_portal_2",
+    "start",
+    "start_battle",
+    "summon",
+    "target_off",
+    "target_on",
+    "travel_abdendriel",
+    "travel_alchemist",
+    "travel_ankrahmun",
+    "travel_arena",
+    "travel_banuta",
+    "travel_carlin",
+    "travel_cemetery",
+    "travel_center",
+    "travel_cormaya",
+    "travel_darashia",
+    "travel_east",
+    "travel_edron",
+    "travel_farmine",
+    "travel_fenrock",
+    "travel_foreign",
+    "travel_goroma",
+    "travel_gray_island",
+    "travel_kazordoon",
+    "travel_krailos",
+    "travel_liberty_bay",
+    "travel_magician",
+    "travel_mistrock",
+    "travel_oramond",
+    "travel_passage",
+    "travel_port_hope",
+    "travel_roshamuul",
+    "travel_svargrond",
+    "travel_thais",
+    "travel_venore",
+    "travel_west",
+    "travel_yalahar",
+    "use_gem_north",
+    "use_imbuing_shrine",
+    "use_imbuing_shrine_north",
+    "use_lever_east",
+    "wait",
+    "wait_ten_min",
+    "walk_keys",
+    "walk_mouse"
+  ],
+  "scripts": {
+    "bonelord_liberty_bay": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\bonelord_liberty_bay\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\bonelord_liberty_bay\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\bonelord_liberty_bay\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\bonelord_liberty_bay\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\bonelord_liberty_bay\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 110,
+        "pos_points": 86,
+        "labels": 11,
+        "actions": 10,
+        "unique_actions": 10
+      }
+    },
+    "braindeath": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\braindeath\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\braindeath\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\braindeath\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\braindeath\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\braindeath\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 80,
+        "pos_points": 58,
+        "labels": 13,
+        "actions": 8,
+        "unique_actions": 4
+      }
+    },
+    "buy_blessing": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\buy_blessing\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\buy_blessing\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\buy_blessing\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\buy_blessing\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\buy_blessing\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 363,
+        "pos_points": 298,
+        "labels": 19,
+        "actions": 31,
+        "unique_actions": 18
+      }
+    },
+    "carlin_amazon_tower": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\carlin_amazon_tower\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\carlin_amazon_tower\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\carlin_amazon_tower\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\carlin_amazon_tower\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\carlin_amazon_tower\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 75,
+        "pos_points": 56,
+        "labels": 9,
+        "actions": 10,
+        "unique_actions": 10
+      }
+    },
+    "cormaya_werecave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\cormaya_werecave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cormaya_werecave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cormaya_werecave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cormaya_werecave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cormaya_werecave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 115,
+        "pos_points": 80,
+        "labels": 22,
+        "actions": 12,
+        "unique_actions": 7
+      }
+    },
+    "cults_ankrahmun": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\cults_ankrahmun\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cults_ankrahmun\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cults_ankrahmun\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cults_ankrahmun\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\cults_ankrahmun\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 86,
+        "pos_points": 66,
+        "labels": 8,
+        "actions": 8,
+        "unique_actions": 7
+      }
+    },
+    "dark_cathedral": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\dark_cathedral\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dark_cathedral\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dark_cathedral\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dark_cathedral\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dark_cathedral\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 126,
+        "pos_points": 114,
+        "labels": 5,
+        "actions": 7,
+        "unique_actions": 7
+      }
+    },
+    "dawnport": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\dawnport\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dawnport\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dawnport\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dawnport\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\dawnport\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 117,
+        "pos_points": 82,
+        "labels": 10,
+        "actions": 8,
+        "unique_actions": 3
+      }
+    },
+    "deepsea_blood_crabs": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\deepsea_blood_crabs\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\deepsea_blood_crabs\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\deepsea_blood_crabs\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\deepsea_blood_crabs\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\deepsea_blood_crabs\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 67,
+        "pos_points": 54,
+        "labels": 6,
+        "actions": 4,
+        "unique_actions": 3
+      }
+    },
+    "demon_hero_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\demon_hero_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\demon_hero_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\demon_hero_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\demon_hero_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\demon_hero_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 162,
+        "pos_points": 134,
+        "labels": 16,
+        "actions": 11,
+        "unique_actions": 7
+      }
+    },
+    "drefia_wyrms_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\drefia_wyrms_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\drefia_wyrms_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\drefia_wyrms_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\drefia_wyrms_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\drefia_wyrms_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 227,
+        "pos_points": 150,
+        "labels": 19,
+        "actions": 12,
+        "unique_actions": 8
+      }
+    },
+    "edron_cults": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\edron_cults\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_cults\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_cults\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_cults\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_cults\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 195,
+        "pos_points": 116,
+        "labels": 17,
+        "actions": 14,
+        "unique_actions": 9
+      }
+    },
+    "edron_werecave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\edron_werecave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_werecave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_werecave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_werecave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\edron_werecave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 92,
+        "pos_points": 67,
+        "labels": 14,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "elvenbane": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\elvenbane\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elvenbane\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elvenbane\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elvenbane\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elvenbane\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 95,
+        "pos_points": 79,
+        "labels": 8,
+        "actions": 8,
+        "unique_actions": 8
+      }
+    },
+    "elves_venore": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\elves_venore\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elves_venore\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elves_venore\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elves_venore\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\elves_venore\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 201,
+        "pos_points": 186,
+        "labels": 8,
+        "actions": 7,
+        "unique_actions": 6
+      }
+    },
+    "feyrist_dark_faun": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\feyrist_dark_faun\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_dark_faun\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_dark_faun\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_dark_faun\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_dark_faun\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 150,
+        "pos_points": 74,
+        "labels": 17,
+        "actions": 4,
+        "unique_actions": 4
+      }
+    },
+    "feyrist_mountain": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\feyrist_mountain\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_mountain\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_mountain\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_mountain\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_mountain\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 103,
+        "pos_points": 42,
+        "labels": 26,
+        "actions": 6,
+        "unique_actions": 5
+      }
+    },
+    "feyrist_nightmare_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\feyrist_nightmare_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 101,
+        "pos_points": 54,
+        "labels": 21,
+        "actions": 6,
+        "unique_actions": 5
+      }
+    },
+    "feyrist_nightmare_cave_down": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\feyrist_nightmare_cave_down\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave_down\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave_down\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave_down\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\feyrist_nightmare_cave_down\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 154,
+        "pos_points": 78,
+        "labels": 50,
+        "actions": 6,
+        "unique_actions": 5
+      }
+    },
+    "forest_fury": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\forest_fury\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\forest_fury\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\forest_fury\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\forest_fury\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\forest_fury\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 116,
+        "pos_points": 86,
+        "labels": 16,
+        "actions": 12,
+        "unique_actions": 12
+      }
+    },
+    "giant_spider_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\giant_spider_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\giant_spider_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\giant_spider_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\giant_spider_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\giant_spider_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 119,
+        "pos_points": 85,
+        "labels": 16,
+        "actions": 16,
+        "unique_actions": 13
+      }
+    },
+    "glooth_bandit_east": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\glooth_bandit_east\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_east\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_east\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_east\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_east\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 107,
+        "pos_points": 80,
+        "labels": 13,
+        "actions": 13,
+        "unique_actions": 8
+      }
+    },
+    "glooth_bandit_south": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\glooth_bandit_south\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_south\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_south\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_south\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_south\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 100,
+        "pos_points": 69,
+        "labels": 16,
+        "actions": 14,
+        "unique_actions": 9
+      }
+    },
+    "glooth_bandit_west": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\glooth_bandit_west\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_west\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_west\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_west\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\glooth_bandit_west\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 221,
+        "pos_points": 132,
+        "labels": 15,
+        "actions": 13,
+        "unique_actions": 8
+      }
+    },
+    "goblin_train_ab": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\goblin_train_ab\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\goblin_train_ab\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\goblin_train_ab\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\goblin_train_ab\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\goblin_train_ab\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 64,
+        "pos_points": 53,
+        "labels": 4,
+        "actions": 7,
+        "unique_actions": 7
+      }
+    },
+    "hero_fortress": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\hero_fortress\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 150,
+        "pos_points": 124,
+        "labels": 15,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "hero_fortress_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\hero_fortress_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 200,
+        "pos_points": 139,
+        "labels": 15,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "hero_fortress_down": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\hero_fortress_down\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_down\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_down\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_down\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\hero_fortress_down\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 158,
+        "pos_points": 136,
+        "labels": 13,
+        "actions": 8,
+        "unique_actions": 4
+      }
+    },
+    "ice_fishing": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\ice_fishing\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_fishing\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_fishing\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_fishing\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_fishing\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 135,
+        "pos_points": 80,
+        "labels": 13,
+        "actions": 42,
+        "unique_actions": 13
+      }
+    },
+    "ice_witch": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\ice_witch\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_witch\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_witch\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_witch\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\ice_witch\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 197,
+        "pos_points": 155,
+        "labels": 15,
+        "actions": 26,
+        "unique_actions": 8
+      }
+    },
+    "kazz_dragon": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\kazz_dragon\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\kazz_dragon\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\kazz_dragon\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\kazz_dragon\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\kazz_dragon\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 54,
+        "pos_points": 35,
+        "labels": 9,
+        "actions": 8,
+        "unique_actions": 5
+      }
+    },
+    "killer_caimans": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\killer_caimans\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 172,
+        "pos_points": 123,
+        "labels": 22,
+        "actions": 26,
+        "unique_actions": 18
+      }
+    },
+    "krailos_nightmare": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\krailos_nightmare\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 112,
+        "pos_points": 84,
+        "labels": 14,
+        "actions": 13,
+        "unique_actions": 9
+      }
+    },
+    "krailos_nightmare_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\krailos_nightmare_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_nightmare_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 198,
+        "pos_points": 148,
+        "labels": 17,
+        "actions": 13,
+        "unique_actions": 9
+      }
+    },
+    "krailos_spider_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\krailos_spider_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_spider_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_spider_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_spider_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\krailos_spider_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 94,
+        "pos_points": 72,
+        "labels": 11,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "laguna_island_tortoises": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\laguna_island_tortoises\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\laguna_island_tortoises\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\laguna_island_tortoises\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\laguna_island_tortoises\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\laguna_island_tortoises\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 180,
+        "pos_points": 146,
+        "labels": 14,
+        "actions": 20,
+        "unique_actions": 14
+      }
+    },
+    "liberty_bay_cults_before_piano": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\liberty_bay_cults_before_piano\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\liberty_bay_cults_before_piano\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\liberty_bay_cults_before_piano\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\liberty_bay_cults_before_piano\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\liberty_bay_cults_before_piano\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 88,
+        "pos_points": 72,
+        "labels": 8,
+        "actions": 5,
+        "unique_actions": 4
+      }
+    },
+    "library_tomb": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\library_tomb\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\library_tomb\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\library_tomb\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\library_tomb\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\library_tomb\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 68,
+        "pos_points": 41,
+        "labels": 17,
+        "actions": 9,
+        "unique_actions": 5
+      }
+    },
+    "magician_quarter": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\magician_quarter\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\magician_quarter\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\magician_quarter\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\magician_quarter\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\magician_quarter\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 135,
+        "pos_points": 104,
+        "labels": 16,
+        "actions": 15,
+        "unique_actions": 12
+      }
+    },
+    "market_thais": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\market_thais\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\market_thais\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\market_thais\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\market_thais\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\market_thais\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 45,
+        "pos_points": 23,
+        "labels": 10,
+        "actions": 7,
+        "unique_actions": 2
+      }
+    },
+    "medusa_tower": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\medusa_tower\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\medusa_tower\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\medusa_tower\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\medusa_tower\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\medusa_tower\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 122,
+        "pos_points": 72,
+        "labels": 12,
+        "actions": 8,
+        "unique_actions": 8
+      }
+    },
+    "meriana_gargoyle": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\meriana_gargoyle\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\meriana_gargoyle\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\meriana_gargoyle\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\meriana_gargoyle\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\meriana_gargoyle\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 193,
+        "pos_points": 156,
+        "labels": 18,
+        "actions": 19,
+        "unique_actions": 13
+      }
+    },
+    "minotaur_cults": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\minotaur_cults\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_cults\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_cults\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_cults\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_cults\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 184,
+        "pos_points": 155,
+        "labels": 13,
+        "actions": 14,
+        "unique_actions": 9
+      }
+    },
+    "minotaur_darashia": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\minotaur_darashia\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_darashia\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_darashia\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_darashia\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\minotaur_darashia\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 120,
+        "pos_points": 85,
+        "labels": 17,
+        "actions": 18,
+        "unique_actions": 14
+      }
+    },
+    "mother_of_scarab": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\mother_of_scarab\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mother_of_scarab\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mother_of_scarab\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mother_of_scarab\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mother_of_scarab\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 128,
+        "pos_points": 107,
+        "labels": 13,
+        "actions": 4,
+        "unique_actions": 4
+      }
+    },
+    "mount_sternum": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\mount_sternum\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mount_sternum\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mount_sternum\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mount_sternum\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mount_sternum\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 143,
+        "pos_points": 127,
+        "labels": 6,
+        "actions": 10,
+        "unique_actions": 9
+      }
+    },
+    "mutated_humans": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\mutated_humans\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_humans\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_humans\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_humans\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_humans\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 166,
+        "pos_points": 139,
+        "labels": 10,
+        "actions": 17,
+        "unique_actions": 13
+      }
+    },
+    "mutated_temple_complex": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\mutated_temple_complex\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_temple_complex\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_temple_complex\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_temple_complex\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\mutated_temple_complex\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 100,
+        "pos_points": 74,
+        "labels": 13,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "oramond_demon_sewers": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_demon_sewers\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_demon_sewers\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_demon_sewers\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_demon_sewers\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_demon_sewers\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 108,
+        "pos_points": 77,
+        "labels": 14,
+        "actions": 16,
+        "unique_actions": 11
+      }
+    },
+    "oramond_hydra_task": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_hydra_task\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_hydra_task\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_hydra_task\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_hydra_task\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_hydra_task\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 140,
+        "pos_points": 80,
+        "labels": 29,
+        "actions": 9,
+        "unique_actions": 4
+      }
+    },
+    "oramond_sewers_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_sewers_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_sewers_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_sewers_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_sewers_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_sewers_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 144,
+        "pos_points": 88,
+        "labels": 19,
+        "actions": 17,
+        "unique_actions": 11
+      }
+    },
+    "oramond_tower_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_tower_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_tower_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_tower_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_tower_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_tower_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 128,
+        "pos_points": 79,
+        "labels": 18,
+        "actions": 17,
+        "unique_actions": 12
+      }
+    },
+    "oramond_west": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_west\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 109,
+        "pos_points": 54,
+        "labels": 12,
+        "actions": 10,
+        "unique_actions": 6
+      }
+    },
+    "oramond_west_tasker": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\oramond_west_tasker\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west_tasker\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west_tasker\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west_tasker\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\oramond_west_tasker\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 79,
+        "pos_points": 53,
+        "labels": 13,
+        "actions": 12,
+        "unique_actions": 7
+      }
+    },
+    "orc_fortress_shaman": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\orc_fortress_shaman\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\orc_fortress_shaman\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\orc_fortress_shaman\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\orc_fortress_shaman\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\orc_fortress_shaman\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 145,
+        "pos_points": 132,
+        "labels": 8,
+        "actions": 4,
+        "unique_actions": 4
+      }
+    },
+    "outside_orc_fortress": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\outside_orc_fortress\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\outside_orc_fortress\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\outside_orc_fortress\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\outside_orc_fortress\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\outside_orc_fortress\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 186,
+        "pos_points": 148,
+        "labels": 22,
+        "actions": 9,
+        "unique_actions": 6
+      }
+    },
+    "peninsula_tomb_ankrahmun": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\peninsula_tomb_ankrahmun\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\peninsula_tomb_ankrahmun\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\peninsula_tomb_ankrahmun\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\peninsula_tomb_ankrahmun\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\peninsula_tomb_ankrahmun\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 219,
+        "pos_points": 143,
+        "labels": 15,
+        "actions": 7,
+        "unique_actions": 6
+      }
+    },
+    "pirates_yalahar": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\pirates_yalahar\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\pirates_yalahar\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\pirates_yalahar\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\pirates_yalahar\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\pirates_yalahar\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 108,
+        "pos_points": 83,
+        "labels": 11,
+        "actions": 14,
+        "unique_actions": 11
+      }
+    },
+    "putrid_mummy": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\putrid_mummy\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 177,
+        "pos_points": 119,
+        "labels": 15,
+        "actions": 22,
+        "unique_actions": 18
+      }
+    },
+    "putrid_mummy_mage": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\putrid_mummy_mage\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy_mage\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy_mage\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy_mage\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\putrid_mummy_mage\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 120,
+        "pos_points": 95,
+        "labels": 12,
+        "actions": 12,
+        "unique_actions": 8
+      }
+    },
+    "quaras_liberty_bay": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quaras_liberty_bay\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quaras_liberty_bay\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quaras_liberty_bay\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quaras_liberty_bay\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quaras_liberty_bay\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 101,
+        "pos_points": 76,
+        "labels": 6,
+        "actions": 2,
+        "unique_actions": 2
+      }
+    },
+    "rotworm_venore_southeast": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\rotworm_venore_southeast\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\rotworm_venore_southeast\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\rotworm_venore_southeast\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\rotworm_venore_southeast\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\rotworm_venore_southeast\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 120,
+        "pos_points": 102,
+        "labels": 9,
+        "actions": 9,
+        "unique_actions": 8
+      }
+    },
+    "salamander_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\salamander_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\salamander_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\salamander_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\salamander_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\salamander_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 71,
+        "pos_points": 57,
+        "labels": 6,
+        "actions": 8,
+        "unique_actions": 8
+      }
+    },
+    "sea_serpent": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\sea_serpent\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sea_serpent\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sea_serpent\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sea_serpent\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sea_serpent\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 193,
+        "pos_points": 120,
+        "labels": 27,
+        "actions": 10,
+        "unique_actions": 8
+      }
+    },
+    "sell_npc": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\sell_npc\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sell_npc\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sell_npc\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sell_npc\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\sell_npc\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 642,
+        "pos_points": 470,
+        "labels": 55,
+        "actions": 116,
+        "unique_actions": 59
+      }
+    },
+    "stonerefiner": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\stonerefiner\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\stonerefiner\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\stonerefiner\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\stonerefiner\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\stonerefiner\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 158,
+        "pos_points": 119,
+        "labels": 23,
+        "actions": 14,
+        "unique_actions": 11
+      }
+    },
+    "swamp_troll": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\swamp_troll\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\swamp_troll\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\swamp_troll\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\swamp_troll\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\swamp_troll\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 141,
+        "pos_points": 112,
+        "labels": 14,
+        "actions": 15,
+        "unique_actions": 12
+      }
+    },
+    "tarantula_cave": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\tarantula_cave\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\tarantula_cave\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\tarantula_cave\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\tarantula_cave\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\tarantula_cave\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 61,
+        "pos_points": 40,
+        "labels": 9,
+        "actions": 4,
+        "unique_actions": 4
+      }
+    },
+    "thais_cyclops_south": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\thais_cyclops_south\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\thais_cyclops_south\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\thais_cyclops_south\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\thais_cyclops_south\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\thais_cyclops_south\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 124,
+        "pos_points": 106,
+        "labels": 7,
+        "actions": 10,
+        "unique_actions": 9
+      }
+    },
+    "train_slime": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\train_slime\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_slime\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_slime\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_slime\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_slime\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 77,
+        "pos_points": 45,
+        "labels": 19,
+        "actions": 12,
+        "unique_actions": 12
+      }
+    },
+    "train_venore_rotworm_north": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\train_venore_rotworm_north\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_venore_rotworm_north\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_venore_rotworm_north\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_venore_rotworm_north\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\train_venore_rotworm_north\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 94,
+        "pos_points": 71,
+        "labels": 14,
+        "actions": 9,
+        "unique_actions": 8
+      }
+    },
+    "vampire_crypt_edron": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\vampire_crypt_edron\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 127,
+        "pos_points": 106,
+        "labels": 12,
+        "actions": 8,
+        "unique_actions": 4
+      }
+    },
+    "vampire_crypt_edron_box": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\vampire_crypt_edron_box\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_box\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_box\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_box\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_box\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 175,
+        "pos_points": 130,
+        "labels": 12,
+        "actions": 8,
+        "unique_actions": 4
+      }
+    },
+    "vampire_crypt_edron_mage": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\vampire_crypt_edron_mage\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_mage\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_mage\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_mage\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_mage\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 155,
+        "pos_points": 137,
+        "labels": 9,
+        "actions": 6,
+        "unique_actions": 6
+      }
+    },
+    "vampire_crypt_edron_upper": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\vampire_crypt_edron_upper\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_upper\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_upper\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_upper\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\vampire_crypt_edron_upper\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 119,
+        "pos_points": 98,
+        "labels": 12,
+        "actions": 8,
+        "unique_actions": 4
+      }
+    },
+    "venore_amazon_camp": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\venore_amazon_camp\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\venore_amazon_camp\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\venore_amazon_camp\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\venore_amazon_camp\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\venore_amazon_camp\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 100,
+        "pos_points": 82,
+        "labels": 8,
+        "actions": 10,
+        "unique_actions": 10
+      }
+    },
+    "wasp_ab": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\wasp_ab\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_ab\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_ab\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_ab\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_ab\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 54,
+        "pos_points": 38,
+        "labels": 9,
+        "actions": 7,
+        "unique_actions": 7
+      }
+    },
+    "wasp_darashia": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\wasp_darashia\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_darashia\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_darashia\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_darashia\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_darashia\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 100,
+        "pos_points": 70,
+        "labels": 14,
+        "actions": 16,
+        "unique_actions": 12
+      }
+    },
+    "wasp_thais": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\wasp_thais\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_thais\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_thais\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_thais\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wasp_thais\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 96,
+        "pos_points": 73,
+        "labels": 12,
+        "actions": 11,
+        "unique_actions": 11
+      }
+    },
+    "wyrm_liberty_bay": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\wyrm_liberty_bay\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wyrm_liberty_bay\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wyrm_liberty_bay\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wyrm_liberty_bay\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\wyrm_liberty_bay\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 38,
+        "pos_points": 25,
+        "labels": 8,
+        "actions": 2,
+        "unique_actions": 2
+      }
+    },
+    "yalahar_cults": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\yalahar_cults\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_cults\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_cults\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_cults\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_cults\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 111,
+        "pos_points": 88,
+        "labels": 15,
+        "actions": 3,
+        "unique_actions": 3
+      }
+    },
+    "yalahar_dragons": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\yalahar_dragons\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_dragons\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_dragons\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_dragons\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_dragons\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 79,
+        "pos_points": 59,
+        "labels": 11,
+        "actions": 1,
+        "unique_actions": 1
+      }
+    },
+    "yalahar_elves": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\yalahar_elves\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_elves\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_elves\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_elves\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_elves\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 71,
+        "pos_points": 53,
+        "labels": 10,
+        "actions": 7,
+        "unique_actions": 4
+      }
+    },
+    "yalahar_necromancer": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\yalahar_necromancer\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_necromancer\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_necromancer\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_necromancer\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\yalahar_necromancer\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 107,
+        "pos_points": 95,
+        "labels": 7,
+        "actions": 2,
+        "unique_actions": 2
+      }
+    },
+    "killer_caimans/killer_caimans": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\killer_caimans\\killer_caimans\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\killer_caimans\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\killer_caimans\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\killer_caimans\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\killer_caimans\\killer_caimans\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 137,
+        "pos_points": 106,
+        "labels": 12,
+        "actions": 18,
+        "unique_actions": 12
+      }
+    },
+    "quests/apes": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\apes\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\apes\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\apes\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\apes\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\apes\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 806,
+        "pos_points": 718,
+        "labels": 32,
+        "actions": 8,
+        "unique_actions": 6
+      }
+    },
+    "quests/barbarian_test": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\barbarian_test\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\barbarian_test\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\barbarian_test\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\barbarian_test\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\barbarian_test\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 53,
+        "pos_points": 41,
+        "labels": 3,
+        "actions": 9,
+        "unique_actions": 9
+      }
+    },
+    "quests/feyrist": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\feyrist\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\feyrist\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\feyrist\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\feyrist\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\feyrist\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 645,
+        "pos_points": 567,
+        "labels": 33,
+        "actions": 19,
+        "unique_actions": 7
+      }
+    },
+    "quests/green_djinn": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\green_djinn\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\green_djinn\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\green_djinn\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\green_djinn\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\green_djinn\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 380,
+        "pos_points": 351,
+        "labels": 6,
+        "actions": 23,
+        "unique_actions": 17
+      }
+    },
+    "quests/meriana": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\meriana\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\meriana\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\meriana\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\meriana\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\meriana\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 299,
+        "pos_points": 272,
+        "labels": 1,
+        "actions": 26,
+        "unique_actions": 20
+      }
+    },
+    "quests/sea_serpent": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\sea_serpent\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\sea_serpent\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\sea_serpent\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\sea_serpent\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\sea_serpent\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 55,
+        "pos_points": 24,
+        "labels": 9,
+        "actions": 22,
+        "unique_actions": 15
+      }
+    },
+    "quests/yalahar": {
+      "waypoints": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\scripts-master\\quests\\yalahar\\waypoints.in",
+      "has_setups": true,
+      "outputs": {
+        "route_png": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\yalahar\\route.png",
+        "route_stats_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\yalahar\\route_stats.json",
+        "actions_in_waypoints_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\yalahar\\actions_in_waypoints.json",
+        "setup_actions_json": "C:\\Users\\gmast\\Documents\\GitHub\\tibia_bot_framework\\reports\\cloudbot\\quests\\yalahar\\setup_actions.json"
+      },
+      "counts": {
+        "lines": 289,
+        "pos_points": 266,
+        "labels": 3,
+        "actions": 20,
+        "unique_actions": 19
+      }
+    }
+  },
+  "inventory": {
+    "waypoints_actions_used": {
+      "check_time": 79,
+      "check": 78,
+      "end": 72,
+      "check_train": 47,
+      "check_supplies": 33,
+      "deposit": 33,
+      "sell": 33,
+      "buy_potions": 28,
+      "bank": 27,
+      "travel_edron": 25,
+      "wait": 16,
+      "summon": 15,
+      "walk_keys": 13,
+      "walk_mouse": 12,
+      "check2": 11,
+      "travel_venore": 11,
+      "buy_ammo": 10,
+      "refill": 10,
+      "check_ammo": 9,
+      "target_off": 8,
+      "travel_darashia": 8,
+      "buy_runes": 6,
+      "target_on": 6,
+      "travel_oramond": 6,
+      "travel_port_hope": 6,
+      "exit": 5,
+      "levitate_south_down": 5,
+      "travel_ankrahmun": 5,
+      "travel_cormaya": 5,
+      "travel_east": 5,
+      "travel_svargrond": 5,
+      "travel_thais": 5,
+      "travel_carlin": 4,
+      "travel_center": 4,
+      "travel_liberty_bay": 4,
+      "travel_passage": 4,
+      "check_down": 3,
+      "levitate_down": 3,
+      "levitate_north_up": 3,
+      "levitate_up": 3,
+      "travel_farmine": 3,
+      "travel_krailos": 3,
+      "use_elevator": 3,
+      "debug": 2,
+      "djinn": 2,
+      "levitate_east_down": 2,
+      "levitate_west_up": 2,
+      "loot_monsters": 2,
+      "travel_abdendriel": 2,
+      "travel_kazordoon": 2,
+      "travel_west": 2,
+      "travel_yalahar": 2,
+      "angus": 1,
+      "angus2": 1,
+      "back_12": 1,
+      "back_14": 1,
+      "bear_complete": 1,
+      "buy_bait": 1,
+      "buy_poem": 1,
+      "buy_rake": 1,
+      "buy_ticket": 1,
+      "buy_worms": 1,
+      "check_1": 1,
+      "check_djinn_type": 1,
+      "check_down_1": 1,
+      "check_down_2": 1,
+      "check_floor": 1,
+      "check_imbuements": 1,
+      "check_north": 1,
+      "check_rashid": 1,
+      "check_sell_alexander": 1,
+      "check_sell_djinn": 1,
+      "check_sell_edron": 1,
+      "check_sell_edron_tower": 1,
+      "check_sell_esrik": 1,
+      "check_sell_flint": 1,
+      "check_sell_lailene": 1,
+      "check_sell_tamoril": 1,
+      "check_sell_telas": 1,
+      "check_task": 1,
+      "check_teleport": 1,
+      "check_worms": 1,
+      "djinn2": 1,
+      "drink": 1,
+      "edron": 1,
+      "end_rashid": 1,
+      "errand": 1,
+      "farmine": 1,
+      "fill_mead": 1,
+      "finish": 1,
+      "fish_south": 1,
+      "flint": 1,
+      "get_item": 1,
+      "get_mission": 1,
+      "give_fish_captain": 1,
+      "give_ring": 1,
+      "go_down": 1,
+      "go_up": 1,
+      "gohunt_12": 1,
+      "gohunt_14": 1,
+      "honey": 1,
+      "jug": 1,
+      "jump_elevator_gohunt": 1,
+      "jump_travel_back": 1,
+      "karith": 1,
+      "larboard": 1,
+      "leave2": 1,
+      "mamooth": 1,
+      "mamooth_complete": 1,
+      "mead": 1,
+      "mermaid": 1,
+      "mermaid2": 1,
+      "passage": 1,
+      "peg_leg": 1,
+      "quit": 1,
+      "rashid_ankrahmun": 1,
+      "rashid_carlin": 1,
+      "rashid_darashia": 1,
+      "rashid_edron": 1,
+      "rashid_liberty_bay": 1,
+      "rashid_port_hope": 1,
+      "rashid_svargrond": 1,
+      "raymond": 1,
+      "repeat": 1,
+      "repeat_djinn": 1,
+      "repeat_edron": 1,
+      "repeat_farmine": 1,
+      "repeat_flint": 1,
+      "repeat_rashid_ankrahmun": 1,
+      "repeat_rashid_carlin": 1,
+      "repeat_rashid_darashia": 1,
+      "repeat_rashid_edron": 1,
+      "repeat_rashid_liberty_bay": 1,
+      "repeat_rashid_port_hope": 1,
+      "repeat_rashid_svargrond": 1,
+      "repeat_yalahar": 1,
+      "ring": 1,
+      "royal_satin": 1,
+      "rum": 1,
+      "set_bait": 1,
+      "speed": 1,
+      "starboard": 1,
+      "stash_all": 1,
+      "straight": 1,
+      "talk_alesar": 1,
+      "talk_baaleal": 1,
+      "talk_baaleal_2": 1,
+      "talk_malor": 1,
+      "talk_melfar": 1,
+      "talk_orc": 1,
+      "talk_orc_2": 1,
+      "talk_partos": 1,
+      "talk_shauna": 1,
+      "talk_ubaid": 1,
+      "telescope": 1,
+      "travel_alchemist": 1,
+      "travel_banuta": 1,
+      "travel_cemetery": 1,
+      "travel_magician": 1,
+      "travel_meriana": 1,
+      "use_imbuing_shrine": 1,
+      "use_mead_bear": 1,
+      "use_rake_north": 1,
+      "venorean_spice": 1,
+      "wyrdin": 1,
+      "yalahar": 1
+    },
+    "setup_label_actions_used": {
+      "conditional_jump_item_count_below": 31,
+      "withdraw_item_from_depot_to_backpack": 21,
+      "conditional_jump_script_options": 10,
+      "talk_npc": 10,
+      "set_persistent_interval": 9,
+      "wait_mana_percentage_below": 8,
+      "set_target_action": 4,
+      "swap_equip": 4,
+      "wait_lure": 4,
+      "withdraw_item_from_stash": 3,
+      "conditional_jump_monsters_on_screen": 1,
+      "conditional_jump_position": 1,
+      "drop_item_to_sqm": 1,
+      "equip_item": 1,
+      "jump_to_label": 1,
+      "wait": 1
+    },
+    "setup_persistent_actions_used": {
+      "eat_food": 134,
+      "drop_vials": 101,
+      "haste": 94,
+      "anti_paralyze": 93,
+      "lure_monsters": 64,
+      "recover_full_mana": 44,
+      "equip_item": 29,
+      "use_hotkey": 24,
+      "target_wall": 19,
+      "stop_target_no_supplies": 15,
+      "blacklist_coords": 12,
+      "dynamic_barrier_rectangles": 12,
+      "refill_diamond_ammo": 12,
+      "refill_ammo": 10,
+      "lure_monsters_diamond_arrow": 9,
+      "throw_rune_if_monsters": 7,
+      "drop_items": 6,
+      "dynamic_barrier": 6,
+      "refill_priority_ammo": 5,
+      "cast_spell": 3,
+      "cast_spell_if_monsters": 3,
+      "anti_poison": 2,
+      "conditional_jump_player_on_screen": 2,
+      "refill_quiver": 2,
+      "scan_bodies": 2,
+      "swap_equip": 2,
+      "dynamic_barrier_coords": 1,
+      "swap_target_action": 1,
+      "use_hotkey_if_condition": 1
+    },
+    "missing_waypoint_actions": [
+      "angus",
+      "angus2",
+      "back_12",
+      "back_14",
+      "bear_complete",
+      "buy_bait",
+      "buy_poem",
+      "buy_rake",
+      "buy_worms",
+      "check_1",
+      "check_djinn_type",
+      "check_down",
+      "check_down_1",
+      "check_down_2",
+      "check_floor",
+      "check_north",
+      "check_rashid",
+      "check_sell_alexander",
+      "check_sell_djinn",
+      "check_sell_edron",
+      "check_sell_edron_tower",
+      "check_sell_esrik",
+      "check_sell_flint",
+      "check_sell_lailene",
+      "check_sell_tamoril",
+      "check_sell_telas",
+      "check_task",
+      "check_teleport",
+      "check_worms",
+      "djinn",
+      "djinn2",
+      "drink",
+      "edron",
+      "end_rashid",
+      "errand",
+      "exit",
+      "farmine",
+      "fill_mead",
+      "finish",
+      "fish_south",
+      "flint",
+      "get_item",
+      "get_mission",
+      "give_fish_captain",
+      "give_ring",
+      "go_down",
+      "go_up",
+      "gohunt_12",
+      "gohunt_14",
+      "honey",
+      "jug",
+      "jump_elevator_gohunt",
+      "jump_travel_back",
+      "karith",
+      "larboard",
+      "leave2",
+      "mamooth",
+      "mamooth_complete",
+      "mead",
+      "mermaid",
+      "mermaid2",
+      "passage",
+      "peg_leg",
+      "quit",
+      "rashid_ankrahmun",
+      "rashid_carlin",
+      "rashid_darashia",
+      "rashid_edron",
+      "rashid_liberty_bay",
+      "rashid_port_hope",
+      "rashid_svargrond",
+      "raymond",
+      "repeat",
+      "repeat_djinn",
+      "repeat_edron",
+      "repeat_farmine",
+      "repeat_flint",
+      "repeat_rashid_ankrahmun",
+      "repeat_rashid_carlin",
+      "repeat_rashid_darashia",
+      "repeat_rashid_edron",
+      "repeat_rashid_liberty_bay",
+      "repeat_rashid_port_hope",
+      "repeat_rashid_svargrond",
+      "repeat_yalahar",
+      "ring",
+      "royal_satin",
+      "rum",
+      "set_bait",
+      "speed",
+      "starboard",
+      "stash_all",
+      "straight",
+      "talk_alesar",
+      "talk_baaleal",
+      "talk_baaleal_2",
+      "talk_malor",
+      "talk_melfar",
+      "talk_orc",
+      "talk_orc_2",
+      "talk_partos",
+      "talk_shauna",
+      "talk_ubaid",
+      "telescope",
+      "travel_meriana",
+      "use_elevator",
+      "use_mead_bear",
+      "use_rake_north",
+      "venorean_spice",
+      "wyrdin",
+      "yalahar"
+    ],
+    "missing_setup_actions": [
+      "conditional_jump_item_count_below",
+      "conditional_jump_monsters_on_screen",
+      "conditional_jump_position",
+      "conditional_jump_script_options",
+      "drop_item_to_sqm",
+      "equip_item",
+      "jump_to_label",
+      "set_persistent_interval",
+      "set_target_action",
+      "swap_equip",
+      "talk_npc",
+      "wait_lure",
+      "wait_mana_percentage_below",
+      "withdraw_item_from_depot_to_backpack",
+      "withdraw_item_from_stash"
+    ]
+  }
+}

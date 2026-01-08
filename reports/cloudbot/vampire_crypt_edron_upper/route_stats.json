@@ -1,0 +1,168 @@
+{
+  "counts": {
+    "lines": 119,
+    "pos_points": 98,
+    "labels": 12,
+    "actions": 8,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 1617,
+    "total_euclid": 1299.0027555886322,
+    "max_manhattan": 43,
+    "max_jump": {
+      "from": {
+        "line_index": 90,
+        "x": 33243,
+        "y": 31793,
+        "z": 7
+      },
+      "to": {
+        "line_index": 91,
+        "x": 33233,
+        "y": 31826,
+        "z": 7
+      },
+      "dx": -10,
+      "dy": 33,
+      "dz": 0,
+      "manhattan": 43,
+      "euclid": 34.48187929913333
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33242,
+          "y": 31767,
+          "z": 7
+        },
+        "first_line": 7,
+        "again_line": 8
+      },
+      {
+        "pos": {
+          "x": 33062,
+          "y": 31697,
+          "z": 8
+        },
+        "first_line": 31,
+        "again_line": 62
+      },
+      {
+        "pos": {
+          "x": 33136,
+          "y": 31699,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 67
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31717,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 71
+      },
+      {
+        "pos": {
+          "x": 33212,
+          "y": 31723,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 72
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31728,
+          "z": 7
+        },
+        "first_line": 19,
+        "again_line": 73
+      },
+      {
+        "pos": {
+          "x": 33214,
+          "y": 31735,
+          "z": 7
+        },
+        "first_line": 18,
+        "again_line": 74
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31742,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 75
+      },
+      {
+        "pos": {
+          "x": 33215,
+          "y": 31748,
+          "z": 7
+        },
+        "first_line": 16,
+        "again_line": 76
+      },
+      {
+        "pos": {
+          "x": 33234,
+          "y": 31768,
+          "z": 6
+        },
+        "first_line": 10,
+        "again_line": 81
+      },
+      {
+        "pos": {
+          "x": 33250,
+          "y": 31775,
+          "z": 7
+        },
+        "first_line": 6,
+        "again_line": 85
+      },
+      {
+        "pos": {
+          "x": 33247,
+          "y": 31787,
+          "z": 7
+        },
+        "first_line": 5,
+        "again_line": 87
+      }
+    ],
+    "repeat_positions": 12
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "enterspawn",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end"
+  ]
+}

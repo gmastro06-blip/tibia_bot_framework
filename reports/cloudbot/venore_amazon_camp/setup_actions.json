@@ -1,0 +1,219 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_items",
+      "min_interval": 40,
+      "max_interval": 100,
+      "args": {
+        "names": [
+          "sabre",
+          "skull",
+          "dagger",
+          "empty potion flask"
+        ]
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "min_interval": 1,
+      "max_interval": 3,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "drop_items",
+      "interval": 60,
+      "args": {
+        "names": [
+          "sabre",
+          "skull",
+          "dagger",
+          "empty potion flask"
+        ]
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "drop_items",
+      "interval": 60,
+      "args": {
+        "names": [
+          "sabre",
+          "skull",
+          "dagger",
+          "empty potion flask"
+        ]
+      }
+    },
+    {
+      "action": "refill_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "ammo_name": "spear",
+        "equip_slot": "weapon",
+        "min_amount": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Poison Spider",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Bat",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Amazon",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Valkyrie",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bear",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Xenia",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poison Spider",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Bat",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Amazon",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Valkyrie",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bear",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Xenia",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Poison Spider",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Bat",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Amazon",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Valkyrie",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bear",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Witch",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mummy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Ghoul",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Xenia",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

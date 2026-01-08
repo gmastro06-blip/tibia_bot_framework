@@ -1,0 +1,132 @@
+[
+  {
+    "line": 62,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 66,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 69,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 74,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 78,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 80,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 82,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 86,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 90,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 93,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 97,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 100,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 102,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 105,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 107,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 155,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 163,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 165,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 172,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 175,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 178,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 181,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 184,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 187,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 192,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 193,
+    "action": "travel_svargrond",
+    "raw": "action travel_svargrond"
+  }
+]

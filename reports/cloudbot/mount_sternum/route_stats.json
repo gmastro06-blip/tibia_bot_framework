@@ -1,0 +1,266 @@
+{
+  "counts": {
+    "lines": 143,
+    "pos_points": 127,
+    "labels": 6,
+    "actions": 10,
+    "unique_actions": 9
+  },
+  "distance": {
+    "total_manhattan": 1194,
+    "total_euclid": 996.1934552343007,
+    "max_manhattan": 24,
+    "max_jump": {
+      "from": {
+        "line_index": 21,
+        "x": 32368,
+        "y": 32195,
+        "z": 7
+      },
+      "to": {
+        "line_index": 24,
+        "x": 32369,
+        "y": 32172,
+        "z": 7
+      },
+      "dx": 1,
+      "dy": -23,
+      "dz": 0,
+      "manhattan": 24,
+      "euclid": 23.021728866442675
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32400,
+          "y": 32220,
+          "z": 7
+        },
+        "first_line": 13,
+        "again_line": 14
+      },
+      {
+        "pos": {
+          "x": 32400,
+          "y": 32217,
+          "z": 7
+        },
+        "first_line": 12,
+        "again_line": 17
+      },
+      {
+        "pos": {
+          "x": 32462,
+          "y": 32045,
+          "z": 8
+        },
+        "first_line": 66,
+        "again_line": 68
+      },
+      {
+        "pos": {
+          "x": 32461,
+          "y": 32052,
+          "z": 8
+        },
+        "first_line": 65,
+        "again_line": 69
+      },
+      {
+        "pos": {
+          "x": 32438,
+          "y": 32095,
+          "z": 9
+        },
+        "first_line": 83,
+        "again_line": 84
+      },
+      {
+        "pos": {
+          "x": 32439,
+          "y": 32103,
+          "z": 8
+        },
+        "first_line": 79,
+        "again_line": 85
+      },
+      {
+        "pos": {
+          "x": 32446,
+          "y": 32103,
+          "z": 8
+        },
+        "first_line": 78,
+        "again_line": 86
+      },
+      {
+        "pos": {
+          "x": 32478,
+          "y": 32115,
+          "z": 8
+        },
+        "first_line": 97,
+        "again_line": 99
+      },
+      {
+        "pos": {
+          "x": 32479,
+          "y": 32108,
+          "z": 8
+        },
+        "first_line": 96,
+        "again_line": 100
+      },
+      {
+        "pos": {
+          "x": 32495,
+          "y": 32089,
+          "z": 8
+        },
+        "first_line": 104,
+        "again_line": 107
+      },
+      {
+        "pos": {
+          "x": 32446,
+          "y": 32125,
+          "z": 7
+        },
+        "first_line": 36,
+        "again_line": 119
+      },
+      {
+        "pos": {
+          "x": 32445,
+          "y": 32133,
+          "z": 7
+        },
+        "first_line": 35,
+        "again_line": 120
+      },
+      {
+        "pos": {
+          "x": 32440,
+          "y": 32138,
+          "z": 7
+        },
+        "first_line": 34,
+        "again_line": 121
+      },
+      {
+        "pos": {
+          "x": 32431,
+          "y": 32140,
+          "z": 7
+        },
+        "first_line": 33,
+        "again_line": 122
+      },
+      {
+        "pos": {
+          "x": 32423,
+          "y": 32145,
+          "z": 7
+        },
+        "first_line": 32,
+        "again_line": 123
+      },
+      {
+        "pos": {
+          "x": 32416,
+          "y": 32150,
+          "z": 7
+        },
+        "first_line": 31,
+        "again_line": 124
+      },
+      {
+        "pos": {
+          "x": 32411,
+          "y": 32155,
+          "z": 7
+        },
+        "first_line": 30,
+        "again_line": 125
+      },
+      {
+        "pos": {
+          "x": 32406,
+          "y": 32160,
+          "z": 7
+        },
+        "first_line": 29,
+        "again_line": 126
+      },
+      {
+        "pos": {
+          "x": 32399,
+          "y": 32162,
+          "z": 7
+        },
+        "first_line": 28,
+        "again_line": 127
+      },
+      {
+        "pos": {
+          "x": 32389,
+          "y": 32162,
+          "z": 7
+        },
+        "first_line": 27,
+        "again_line": 128
+      },
+      {
+        "pos": {
+          "x": 32379,
+          "y": 32162,
+          "z": 7
+        },
+        "first_line": 26,
+        "again_line": 129
+      },
+      {
+        "pos": {
+          "x": 32372,
+          "y": 32166,
+          "z": 7
+        },
+        "first_line": 25,
+        "again_line": 130
+      },
+      {
+        "pos": {
+          "x": 32369,
+          "y": 32172,
+          "z": 7
+        },
+        "first_line": 24,
+        "again_line": 131
+      }
+    ],
+    "repeat_positions": 23
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "enterspawn",
+    "hunt",
+    "leave",
+    "exit"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "exit",
+    "sell"
+  ]
+}

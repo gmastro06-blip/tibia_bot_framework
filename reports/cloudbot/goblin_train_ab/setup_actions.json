@@ -1,0 +1,27 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "refill_priority_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "priority_ammo_name": "small stone",
+        "regular_ammo_name": "jagged sword",
+        "equip_slot": "weapon"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Goblin",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wolf",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "line": 21,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 22,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 25,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 28,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 31,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 34,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 37,
+    "action": "end",
+    "raw": "action end"
+  }
+]

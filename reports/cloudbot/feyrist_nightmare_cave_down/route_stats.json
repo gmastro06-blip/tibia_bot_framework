@@ -1,0 +1,241 @@
+{
+  "counts": {
+    "lines": 154,
+    "pos_points": 78,
+    "labels": 50,
+    "actions": 6,
+    "unique_actions": 5
+  },
+  "distance": {
+    "total_manhattan": 4442,
+    "total_euclid": 3610.673208806466,
+    "max_manhattan": 879,
+    "max_jump": {
+      "from": {
+        "line_index": 28,
+        "x": 33060,
+        "y": 32715,
+        "z": 5
+      },
+      "to": {
+        "line_index": 33,
+        "x": 33527,
+        "y": 32303,
+        "z": 4
+      },
+      "dx": 467,
+      "dy": -412,
+      "dz": -1,
+      "manhattan": 879,
+      "euclid": 622.7623944972914
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 16,
+          "x": 32632,
+          "y": 32744,
+          "z": 4
+        },
+        "to": {
+          "line_index": 23,
+          "x": 33090,
+          "y": 32338,
+          "z": 7
+        },
+        "dx": 458,
+        "dy": -406,
+        "dz": 3,
+        "manhattan": 864,
+        "euclid": 612.0457499239742
+      },
+      {
+        "from": {
+          "line_index": 23,
+          "x": 33090,
+          "y": 32338,
+          "z": 7
+        },
+        "to": {
+          "line_index": 28,
+          "x": 33060,
+          "y": 32715,
+          "z": 5
+        },
+        "dx": -30,
+        "dy": 377,
+        "dz": -2,
+        "manhattan": 407,
+        "euclid": 378.1917503066401
+      },
+      {
+        "from": {
+          "line_index": 28,
+          "x": 33060,
+          "y": 32715,
+          "z": 5
+        },
+        "to": {
+          "line_index": 33,
+          "x": 33527,
+          "y": 32303,
+          "z": 4
+        },
+        "dx": 467,
+        "dy": -412,
+        "dz": -1,
+        "manhattan": 879,
+        "euclid": 622.7623944972914
+      },
+      {
+        "from": {
+          "line_index": 137,
+          "x": 33527,
+          "y": 32300,
+          "z": 4
+        },
+        "to": {
+          "line_index": 140,
+          "x": 33095,
+          "y": 32338,
+          "z": 7
+        },
+        "dx": -432,
+        "dy": 38,
+        "dz": 3,
+        "manhattan": 470,
+        "euclid": 433.6680758368086
+      },
+      {
+        "from": {
+          "line_index": 140,
+          "x": 33095,
+          "y": 32338,
+          "z": 7
+        },
+        "to": {
+          "line_index": 143,
+          "x": 33063,
+          "y": 32716,
+          "z": 5
+        },
+        "dx": -32,
+        "dy": 378,
+        "dz": -2,
+        "manhattan": 410,
+        "euclid": 379.35207920874774
+      },
+      {
+        "from": {
+          "line_index": 143,
+          "x": 33063,
+          "y": 32716,
+          "z": 5
+        },
+        "to": {
+          "line_index": 146,
+          "x": 32628,
+          "y": 32746,
+          "z": 4
+        },
+        "dx": -435,
+        "dy": 30,
+        "dz": -1,
+        "manhattan": 465,
+        "euclid": 436.033255612459
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32622,
+          "y": 32742,
+          "z": 7
+        },
+        "first_line": 4,
+        "again_line": 7
+      },
+      {
+        "pos": {
+          "x": 33606,
+          "y": 32269,
+          "z": 9
+        },
+        "first_line": 111,
+        "again_line": 113
+      },
+      {
+        "pos": {
+          "x": 33547,
+          "y": 32268,
+          "z": 8
+        },
+        "first_line": 127,
+        "again_line": 128
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start",
+    "go_withdraw_amulet",
+    "call_withdraw_garlic_necklace",
+    "skip_withdraw_amulet",
+    "has_gems",
+    "go_feyrist",
+    "exit_no_gems",
+    "use_gems",
+    "energy_portal_1",
+    "use_gem_north",
+    "energy_portal_2",
+    "use_gem_north",
+    "after_portal",
+    "skip_equip_amulet",
+    "enter_cave",
+    "hunt",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_3",
+    "wait_lure_6",
+    "wait_lure_3",
+    "leave",
+    "energy_portal_1",
+    "energy_portal_2",
+    "after_portal_2",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "end",
+    "summon",
+    "wait"
+  ]
+}

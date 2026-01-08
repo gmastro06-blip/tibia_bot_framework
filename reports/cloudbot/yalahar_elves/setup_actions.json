@@ -1,0 +1,111 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 50
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "alias": "anti_trap",
+      "interval": 30,
+      "args": {
+        "hotkey": "esc"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Elf Arcanist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Arcanist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Arcanist",
+      "priority": 2,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "loot": true
+    },
+    {
+      "name": "Elf",
+      "action": "stand",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "priority": 3,
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "loot": true
+    }
+  ]
+}

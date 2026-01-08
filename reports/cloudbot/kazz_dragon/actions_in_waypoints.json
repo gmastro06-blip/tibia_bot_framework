@@ -1,0 +1,42 @@
+[
+  {
+    "line": 5,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 9,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 36,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 46,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 50,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 51,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 53,
+    "action": "exit",
+    "raw": "action exit"
+  },
+  {
+    "line": 54,
+    "action": "end",
+    "raw": "action end"
+  }
+]

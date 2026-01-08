@@ -1,0 +1,151 @@
+{
+  "counts": {
+    "lines": 120,
+    "pos_points": 102,
+    "labels": 9,
+    "actions": 9,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 860,
+    "total_euclid": 725.3952927654727,
+    "max_manhattan": 27,
+    "max_jump": {
+      "from": {
+        "line_index": 107,
+        "x": 32998,
+        "y": 32073,
+        "z": 6
+      },
+      "to": {
+        "line_index": 108,
+        "x": 32976,
+        "y": 32078,
+        "z": 6
+      },
+      "dx": -22,
+      "dy": 5,
+      "dz": 0,
+      "manhattan": 27,
+      "euclid": 22.561028345356956
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33107,
+          "y": 32096,
+          "z": 8
+        },
+        "first_line": 51,
+        "again_line": 57
+      },
+      {
+        "pos": {
+          "x": 33088,
+          "y": 32089,
+          "z": 7
+        },
+        "first_line": 40,
+        "again_line": 84
+      },
+      {
+        "pos": {
+          "x": 33045,
+          "y": 32096,
+          "z": 7
+        },
+        "first_line": 32,
+        "again_line": 91
+      },
+      {
+        "pos": {
+          "x": 33021,
+          "y": 32100,
+          "z": 6
+        },
+        "first_line": 28,
+        "again_line": 96
+      },
+      {
+        "pos": {
+          "x": 33013,
+          "y": 32100,
+          "z": 6
+        },
+        "first_line": 27,
+        "again_line": 98
+      },
+      {
+        "pos": {
+          "x": 33004,
+          "y": 32099,
+          "z": 7
+        },
+        "first_line": 25,
+        "again_line": 101
+      },
+      {
+        "pos": {
+          "x": 32999,
+          "y": 32096,
+          "z": 6
+        },
+        "first_line": 21,
+        "again_line": 104
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 18,
+        "again_line": 107
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 18,
+        "again_line": 112
+      },
+      {
+        "pos": {
+          "x": 33006,
+          "y": 32064,
+          "z": 6
+        },
+        "first_line": 114,
+        "again_line": 116
+      }
+    ],
+    "repeat_positions": 9
+  },
+  "labels": [
+    "start",
+    "refill",
+    "go_hunt",
+    "door1",
+    "door2",
+    "hunt",
+    "leave",
+    "train",
+    "end"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell"
+  ]
+}

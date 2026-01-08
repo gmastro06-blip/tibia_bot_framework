@@ -1,4 +1,4 @@
-# Tibia Bot Framework
+Hacer un “route viewer” (dibujar la ruta, detectar saltos raros, loops, distancias, acciones presentes).# Tibia Bot Framework
 
 Framework de bot en tiempo real para Tibia-like MMORPGs usando un pipeline threaded: **captura → visión → decisión → acción**.
 

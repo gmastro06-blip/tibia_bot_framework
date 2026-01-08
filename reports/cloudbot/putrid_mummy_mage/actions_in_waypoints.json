@@ -1,0 +1,62 @@
+[
+  {
+    "line": 3,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 20,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 57,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 78,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 84,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 92,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 95,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 98,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 101,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 104,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 107,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 116,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  }
+]

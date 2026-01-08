@@ -1,0 +1,26 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 30
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Tarantula",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poison Spider",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Spider",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

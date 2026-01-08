@@ -1,0 +1,71 @@
+{
+"general": 
+{
+	"loot_type":"auto",
+	"loot_priority":"first"
+},
+"script_options": {
+	"hours_leave": [9],
+	"skill_train":"axe"
+},
+"containers": 
+{
+	"gold_bp":"Golden Backpack",
+	"loot_bp":"Red Backpack"
+},
+"tools": {},
+"items":
+{
+	"mana potion": {"hotkey":"f1", "id":268, "use":"self"},
+	"strong health potion": {"hotkey":"f2", "id":236, "use":"self"},
+	"brown mushroom": {"hotkey":"f11", "id":3725, "use":"use"}
+},
+"spells":
+{
+	"utani hur": "v",
+	"utura": "R",
+	"exeta res": "x",
+	"exura ico":"r",
+	"exori":"1",
+	"exori ico":"q"
+},
+"healing":
+[
+	{"type":"hp", "below_percent":60, "use_item":"strong health potion",  "priority":4},
+	{"type":"hp", "below_percent":85, "use_spell":"exura ico", "min_mana_percent":20, "priority":3},
+	{"type":"mp", "below_percent":50, "use_item":"mana potion", "priority":2},
+	{"type":"hp", "below_percent":95, "use_spell":"utura", "min_mana_percent":20, "priority":1, "cooldown":60}
+],
+"hunt_config": {
+	"cap_leave": 100,
+	"mana_name": "mana potion",
+	"take_mana": 200,
+	"mana_leave": 80,
+	"health_name": "strong health potion",
+	"take_health": 50,
+	"health_leave": 20
+},
+"persistent_actions": [
+	{"action":"haste", "interval":40, "args":{"hotkey":"v"}},
+	{"action":"drop_vials", "interval":300},
+	{"action":"cast_spell_if_monsters", "use_in_battle":true, "interval":5, "args":{"spell_hotkey":"x", "min_mp":20, "monsters_count":1, "selected_monsters":["Pirate Marauder"]}},
+	{"action":"lure_monsters", "interval":0.5},
+	{"action":"recover_full_mana", "interval":3, "args":{"hotkey":"f1"}},
+	{"action":"eat_food", "interval":60, "args":{"hotkey":"f11"}}
+],
+"target_monsters": 
+[
+	{"name":"Pirate Buccaneer", "action":"follow", "loot":true},
+	{"name":"Pirate Corsair", "action":"follow", "loot":true},
+	{"name":"Pirate Cutthroat", "action":"follow", "loot":true},
+	{"name":"Pirate Marauder", "action":"follow", "loot":true}
+],
+"target_spells":
+[ 
+	{"name":"exori ico", "min_mana_percent":30, "priority":1, "cooldown":6,
+		"monsters":["Pirate Buccaneer", "Pirate Corsair", "Pirate Cutthroat", "Pirate Marauder"]},
+	{"name":"exori", "min_mana_percent":30, "priority":2, "min_monster_count":3}
+],
+"loot": []
+}
+

@@ -1,0 +1,37 @@
+[
+  {
+    "line": 4,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 8,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 9,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 11,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 41,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 50,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 53,
+    "action": "end",
+    "raw": "action end"
+  }
+]

@@ -1,0 +1,52 @@
+[
+  {
+    "line": 53,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 92,
+    "action": "check2",
+    "raw": "action check2"
+  },
+  {
+    "line": 125,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 177,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 182,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 185,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 188,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 191,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 194,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 197,
+    "action": "end",
+    "raw": "action end"
+  }
+]

@@ -1,0 +1,87 @@
+[
+  {
+    "line": 12,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 34,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 76,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 83,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 84,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 100,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 110,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 112,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 116,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 121,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 124,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 127,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 130,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 133,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 136,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 141,
+    "action": "travel_oramond",
+    "raw": "action travel_oramond"
+  },
+  {
+    "line": 144,
+    "action": "wait",
+    "raw": "action wait"
+  }
+]

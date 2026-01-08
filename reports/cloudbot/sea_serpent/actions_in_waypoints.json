@@ -1,0 +1,52 @@
+[
+  {
+    "line": 13,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 15,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 20,
+    "action": "travel_east",
+    "raw": "action travel_east"
+  },
+  {
+    "line": 31,
+    "action": "travel_west",
+    "raw": "action travel_west"
+  },
+  {
+    "line": 36,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 38,
+    "action": "travel_svargrond",
+    "raw": "action travel_svargrond"
+  },
+  {
+    "line": 45,
+    "action": "travel_passage",
+    "raw": "action travel_passage"
+  },
+  {
+    "line": 116,
+    "action": "check_north",
+    "raw": "action check_north"
+  },
+  {
+    "line": 182,
+    "action": "travel_passage",
+    "raw": "action travel_passage"
+  },
+  {
+    "line": 186,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

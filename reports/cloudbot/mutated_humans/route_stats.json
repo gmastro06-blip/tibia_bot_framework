@@ -1,0 +1,85 @@
+{
+  "counts": {
+    "lines": 166,
+    "pos_points": 139,
+    "labels": 10,
+    "actions": 17,
+    "unique_actions": 13
+  },
+  "distance": {
+    "total_manhattan": 1520,
+    "total_euclid": 1257.8821449263075,
+    "max_manhattan": 31,
+    "max_jump": {
+      "from": {
+        "line_index": 102,
+        "x": 32744,
+        "y": 31142,
+        "z": 7
+      },
+      "to": {
+        "line_index": 103,
+        "x": 32735,
+        "y": 31120,
+        "z": 7
+      },
+      "dx": -9,
+      "dy": -22,
+      "dz": 0,
+      "manhattan": 31,
+      "euclid": 23.769728648009426
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32693,
+          "y": 31183,
+          "z": 8
+        },
+        "first_line": 79,
+        "again_line": 82
+      },
+      {
+        "pos": {
+          "x": 32843,
+          "y": 31122,
+          "z": 7
+        },
+        "first_line": 35,
+        "again_line": 118
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "leave",
+    "train",
+    "sword",
+    "axe",
+    "club",
+    "distance",
+    "start trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "refill",
+    "sell",
+    "travel_alchemist",
+    "travel_cemetery",
+    "travel_magician",
+    "wait"
+  ]
+}

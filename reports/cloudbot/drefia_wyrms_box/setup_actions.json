@@ -1,0 +1,133 @@
+{
+  "label_actions": [
+    {
+      "label": "refill_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 50,
+        "hotkey": "e",
+        "monster_count_below": 2
+      }
+    },
+    {
+      "label": "refill_mana",
+      "action": "wait_mana_percentage_below",
+      "args": {
+        "mana_perc": 45,
+        "hotkey": "e",
+        "monster_count_below": 2
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 5
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 8,
+        "min_count": 2,
+        "drop_above_hp_perc": 70
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "refill_quiver",
+      "interval": 30,
+      "use_in_battle": true,
+      "args": {
+        "quiver_name": "Quiver",
+        "ammo_name": "diamond arrow"
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "alias": "rune_thrower",
+      "action": "throw_rune_if_monsters",
+      "interval": 2,
+      "args": {
+        "min_mp": 20,
+        "rune_name": "avalanche rune"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 2,
+      "args": {
+        "count": 7,
+        "min_count": 2,
+        "drop_above_hp_perc": 70
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Wyrm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elder Wyrm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wyrm",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Tyrn",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elder Wyrm",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

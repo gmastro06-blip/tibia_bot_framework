@@ -1,0 +1,102 @@
+[
+  {
+    "line": 25,
+    "action": "angus",
+    "raw": "action angus"
+  },
+  {
+    "line": 51,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 66,
+    "action": "travel_kazordoon",
+    "raw": "action travel_kazordoon"
+  },
+  {
+    "line": 68,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  },
+  {
+    "line": 77,
+    "action": "honey",
+    "raw": "action honey"
+  },
+  {
+    "line": 89,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 104,
+    "action": "jug",
+    "raw": "action jug"
+  },
+  {
+    "line": 119,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 128,
+    "action": "venorean_spice",
+    "raw": "action venorean_spice"
+  },
+  {
+    "line": 136,
+    "action": "travel_thais",
+    "raw": "action travel_thais"
+  },
+  {
+    "line": 150,
+    "action": "royal_satin",
+    "raw": "action royal_satin"
+  },
+  {
+    "line": 165,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 188,
+    "action": "angus2",
+    "raw": "action angus2"
+  },
+  {
+    "line": 213,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 233,
+    "action": "wyrdin",
+    "raw": "action wyrdin"
+  },
+  {
+    "line": 250,
+    "action": "travel_liberty_bay",
+    "raw": "action travel_liberty_bay"
+  },
+  {
+    "line": 261,
+    "action": "rum",
+    "raw": "action rum"
+  },
+  {
+    "line": 272,
+    "action": "travel_yalahar",
+    "raw": "action travel_yalahar"
+  },
+  {
+    "line": 280,
+    "action": "karith",
+    "raw": "action karith"
+  },
+  {
+    "line": 289,
+    "action": "end",
+    "raw": "action end"
+  }
+]

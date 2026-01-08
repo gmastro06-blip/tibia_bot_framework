@@ -1,0 +1,125 @@
+{
+  "label_actions": [
+    {
+      "label": "check_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 10,
+        "label_jump": "train"
+      }
+    },
+    {
+      "label": "check_low_stealth",
+      "action": "conditional_jump_item_count_below",
+      "args": {
+        "item_name": "stealth ring",
+        "amount": 3,
+        "label_jump": "leave"
+      }
+    },
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Blue Backpack",
+        "amount": 20,
+        "stack": false
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 120
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "equip_item",
+      "interval": 2,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "V",
+        "amount": 1,
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 195,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "8"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Orc",
+      "action": "follow",
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Orc Shaman",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Warlord",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Leader",
+      "action": "follow",
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Orc",
+      "action": "follow",
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Orc Shaman",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Warlord",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Orc Leader",
+      "action": "follow",
+      "priority": 4,
+      "loot": true
+    }
+  ]
+}

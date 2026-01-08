@@ -1,0 +1,91 @@
+{
+  "label_actions": [
+    {
+      "label": "activate_gfb_thrower",
+      "action": "set_persistent_interval",
+      "args": {
+        "persistent_alias": "gfb_thrower",
+        "interval": 20000
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "scan_bodies",
+      "interval": 30000
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "count": 3
+      }
+    },
+    {
+      "alias": "gfb_thrower",
+      "action": "throw_rune_if_monsters",
+      "interval": 99999,
+      "args": {
+        "min_mp": 10,
+        "rune_name": "great fireball rune"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 1,
+      "args": [
+        "e"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Putrid Mummy",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    }
+  ]
+}

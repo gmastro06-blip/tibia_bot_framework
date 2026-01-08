@@ -1,0 +1,117 @@
+{
+  "counts": {
+    "lines": 141,
+    "pos_points": 112,
+    "labels": 14,
+    "actions": 15,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 1509,
+    "total_euclid": 1227.9843908199528,
+    "max_manhattan": 59,
+    "max_jump": {
+      "from": {
+        "line_index": 102,
+        "x": 32940,
+        "y": 32126,
+        "z": 6
+      },
+      "to": {
+        "line_index": 103,
+        "x": 32981,
+        "y": 32108,
+        "z": 6
+      },
+      "dx": 41,
+      "dy": -18,
+      "dz": 0,
+      "manhattan": 59,
+      "euclid": 44.77722635447622
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 102,
+          "x": 32940,
+          "y": 32126,
+          "z": 6
+        },
+        "to": {
+          "line_index": 103,
+          "x": 32981,
+          "y": 32108,
+          "z": 6
+        },
+        "dx": 41,
+        "dy": -18,
+        "dz": 0,
+        "manhattan": 59,
+        "euclid": 44.77722635447622
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32935,
+          "y": 32125,
+          "z": 6
+        },
+        "first_line": 19,
+        "again_line": 28
+      },
+      {
+        "pos": {
+          "x": 32934,
+          "y": 32216,
+          "z": 7
+        },
+        "first_line": 39,
+        "again_line": 91
+      },
+      {
+        "pos": {
+          "x": 32934,
+          "y": 32216,
+          "z": 8
+        },
+        "first_line": 86,
+        "again_line": 96
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start",
+    "refill",
+    "skip_ammo",
+    "go_hunt",
+    "hunt",
+    "count",
+    "continue",
+    "leave",
+    "train",
+    "sword",
+    "club",
+    "axe",
+    "distance",
+    "start trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check_ammo",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "sell",
+    "wait"
+  ]
+}

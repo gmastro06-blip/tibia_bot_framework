@@ -1,0 +1,21 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 60
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Badger",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Penguin",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

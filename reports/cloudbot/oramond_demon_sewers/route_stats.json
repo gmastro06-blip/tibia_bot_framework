@@ -1,0 +1,244 @@
+{
+  "counts": {
+    "lines": 108,
+    "pos_points": 77,
+    "labels": 14,
+    "actions": 16,
+    "unique_actions": 11
+  },
+  "distance": {
+    "total_manhattan": 2296,
+    "total_euclid": 1777.6773918932327,
+    "max_manhattan": 531,
+    "max_jump": {
+      "from": {
+        "line_index": 104,
+        "x": 33176,
+        "y": 31764,
+        "z": 6
+      },
+      "to": {
+        "line_index": 106,
+        "x": 33486,
+        "y": 31985,
+        "z": 7
+      },
+      "dx": 310,
+      "dy": 221,
+      "dz": 1,
+      "manhattan": 531,
+      "euclid": 380.71117661555456
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 78,
+          "x": 33637,
+          "y": 31891,
+          "z": 6
+        },
+        "to": {
+          "line_index": 79,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "dx": -158,
+        "dy": 95,
+        "dz": 1,
+        "manhattan": 253,
+        "euclid": 184.36105879496353
+      },
+      {
+        "from": {
+          "line_index": 79,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "to": {
+          "line_index": 81,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": -303,
+        "dy": -215,
+        "dz": -1,
+        "manhattan": 518,
+        "euclid": 371.52927206345396
+      },
+      {
+        "from": {
+          "line_index": 104,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 106,
+          "x": 33486,
+          "y": 31985,
+          "z": 7
+        },
+        "dx": 310,
+        "dy": 221,
+        "dz": 1,
+        "manhattan": 531,
+        "euclid": 380.71117661555456
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33564,
+          "y": 31992,
+          "z": 7
+        },
+        "first_line": 19,
+        "again_line": 22
+      },
+      {
+        "pos": {
+          "x": 33506,
+          "y": 32025,
+          "z": 10
+        },
+        "first_line": 41,
+        "again_line": 46
+      },
+      {
+        "pos": {
+          "x": 33544,
+          "y": 31989,
+          "z": 10
+        },
+        "first_line": 29,
+        "again_line": 52
+      },
+      {
+        "pos": {
+          "x": 33549,
+          "y": 31974,
+          "z": 10
+        },
+        "first_line": 28,
+        "again_line": 55
+      },
+      {
+        "pos": {
+          "x": 33561,
+          "y": 31994,
+          "z": 7
+        },
+        "first_line": 18,
+        "again_line": 61
+      },
+      {
+        "pos": {
+          "x": 33566,
+          "y": 31995,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 62
+      },
+      {
+        "pos": {
+          "x": 33586,
+          "y": 32000,
+          "z": 7
+        },
+        "first_line": 16,
+        "again_line": 64
+      },
+      {
+        "pos": {
+          "x": 33594,
+          "y": 32000,
+          "z": 7
+        },
+        "first_line": 15,
+        "again_line": 65
+      },
+      {
+        "pos": {
+          "x": 33612,
+          "y": 31992,
+          "z": 7
+        },
+        "first_line": 14,
+        "again_line": 66
+      },
+      {
+        "pos": {
+          "x": 33632,
+          "y": 31984,
+          "z": 7
+        },
+        "first_line": 13,
+        "again_line": 69
+      },
+      {
+        "pos": {
+          "x": 33633,
+          "y": 31979,
+          "z": 7
+        },
+        "first_line": 12,
+        "again_line": 70
+      },
+      {
+        "pos": {
+          "x": 33633,
+          "y": 31976,
+          "z": 7
+        },
+        "first_line": 11,
+        "again_line": 71
+      },
+      {
+        "pos": {
+          "x": 33635,
+          "y": 31957,
+          "z": 7
+        },
+        "first_line": 9,
+        "again_line": 72
+      }
+    ],
+    "repeat_positions": 13
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "check_down",
+    "open_hole",
+    "went_down",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "levitate_north_up",
+    "levitate_south_down",
+    "summon",
+    "target_off",
+    "target_on",
+    "travel_edron",
+    "travel_oramond"
+  ]
+}

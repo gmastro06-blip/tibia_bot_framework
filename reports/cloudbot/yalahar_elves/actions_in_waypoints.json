@@ -1,0 +1,37 @@
+[
+  {
+    "line": 36,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 50,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 55,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 58,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 61,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 64,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 67,
+    "action": "end",
+    "raw": "action end"
+  }
+]

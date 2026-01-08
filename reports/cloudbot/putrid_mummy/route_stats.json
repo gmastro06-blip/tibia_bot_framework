@@ -1,0 +1,206 @@
+{
+  "counts": {
+    "lines": 177,
+    "pos_points": 119,
+    "labels": 15,
+    "actions": 22,
+    "unique_actions": 18
+  },
+  "distance": {
+    "total_manhattan": 3188,
+    "total_euclid": 2701.0437810047397,
+    "max_manhattan": 738,
+    "max_jump": {
+      "from": {
+        "line_index": 139,
+        "x": 33271,
+        "y": 32441,
+        "z": 6
+      },
+      "to": {
+        "line_index": 141,
+        "x": 33189,
+        "y": 31785,
+        "z": 3
+      },
+      "dx": -82,
+      "dy": -656,
+      "dz": -3,
+      "manhattan": 738,
+      "euclid": 661.1051353604811
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 139,
+          "x": 33271,
+          "y": 32441,
+          "z": 6
+        },
+        "to": {
+          "line_index": 141,
+          "x": 33189,
+          "y": 31785,
+          "z": 3
+        },
+        "dx": -82,
+        "dy": -656,
+        "dz": -3,
+        "manhattan": 738,
+        "euclid": 661.1051353604811
+      },
+      {
+        "from": {
+          "line_index": 171,
+          "x": 33194,
+          "y": 31782,
+          "z": 3
+        },
+        "to": {
+          "line_index": 173,
+          "x": 33265,
+          "y": 32441,
+          "z": 6
+        },
+        "dx": 71,
+        "dy": 659,
+        "dz": 3,
+        "manhattan": 730,
+        "euclid": 662.8136993152751
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33329,
+          "y": 32258,
+          "z": 12
+        },
+        "first_line": 67,
+        "again_line": 70
+      },
+      {
+        "pos": {
+          "x": 33356,
+          "y": 32287,
+          "z": 12
+        },
+        "first_line": 74,
+        "again_line": 77
+      },
+      {
+        "pos": {
+          "x": 33364,
+          "y": 32304,
+          "z": 12
+        },
+        "first_line": 79,
+        "again_line": 82
+      },
+      {
+        "pos": {
+          "x": 33386,
+          "y": 32279,
+          "z": 12
+        },
+        "first_line": 86,
+        "again_line": 89
+      },
+      {
+        "pos": {
+          "x": 33374,
+          "y": 32260,
+          "z": 12
+        },
+        "first_line": 92,
+        "again_line": 95
+      },
+      {
+        "pos": {
+          "x": 33363,
+          "y": 32264,
+          "z": 12
+        },
+        "first_line": 97,
+        "again_line": 100
+      },
+      {
+        "pos": {
+          "x": 33351,
+          "y": 32254,
+          "z": 12
+        },
+        "first_line": 102,
+        "again_line": 105
+      },
+      {
+        "pos": {
+          "x": 33328,
+          "y": 32258,
+          "z": 12
+        },
+        "first_line": 66,
+        "again_line": 108
+      },
+      {
+        "pos": {
+          "x": 33328,
+          "y": 32258,
+          "z": 12
+        },
+        "first_line": 66,
+        "again_line": 111
+      },
+      {
+        "pos": {
+          "x": 33295,
+          "y": 32271,
+          "z": 12
+        },
+        "first_line": 50,
+        "again_line": 117
+      }
+    ],
+    "repeat_positions": 9
+  },
+  "labels": [
+    "start",
+    "go_bank",
+    "imbue_items",
+    "skip_imbuement",
+    "skip_ammo",
+    "gohunt",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check_ammo",
+    "check_imbuements",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "refill",
+    "sell",
+    "travel_darashia",
+    "travel_edron",
+    "use_imbuing_shrine",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "counts": {
+    "lines": 128,
+    "pos_points": 79,
+    "labels": 18,
+    "actions": 17,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 1914,
+    "total_euclid": 1440.973746587682,
+    "max_manhattan": 531,
+    "max_jump": {
+      "from": {
+        "line_index": 124,
+        "x": 33176,
+        "y": 31764,
+        "z": 6
+      },
+      "to": {
+        "line_index": 126,
+        "x": 33486,
+        "y": 31985,
+        "z": 7
+      },
+      "dx": 310,
+      "dy": 221,
+      "dz": 1,
+      "manhattan": 531,
+      "euclid": 380.71117661555456
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 96,
+          "x": 33637,
+          "y": 31891,
+          "z": 6
+        },
+        "to": {
+          "line_index": 97,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "dx": -158,
+        "dy": 95,
+        "dz": 1,
+        "manhattan": 253,
+        "euclid": 184.36105879496353
+      },
+      {
+        "from": {
+          "line_index": 97,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "to": {
+          "line_index": 99,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": -303,
+        "dy": -215,
+        "dz": -1,
+        "manhattan": 518,
+        "euclid": 371.52927206345396
+      },
+      {
+        "from": {
+          "line_index": 124,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 126,
+          "x": 33486,
+          "y": 31985,
+          "z": 7
+        },
+        "dx": 310,
+        "dy": 221,
+        "dz": 1,
+        "manhattan": 531,
+        "euclid": 380.71117661555456
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33561,
+          "y": 31922,
+          "z": 7
+        },
+        "first_line": 14,
+        "again_line": 17
+      },
+      {
+        "pos": {
+          "x": 33550,
+          "y": 31927,
+          "z": 5
+        },
+        "first_line": 27,
+        "again_line": 30
+      },
+      {
+        "pos": {
+          "x": 33553,
+          "y": 31926,
+          "z": 3
+        },
+        "first_line": 42,
+        "again_line": 45
+      },
+      {
+        "pos": {
+          "x": 33552,
+          "y": 31927,
+          "z": 6
+        },
+        "first_line": 53,
+        "again_line": 56
+      },
+      {
+        "pos": {
+          "x": 33550,
+          "y": 31926,
+          "z": 7
+        },
+        "first_line": 62,
+        "again_line": 65
+      },
+      {
+        "pos": {
+          "x": 33560,
+          "y": 31924,
+          "z": 7
+        },
+        "first_line": 18,
+        "again_line": 77
+      },
+      {
+        "pos": {
+          "x": 33562,
+          "y": 31919,
+          "z": 7
+        },
+        "first_line": 78,
+        "again_line": 79
+      },
+      {
+        "pos": {
+          "x": 33631,
+          "y": 31897,
+          "z": 6
+        },
+        "first_line": 88,
+        "again_line": 93
+      }
+    ],
+    "repeat_positions": 8
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "unreachable_antitrap",
+    "leave",
+    "sell_flint",
+    "train",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "levitate_down",
+    "levitate_up",
+    "sell",
+    "summon",
+    "travel_edron",
+    "travel_oramond",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

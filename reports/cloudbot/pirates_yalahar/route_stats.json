@@ -1,0 +1,93 @@
+{
+  "counts": {
+    "lines": 108,
+    "pos_points": 83,
+    "labels": 11,
+    "actions": 14,
+    "unique_actions": 11
+  },
+  "distance": {
+    "total_manhattan": 1210,
+    "total_euclid": 946.1090278180104,
+    "max_manhattan": 43,
+    "max_jump": {
+      "from": {
+        "line_index": 63,
+        "x": 32633,
+        "y": 31336,
+        "z": 6
+      },
+      "to": {
+        "line_index": 64,
+        "x": 32665,
+        "y": 31347,
+        "z": 6
+      },
+      "dx": 32,
+      "dy": 11,
+      "dz": 0,
+      "manhattan": 43,
+      "euclid": 33.83784863137726
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32640,
+          "y": 31301,
+          "z": 6
+        },
+        "first_line": 33,
+        "again_line": 39
+      },
+      {
+        "pos": {
+          "x": 32670,
+          "y": 31337,
+          "z": 6
+        },
+        "first_line": 51,
+        "again_line": 55
+      },
+      {
+        "pos": {
+          "x": 32708,
+          "y": 31311,
+          "z": 7
+        },
+        "first_line": 22,
+        "again_line": 69
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "continue",
+    "leave",
+    "train",
+    "sword",
+    "axe",
+    "club",
+    "distance",
+    "start trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_1",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "refill",
+    "sell"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "counts": {
+    "lines": 101,
+    "pos_points": 76,
+    "labels": 6,
+    "actions": 2,
+    "unique_actions": 2
+  },
+  "distance": {
+    "total_manhattan": 940,
+    "total_euclid": 754.69728246968,
+    "max_manhattan": 21,
+    "max_jump": {
+      "from": {
+        "line_index": 12,
+        "x": 32228,
+        "y": 32870,
+        "z": 7
+      },
+      "to": {
+        "line_index": 13,
+        "x": 32213,
+        "y": 32876,
+        "z": 7
+      },
+      "dx": -15,
+      "dy": 6,
+      "dz": 0,
+      "manhattan": 21,
+      "euclid": 16.15549442140351
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32239,
+          "y": 32875,
+          "z": 10
+        },
+        "first_line": 26,
+        "again_line": 70
+      },
+      {
+        "pos": {
+          "x": 32228,
+          "y": 32870,
+          "z": 7
+        },
+        "first_line": 12,
+        "again_line": 87
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "leave",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time"
+  ]
+}

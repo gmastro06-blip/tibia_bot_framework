@@ -1,0 +1,112 @@
+{
+  "counts": {
+    "lines": 120,
+    "pos_points": 95,
+    "labels": 12,
+    "actions": 12,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 2943,
+    "total_euclid": 2500.1375811419402,
+    "max_manhattan": 738,
+    "max_jump": {
+      "from": {
+        "line_index": 82,
+        "x": 33271,
+        "y": 32441,
+        "z": 6
+      },
+      "to": {
+        "line_index": 84,
+        "x": 33189,
+        "y": 31785,
+        "z": 3
+      },
+      "dx": -82,
+      "dy": -656,
+      "dz": -3,
+      "manhattan": 738,
+      "euclid": 661.1051353604811
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 82,
+          "x": 33271,
+          "y": 32441,
+          "z": 6
+        },
+        "to": {
+          "line_index": 84,
+          "x": 33189,
+          "y": 31785,
+          "z": 3
+        },
+        "dx": -82,
+        "dy": -656,
+        "dz": -3,
+        "manhattan": 738,
+        "euclid": 661.1051353604811
+      },
+      {
+        "from": {
+          "line_index": 114,
+          "x": 33194,
+          "y": 31782,
+          "z": 3
+        },
+        "to": {
+          "line_index": 116,
+          "x": 33265,
+          "y": 32441,
+          "z": 6
+        },
+        "dx": 71,
+        "dy": 659,
+        "dz": 3,
+        "manhattan": 730,
+        "euclid": 662.8136993152751
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33295,
+          "y": 32271,
+          "z": 12
+        },
+        "first_line": 21,
+        "again_line": 61
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "activate_gfb_thrower",
+    "hunt",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "end",
+    "target_off",
+    "travel_darashia",
+    "travel_edron"
+  ]
+}

@@ -1,0 +1,80 @@
+label start
+load scripts/general/refill_liberty_bay.in
+label go_hunt
+node (32273,32815,7)
+node (32245,32814,7)
+node (32230,32796,7)
+node (32206,32789,7)
+node (32175,32786,7)
+stand (32159,32783,7)
+shovel (32158,32782,7)
+node (32122,32778,8)
+stand (32087,32796,8)
+node (32077, 32788, 9)
+node (32087, 32779, 9)
+node (32097, 32774, 9)
+node (32107, 32781, 9)
+stand (32111,32790,9)
+node (32112, 32808, 8)
+node (32128, 32811, 8)
+stand (32136,32787,8)
+label hunt
+node (32131,32778,9)
+node (32119,32768,9)
+node (32112,32755,9)
+node (32133,32755,9)
+node (32126,32768,9)
+action check
+label leave
+stand (32136,32787,9)
+node (32137, 32810, 8)
+node (32110, 32807, 8)
+stand (32111,32790,8)
+node (32101, 32775, 9)
+node (32091, 32762, 9)
+node (32075, 32768, 9)
+node (32075, 32786, 9)
+stand (32087,32796,9)
+node (32121,32778,8)
+stand (32157,32782,8)
+rope (32158,32782,8)
+stand (32186,32785,7)
+node (32212,32790,7)
+node (32236,32795,7)
+node (32253,32817,7)
+node (32287,32826,7)
+node (32312,32833,7)
+node (32325,32835,7)
+stand (32336,32838,7)
+action check_time
+label train
+stand (32334,32850,6)
+stand (32306,32868,7)
+ladder (32306,32868,7)
+stand (32285,32890,6)
+label go_edron
+stand (33175,31775,6)
+stand (33182,31790,7)
+action check_train
+label magic
+ladder (33181,31793,7)
+action end
+label distance
+ladder (33178,31793,7)
+action end
+label club
+ladder (33176,31790,7)
+action end
+label sword
+ladder (33178,31787,7)
+action end
+label axe
+ladder (33181,31787,7)
+action end
+label back
+stand (33176,31776,7)
+ladder (33175,31775,7)
+stand (33176,31764,6)
+label travel_lb
+stand (32306,32868,6)
+stand (32334,32850,7) 

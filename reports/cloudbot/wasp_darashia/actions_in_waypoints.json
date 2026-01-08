@@ -1,0 +1,82 @@
+[
+  {
+    "line": 6,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 10,
+    "action": "check_ammo",
+    "raw": "action check_ammo"
+  },
+  {
+    "line": 12,
+    "action": "buy_ammo",
+    "raw": "action buy_ammo"
+  },
+  {
+    "line": 16,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 17,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 19,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 51,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 58,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 64,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 72,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 75,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 78,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 81,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 84,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 87,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 96,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  }
+]

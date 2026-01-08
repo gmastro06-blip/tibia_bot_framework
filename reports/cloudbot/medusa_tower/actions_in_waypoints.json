@@ -1,0 +1,42 @@
+[
+  {
+    "line": 9,
+    "action": "travel_east",
+    "raw": "action travel_east"
+  },
+  {
+    "line": 31,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 32,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 65,
+    "action": "loot_monsters",
+    "raw": "action loot_monsters"
+  },
+  {
+    "line": 94,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 96,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 116,
+    "action": "travel_center",
+    "raw": "action travel_center"
+  },
+  {
+    "line": 118,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

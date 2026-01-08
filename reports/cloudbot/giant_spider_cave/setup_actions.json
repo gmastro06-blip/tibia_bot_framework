@@ -1,0 +1,42 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 3
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Tarantula",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

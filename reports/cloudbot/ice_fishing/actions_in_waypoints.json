@@ -1,0 +1,212 @@
+[
+  {
+    "line": 3,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 5,
+    "action": "check_worms",
+    "raw": "action check_worms"
+  },
+  {
+    "line": 11,
+    "action": "buy_worms",
+    "raw": "action buy_worms"
+  },
+  {
+    "line": 17,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 26,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 28,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 30,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 32,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 34,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 36,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 38,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 40,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 42,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 44,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 46,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 48,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 54,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 56,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 58,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 60,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 63,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 65,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 67,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 69,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 71,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 73,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 75,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 77,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 79,
+    "action": "fish_south",
+    "raw": "action fish_south"
+  },
+  {
+    "line": 87,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 88,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 93,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 101,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 102,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 109,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 112,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 115,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 118,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 121,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 124,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 130,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 131,
+    "action": "travel_svargrond",
+    "raw": "action travel_svargrond"
+  }
+]

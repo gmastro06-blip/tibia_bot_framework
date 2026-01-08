@@ -1,0 +1,127 @@
+{
+  "counts": {
+    "lines": 100,
+    "pos_points": 70,
+    "labels": 14,
+    "actions": 16,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 2064,
+    "total_euclid": 1826.3266234275252,
+    "max_manhattan": 738,
+    "max_jump": {
+      "from": {
+        "line_index": 62,
+        "x": 33271,
+        "y": 32441,
+        "z": 6
+      },
+      "to": {
+        "line_index": 64,
+        "x": 33189,
+        "y": 31785,
+        "z": 3
+      },
+      "dx": -82,
+      "dy": -656,
+      "dz": -3,
+      "manhattan": 738,
+      "euclid": 661.1051353604811
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 62,
+          "x": 33271,
+          "y": 32441,
+          "z": 6
+        },
+        "to": {
+          "line_index": 64,
+          "x": 33189,
+          "y": 31785,
+          "z": 3
+        },
+        "dx": -82,
+        "dy": -656,
+        "dz": -3,
+        "manhattan": 738,
+        "euclid": 661.1051353604811
+      },
+      {
+        "from": {
+          "line_index": 94,
+          "x": 33194,
+          "y": 31782,
+          "z": 3
+        },
+        "to": {
+          "line_index": 96,
+          "x": 33265,
+          "y": 32441,
+          "z": 6
+        },
+        "dx": 71,
+        "dy": 659,
+        "dz": 3,
+        "manhattan": 730,
+        "euclid": 662.8136993152751
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33214,
+          "y": 32455,
+          "z": 7
+        },
+        "first_line": 1,
+        "again_line": 2
+      },
+      {
+        "pos": {
+          "x": 33216,
+          "y": 32391,
+          "z": 7
+        },
+        "first_line": 17,
+        "again_line": 53
+      }
+    ],
+    "repeat_positions": 2
+  },
+  "labels": [
+    "start",
+    "darashia_dp",
+    "skip_ammo",
+    "hunt",
+    "check_honeycomb",
+    "not_enough_honeycombs",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_trainer"
+  ],
+  "actions": [
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check_ammo",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "sell",
+    "travel_darashia",
+    "travel_edron"
+  ]
+}

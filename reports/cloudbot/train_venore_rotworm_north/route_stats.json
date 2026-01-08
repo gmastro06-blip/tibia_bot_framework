@@ -1,0 +1,111 @@
+{
+  "counts": {
+    "lines": 94,
+    "pos_points": 71,
+    "labels": 14,
+    "actions": 9,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 772,
+    "total_euclid": 638.4707467621844,
+    "max_manhattan": 27,
+    "max_jump": {
+      "from": {
+        "line_index": 68,
+        "x": 33034,
+        "y": 32047,
+        "z": 6
+      },
+      "to": {
+        "line_index": 69,
+        "x": 33023,
+        "y": 32063,
+        "z": 7
+      },
+      "dx": -11,
+      "dy": 16,
+      "dz": 1,
+      "manhattan": 27,
+      "euclid": 19.4164878389476
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33015,
+          "y": 32014,
+          "z": 8
+        },
+        "first_line": 57,
+        "again_line": 62
+      },
+      {
+        "pos": {
+          "x": 32999,
+          "y": 32096,
+          "z": 6
+        },
+        "first_line": 22,
+        "again_line": 78
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 19,
+        "again_line": 81
+      },
+      {
+        "pos": {
+          "x": 32998,
+          "y": 32073,
+          "z": 6
+        },
+        "first_line": 19,
+        "again_line": 86
+      },
+      {
+        "pos": {
+          "x": 33006,
+          "y": 32064,
+          "z": 6
+        },
+        "first_line": 88,
+        "again_line": 90
+      }
+    ],
+    "repeat_positions": 4
+  },
+  "labels": [
+    "start",
+    "equip_strong_weapon",
+    "deactivate_stop_target_low",
+    "go_hunt",
+    "door1",
+    "door2",
+    "equip_weak_weapon",
+    "activate_stop_target_low",
+    "hunt",
+    "leave",
+    "deactivate_stop_target_low",
+    "equip_strong_weapon",
+    "train",
+    "end"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell"
+  ]
+}

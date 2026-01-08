@@ -1,0 +1,184 @@
+{
+  "counts": {
+    "lines": 122,
+    "pos_points": 72,
+    "labels": 12,
+    "actions": 8,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 1099,
+    "total_euclid": 872.1985272738573,
+    "max_manhattan": 68,
+    "max_jump": {
+      "from": {
+        "line_index": 7,
+        "x": 32628,
+        "y": 32771,
+        "z": 7
+      },
+      "to": {
+        "line_index": 9,
+        "x": 32684,
+        "y": 32783,
+        "z": 7
+      },
+      "dx": 56,
+      "dy": 12,
+      "dz": 0,
+      "manhattan": 68,
+      "euclid": 57.271284253105414
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 7,
+          "x": 32628,
+          "y": 32771,
+          "z": 7
+        },
+        "to": {
+          "line_index": 9,
+          "x": 32684,
+          "y": 32783,
+          "z": 7
+        },
+        "dx": 56,
+        "dy": 12,
+        "dz": 0,
+        "manhattan": 68,
+        "euclid": 57.271284253105414
+      },
+      {
+        "from": {
+          "line_index": 113,
+          "x": 32679,
+          "y": 32777,
+          "z": 7
+        },
+        "to": {
+          "line_index": 116,
+          "x": 32629,
+          "y": 32760,
+          "z": 7
+        },
+        "dx": -50,
+        "dy": -17,
+        "dz": 0,
+        "manhattan": 67,
+        "euclid": 52.81098370604357
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32622,
+          "y": 32746,
+          "z": 7
+        },
+        "first_line": 3,
+        "again_line": 6
+      },
+      {
+        "pos": {
+          "x": 32867,
+          "y": 32825,
+          "z": 5
+        },
+        "first_line": 32,
+        "again_line": 33
+      },
+      {
+        "pos": {
+          "x": 32861,
+          "y": 32831,
+          "z": 3
+        },
+        "first_line": 54,
+        "again_line": 66
+      },
+      {
+        "pos": {
+          "x": 32862,
+          "y": 32833,
+          "z": 4
+        },
+        "first_line": 70,
+        "again_line": 73
+      },
+      {
+        "pos": {
+          "x": 32865,
+          "y": 32826,
+          "z": 4
+        },
+        "first_line": 74,
+        "again_line": 77
+      },
+      {
+        "pos": {
+          "x": 32869,
+          "y": 32833,
+          "z": 5
+        },
+        "first_line": 40,
+        "again_line": 80
+      },
+      {
+        "pos": {
+          "x": 32869,
+          "y": 32833,
+          "z": 5
+        },
+        "first_line": 40,
+        "again_line": 83
+      },
+      {
+        "pos": {
+          "x": 32866,
+          "y": 32835,
+          "z": 5
+        },
+        "first_line": 37,
+        "again_line": 85
+      },
+      {
+        "pos": {
+          "x": 32866,
+          "y": 32835,
+          "z": 5
+        },
+        "first_line": 37,
+        "again_line": 86
+      }
+    ],
+    "repeat_positions": 7
+  },
+  "labels": [
+    "start",
+    "withdraw_amulet",
+    "gohunt",
+    "hunt",
+    "wait_mana",
+    "wait_mana",
+    "wait_mana",
+    "wait_mana",
+    "leave",
+    "go_center",
+    "train",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "loot_monsters",
+    "summon",
+    "travel_center",
+    "travel_east",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

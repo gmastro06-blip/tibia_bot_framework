@@ -1,0 +1,10 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "eat_food",
+      "interval": 60
+    }
+  ],
+  "target_monsters": []
+}

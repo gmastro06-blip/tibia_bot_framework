@@ -1,0 +1,193 @@
+label start
+load scripts/general/refill_svargrond.in
+label go_hunt
+node (32310,31126,7)
+node (32331,31118,7)
+call conditional_jump_script_options("var_name":"task" , "label_jump":"check_task", "label_skip":"skip_task")
+label check_task
+call check_kill_sea_serpents("label_jump":"go_task", "label_skip":"skip_task")
+label go_task
+ladder (32341, 31112, 7)
+node (32342, 31107, 6)
+walk (32344, 31107, 6)
+action travel_venore
+walk (32955, 32021, 6)
+action travel_port_hope
+node (32541,32778,6)
+node (32556,32772,6)
+stand (32556,32766,6)
+stand (32556,32780,7)
+action travel_east
+stand (32694,32773,7)
+stand (32694,32772,7)
+stand (32693,32768,6)
+label complete_task
+call talk_npc("list_words":["tasks", "sea serpent", "yes"])
+label repeat_task
+call talk_npc("list_words":["promotion", "yes"])
+call talk_npc("list_words":["tasks", "sea serpent", "yes"])
+stand (32694,32772,6)
+node (32680,32777,7)
+action travel_west
+stand (32558,32769,7)
+ladder (32556,32766,7)
+node (32555,32788,6)
+node (32529,32784,6)
+action travel_venore
+walk (32955, 32021, 6)
+action travel_svargrond
+node (32341, 31109, 6)
+stand (32341, 31112, 6)
+node (32341, 31116, 7)
+label skip_task
+ladder (32341,31119,7)
+node (32353,31125,6)
+action travel_passage
+call conditional_jump_script_options_value("var_name":"respawn", "label_jump_map":{"north":"go_north", "south":"go_south", "south_down":"go_south_down"})
+label go_north
+stand (31938,31041,6)
+label hunt_north
+node (31938,31048,8)
+node (31928,31057,8)
+label down_1
+stand (31923,31056,8)
+call levitate("direction":"east", "hotkey":"-")
+node (31936,31056,9)
+stand (31924,31056,9)
+call levitate("direction":"west", "hotkey":"=")
+node (31915,31047,8)
+label down_2
+stand (31917,31038,8)
+call levitate("direction":"east", "hotkey":"-")
+stand (31918,31038,9)
+call levitate("direction":"east", "hotkey":"-")
+node (31924,31044,10)
+stand (31919,31038,10)
+call levitate("direction":"west", "hotkey":"=")
+stand (31918,31038,9)
+call levitate("direction":"west", "hotkey":"=")
+node (31905,31032,8)
+label down_3
+stand (31906,31034,8)
+call levitate("direction":"south", "hotkey":"-")
+stand (31906,31035,9)
+call levitate("direction":"south", "hotkey":"-")
+node (31903,31043,10)
+stand (31906,31036,10)
+call levitate("direction":"north", "hotkey":"=")
+stand (31906,31035,9)
+call levitate("direction":"north", "hotkey":"=")
+label down_5
+stand (31909,31019,8)
+call levitate("direction":"south", "hotkey":"-")
+stand (31909,31021,9)
+call levitate("direction":"south", "hotkey":"-")
+node (31897,31019,10)
+stand (31909,31022,10)
+call levitate("direction":"north", "hotkey":"=")
+stand (31909,31020,9)
+call levitate("direction":"north", "hotkey":"=")
+node (31910,31016,8)
+label down_6
+stand (31908,31010,8)
+call levitate("direction":"east", "hotkey":"-")
+stand (31909,31010,9)
+call levitate("direction":"east", "hotkey":"-")
+node (31921,31016,10)
+node (31916,31010,10)
+stand (31910,31010,10)
+call levitate("direction":"west", "hotkey":"=")
+stand (31909,31010,9)
+call levitate("direction":"west", "hotkey":"=")
+label down_7
+stand (31904,31009,8)
+call levitate("direction":"south", "hotkey":"-")
+node (31899,30995,9)
+stand (31904,31010,9)
+call levitate("direction":"north", "hotkey":"=")
+node (31923,31026,8)
+label down_8
+stand (31924,31029,8)
+call levitate("direction":"south", "hotkey":"-")
+node (31937,31021,9)
+stand (31924,31030,9)
+call levitate("direction":"north", "hotkey":"=")
+node (31937,31034,8)
+action check_north
+call check_hunt("success":"hunt_north", "fail":"leave_north")
+label leave_north
+stand (31938,31042,8)
+call jump_to_label("label":"leave")
+label go_south
+stand (31939,31050,6)
+label hunt_south
+node (31916,31192,9)
+node (31929,31203,9)
+node (31946,31203,9)
+node (31958,31216,9)
+node (31967,31229,9)
+node (31978,31236,9)
+node (31962,31241,9)
+node (31950,31249,9)
+node (31938,31272,9)
+node (31941,31288,9)
+node (31925,31304,9)
+node (31925,31315,9)
+node (31914,31293,9)
+node (31919,31276,9)
+node (31905,31254,9)
+node (31919,31237,9)
+node (31935,31221,9)
+node (31931,31204,9)
+node (31913,31189,9)
+call check_hunt("success":"hunt_south", "fail":"leave_south")
+label leave_south
+stand (31909,31187,9)
+call jump_to_label("label":"leave")
+label go_south_down
+stand (31939,31050,6)
+node (31926,31199,9)
+node (31936,31219,9)
+node (31940,31236,9)
+stand (31931,31252,9)
+label hunt_south_down
+node (31941,31244,10)
+node (31950,31231,10)
+node (31944,31216,10)
+node (31937,31199,10)
+node (31920,31207,10)
+node (31915,31220,10)
+node (31927,31233,10)
+node (31940,31244,10)
+node (31949,31259,10)
+node (31937,31276,10)
+node (31936,31285,10)
+node (31918,31270,10)
+node (31916,31252,10)
+node (31911,31234,10)
+node (31915,31219,10)
+node (31927,31234,10)
+node (31937,31245,10)
+call check_hunt("success":"hunt_south_down", "fail":"leave_south_down")
+label leave_south_down
+stand (31932,31252,10)
+stand (31931,31252,10)
+node (31938,31236,9)
+node (31935,31218,9)
+node (31930,31203,9)
+node (31917,31192,9)
+stand (31909,31187,9)
+label leave
+node (31948,31045,6)
+action travel_passage
+node (32313,31123,7)
+node (32288,31135,7)
+node (32263,31142,7)
+action check_time
+label train
+load scripts/general/dp_to_train_svargrond.in
+label anti_trap
+stand (32354, 31123, 7)
+stand (31949, 31044, 7)
+label start_trainer
+load scripts/general/train_to_dp_svargrond.in

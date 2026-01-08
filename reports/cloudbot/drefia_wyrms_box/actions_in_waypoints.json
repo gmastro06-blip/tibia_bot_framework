@@ -1,0 +1,62 @@
+[
+  {
+    "line": 36,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 38,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 153,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 185,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 191,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 199,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 202,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 205,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 208,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 211,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 214,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 223,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  }
+]

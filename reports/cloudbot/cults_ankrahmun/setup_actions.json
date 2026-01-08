@@ -1,0 +1,484 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40
+    },
+    {
+      "action": "anti_paralyze",
+      "use_in_battle": true,
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 60
+    },
+    {
+      "action": "equip_item",
+      "interval": 30,
+      "args": {
+        "hotkey": "f9",
+        "amount": 0,
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": {
+        "count": 2
+      }
+    },
+    {
+      "action": "scan_bodies",
+      "interval": 30000
+    },
+    {
+      "action": "swap_target_action",
+      "interval": 3,
+      "args": {
+        "count": 4,
+        "action_below": "distance",
+        "action_above": "stand",
+        "only_monsters": [
+          "Adept Of The Cult",
+          "Acolyte Of The Cult",
+          "Novice Of The Cult",
+          "Enlightened Of The Cult"
+        ]
+      }
+    },
+    {
+      "action": "use_hotkey_if_condition",
+      "interval": 1,
+      "args": {
+        "condition": "paralyzed",
+        "hotkey": "f4"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 30,
+      "args": {
+        "coords_barrier": [
+          [
+            33334,
+            32696,
+            9
+          ],
+          [
+            33334,
+            32697,
+            9
+          ],
+          [
+            33334,
+            32698,
+            9
+          ],
+          [
+            33334,
+            32699,
+            9
+          ],
+          [
+            33334,
+            32700,
+            9
+          ],
+          [
+            33334,
+            32701,
+            9
+          ],
+          [
+            33334,
+            32702,
+            9
+          ],
+          [
+            33334,
+            32703,
+            9
+          ]
+        ]
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "equip_item",
+      "interval": 20,
+      "args": {
+        "hotkey": "j",
+        "amount": 0
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 30,
+      "args": {
+        "coords_barrier": [
+          [
+            33334,
+            32696,
+            9
+          ],
+          [
+            33334,
+            32697,
+            9
+          ],
+          [
+            33334,
+            32698,
+            9
+          ],
+          [
+            33334,
+            32699,
+            9
+          ],
+          [
+            33334,
+            32700,
+            9
+          ],
+          [
+            33334,
+            32701,
+            9
+          ],
+          [
+            33334,
+            32702,
+            9
+          ],
+          [
+            33334,
+            32703,
+            9
+          ]
+        ]
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f10"
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "equip_item",
+      "interval": 20,
+      "args": {
+        "hotkey": "j",
+        "amount": 0
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f4"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 30,
+      "args": {
+        "coords_barrier": [
+          [
+            33334,
+            32696,
+            9
+          ],
+          [
+            33334,
+            32697,
+            9
+          ],
+          [
+            33334,
+            32698,
+            9
+          ],
+          [
+            33334,
+            32699,
+            9
+          ],
+          [
+            33334,
+            32700,
+            9
+          ],
+          [
+            33334,
+            32701,
+            9
+          ],
+          [
+            33334,
+            32702,
+            9
+          ],
+          [
+            33334,
+            32703,
+            9
+          ]
+        ]
+      }
+    },
+    {
+      "action": "use_hotkey",
+      "interval": 54,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f10"
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Lizard Templar",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lizard Snakecharmer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lizard Sentinel",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Enlightened Of The Cult",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Lizard Sentinel",
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 3,
+      "priority": 1,
+      "loot": false
+    },
+    {
+      "name": "Lizard Snakecharmer",
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 3,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Lizard Templar",
+      "action": "follow",
+      "priority": 1,
+      "loot": false
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "follow",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 3,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 3,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Enlightened Of The Cult",
+      "action": "distance",
+      "min_dist": 0,
+      "max_dist": 3,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Enlightened Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Lizard Snakecharmer",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 4,
+      "priority": 1,
+      "loot": true
+    },
+    {
+      "name": "Lizard Templar",
+      "action": "stand",
+      "min_dist": 2,
+      "max_dist": 4,
+      "loot": true
+    },
+    {
+      "name": "Enlightened Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Lizard Snakecharmer",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 4,
+      "loot": true
+    },
+    {
+      "name": "Adept Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Acolyte Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Novice Of The Cult",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 5,
+      "priority": 1,
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+[
+  {
+    "line": 5,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 158,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 159,
+    "action": "travel_carlin",
+    "raw": "action travel_carlin"
+  },
+  {
+    "line": 179,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 180,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 312,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 481,
+    "action": "travel_thais",
+    "raw": "action travel_thais"
+  },
+  {
+    "line": 579,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  }
+]

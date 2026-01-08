@@ -1,0 +1,21 @@
+{
+  "label_actions": [],
+  "persistent_actions": [],
+  "target_monsters": [
+    {
+      "name": "Cyclops",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Cyclops Drone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Cyclops Smith",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

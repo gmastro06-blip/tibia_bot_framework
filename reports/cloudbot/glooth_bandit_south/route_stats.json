@@ -1,0 +1,144 @@
+{
+  "counts": {
+    "lines": 100,
+    "pos_points": 69,
+    "labels": 16,
+    "actions": 14,
+    "unique_actions": 9
+  },
+  "distance": {
+    "total_manhattan": 1176,
+    "total_euclid": 940.9034478732547,
+    "max_manhattan": 130,
+    "max_jump": {
+      "from": {
+        "line_index": 13,
+        "x": 33651,
+        "y": 31941,
+        "z": 7
+      },
+      "to": {
+        "line_index": 14,
+        "x": 33549,
+        "y": 31969,
+        "z": 12
+      },
+      "dx": -102,
+      "dy": 28,
+      "dz": 5,
+      "manhattan": 130,
+      "euclid": 105.77334257741882
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 13,
+          "x": 33651,
+          "y": 31941,
+          "z": 7
+        },
+        "to": {
+          "line_index": 14,
+          "x": 33549,
+          "y": 31969,
+          "z": 12
+        },
+        "dx": -102,
+        "dy": 28,
+        "dz": 5,
+        "manhattan": 130,
+        "euclid": 105.77334257741882
+      },
+      {
+        "from": {
+          "line_index": 66,
+          "x": 33558,
+          "y": 31970,
+          "z": 12
+        },
+        "to": {
+          "line_index": 67,
+          "x": 33647,
+          "y": 31944,
+          "z": 7
+        },
+        "dx": 89,
+        "dy": -26,
+        "dz": -5,
+        "manhattan": 115,
+        "euclid": 92.72000862812729
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33515,
+          "y": 32018,
+          "z": 12
+        },
+        "first_line": 21,
+        "again_line": 56
+      },
+      {
+        "pos": {
+          "x": 33549,
+          "y": 31977,
+          "z": 12
+        },
+        "first_line": 16,
+        "again_line": 63
+      },
+      {
+        "pos": {
+          "x": 33551,
+          "y": 31973,
+          "z": 12
+        },
+        "first_line": 15,
+        "again_line": 64
+      },
+      {
+        "pos": {
+          "x": 33647,
+          "y": 31947,
+          "z": 7
+        },
+        "first_line": 11,
+        "again_line": 68
+      }
+    ],
+    "repeat_positions": 4
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "deactivate_lure",
+    "activate_lure",
+    "hunt",
+    "continue",
+    "skip_teleport",
+    "leave",
+    "deactivate_lure",
+    "sell_flint",
+    "train",
+    "sword",
+    "axe",
+    "club",
+    "distance",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_teleport",
+    "check_time",
+    "check_train",
+    "end",
+    "sell",
+    "summon",
+    "target_off",
+    "target_on"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "label_actions": [
+    {
+      "label": "withdraw_ring",
+      "action": "withdraw_item_from_depot_to_backpack",
+      "args": {
+        "item_name": "stealth ring",
+        "depot_num": 3,
+        "backpack_name": "Backpack",
+        "amount": 4,
+        "stack": false
+      }
+    },
+    {
+      "label": "pegleg",
+      "action": "talk_npc",
+      "args": {
+        "list_words": [
+          "peg leg",
+          "yes"
+        ]
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 90
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "equip_item",
+      "interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f8",
+        "selected_monsters": [
+          "Thornback Tortoise",
+          "Blood Crab"
+        ],
+        "dist": 3,
+        "amount": 4
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 100,
+      "args": {
+        "hotkey": "f11"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Thornback Tortoise",
+      "action": "distance",
+      "priority": 3,
+      "loot": true
+    },
+    {
+      "name": "Blood Crab",
+      "action": "distance",
+      "priority": 2,
+      "loot": true
+    },
+    {
+      "name": "Tortoise",
+      "action": "distance",
+      "loot": true
+    },
+    {
+      "name": "Toad",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

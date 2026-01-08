@@ -1,0 +1,222 @@
+{
+  "counts": {
+    "lines": 144,
+    "pos_points": 88,
+    "labels": 19,
+    "actions": 17,
+    "unique_actions": 11
+  },
+  "distance": {
+    "total_manhattan": 2104,
+    "total_euclid": 1611.446321993286,
+    "max_manhattan": 531,
+    "max_jump": {
+      "from": {
+        "line_index": 139,
+        "x": 33176,
+        "y": 31764,
+        "z": 6
+      },
+      "to": {
+        "line_index": 141,
+        "x": 33486,
+        "y": 31985,
+        "z": 7
+      },
+      "dx": 310,
+      "dy": 221,
+      "dz": 1,
+      "manhattan": 531,
+      "euclid": 380.71117661555456
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 113,
+          "x": 33637,
+          "y": 31891,
+          "z": 6
+        },
+        "to": {
+          "line_index": 114,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "dx": -158,
+        "dy": 95,
+        "dz": 1,
+        "manhattan": 253,
+        "euclid": 184.36105879496353
+      },
+      {
+        "from": {
+          "line_index": 114,
+          "x": 33479,
+          "y": 31986,
+          "z": 7
+        },
+        "to": {
+          "line_index": 116,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": -303,
+        "dy": -215,
+        "dz": -1,
+        "manhattan": 518,
+        "euclid": 371.52927206345396
+      },
+      {
+        "from": {
+          "line_index": 139,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 141,
+          "x": 33486,
+          "y": 31985,
+          "z": 7
+        },
+        "dx": 310,
+        "dy": 221,
+        "dz": 1,
+        "manhattan": 531,
+        "euclid": 380.71117661555456
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33652,
+          "y": 31972,
+          "z": 9
+        },
+        "first_line": 17,
+        "again_line": 20
+      },
+      {
+        "pos": {
+          "x": 33651,
+          "y": 31949,
+          "z": 9
+        },
+        "first_line": 23,
+        "again_line": 26
+      },
+      {
+        "pos": {
+          "x": 33654,
+          "y": 31913,
+          "z": 9
+        },
+        "first_line": 36,
+        "again_line": 39
+      },
+      {
+        "pos": {
+          "x": 33640,
+          "y": 31903,
+          "z": 9
+        },
+        "first_line": 44,
+        "again_line": 47
+      },
+      {
+        "pos": {
+          "x": 33622,
+          "y": 31896,
+          "z": 9
+        },
+        "first_line": 51,
+        "again_line": 54
+      },
+      {
+        "pos": {
+          "x": 33618,
+          "y": 31908,
+          "z": 9
+        },
+        "first_line": 60,
+        "again_line": 63
+      },
+      {
+        "pos": {
+          "x": 33609,
+          "y": 31928,
+          "z": 9
+        },
+        "first_line": 68,
+        "again_line": 71
+      },
+      {
+        "pos": {
+          "x": 33636,
+          "y": 31927,
+          "z": 9
+        },
+        "first_line": 74,
+        "again_line": 78
+      },
+      {
+        "pos": {
+          "x": 33640,
+          "y": 31960,
+          "z": 9
+        },
+        "first_line": 89,
+        "again_line": 92
+      },
+      {
+        "pos": {
+          "x": 33624,
+          "y": 31976,
+          "z": 7
+        },
+        "first_line": 100,
+        "again_line": 101
+      }
+    ],
+    "repeat_positions": 10
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "hunt",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "refill_mana",
+    "leave",
+    "refill_mana",
+    "sell_flint",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "sell",
+    "summon",
+    "travel_edron",
+    "travel_oramond",
+    "wait",
+    "walk_keys",
+    "walk_mouse"
+  ]
+}

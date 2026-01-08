@@ -1,0 +1,339 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 1,
+      "args": {
+        "hotkey": "e",
+        "monster_count_below": 3
+      }
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 3
+      }
+    },
+    {
+      "action": "haste",
+      "interval": 35
+    },
+    {
+      "action": "eat_food",
+      "interval": 40
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33188,
+          31924,
+          8
+        ],
+        "width": 5,
+        "block_side": "north"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33193,
+          31931,
+          8
+        ],
+        "width": 5,
+        "block_side": "north"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33186,
+          31940,
+          8
+        ],
+        "width": 5,
+        "block_side": "north"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33184,
+          31949,
+          8
+        ],
+        "width": 5,
+        "block_side": "north"
+      }
+    },
+    {
+      "comment": "force circle main room",
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33186,
+          31966,
+          8
+        ],
+        "width": 4,
+        "height": 6
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33192,
+          31968,
+          8
+        ],
+        "height": 15,
+        "block_side": "west"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33181,
+          31970,
+          8
+        ],
+        "height": 8
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33187,
+          31956,
+          8
+        ],
+        "width": 8,
+        "block_side": "south"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33167,
+          31962,
+          8
+        ],
+        "height": 4
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33149,
+          31960,
+          8
+        ],
+        "height": 4
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33153,
+          31966,
+          8
+        ],
+        "width": 15,
+        "block_side": "north"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33178,
+          31969,
+          8
+        ],
+        "width": 5,
+        "block_side": "north"
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33126,
+          31955,
+          8
+        ],
+        "height": 5
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33114,
+          31945,
+          8
+        ],
+        "height": 2,
+        "width": 5
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33118,
+          31961,
+          8
+        ],
+        "height": 2,
+        "width": 5
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33126,
+          31975,
+          8
+        ],
+        "height": 2,
+        "width": 5
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33120,
+          31987,
+          8
+        ],
+        "height": 5,
+        "width": 2
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33139,
+          31991,
+          8
+        ],
+        "height": 10,
+        "width": 2
+      }
+    },
+    {
+      "action": "target_wall",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "barrier_coord": [
+          33172,
+          31980,
+          8
+        ],
+        "height": 5,
+        "width": 2
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Werebadger",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Werefox",
+      "action": "distance",
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Wereboar",
+      "action": "distance",
+      "priority": 2,
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Werebear",
+      "action": "distance",
+      "priority": 2,
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    },
+    {
+      "name": "Werewolf",
+      "action": "distance",
+      "priority": 3,
+      "min_dist": 2,
+      "max_dist": 3,
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "line": 9,
+    "action": "travel_krailos",
+    "raw": "action travel_krailos"
+  },
+  {
+    "line": 45,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 66,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 71,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 76,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 79,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 82,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 85,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 88,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 91,
+    "action": "end",
+    "raw": "action end"
+  }
+]

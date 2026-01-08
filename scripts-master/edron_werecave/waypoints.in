@@ -1,0 +1,92 @@
+label start
+load scripts/general/refill_edron.in
+label gohunt
+node (33222,31839,7)
+node (33203,31844,7)
+door (33191,31845,7)
+stand (33185,31840,7)
+door (33177,31842,8)
+ladder (33173,31843,8)
+node (33165,31847,9)
+node (33159,31854,9)
+rope (33159,31854,9)
+node (33151,31849,8)
+rope (33151,31849,8)
+node (33157,31860,7)
+node (33169,31876,7)
+node (33179,31891,7)
+stand (33186,31916,7)
+action walk_keys
+label hunt
+node (33186,31916,8)
+label go_deeper
+node (33186, 31922, 8)
+node (33192, 31926, 8)
+node (33194, 31933, 8)
+node (33188, 31941, 8)
+node (33186, 31951, 8)
+label hunt2
+node (33188, 31957, 8)
+node (33186, 31963, 8)
+node (33176, 31965, 8)
+node (33167, 31961, 8)
+node (33161, 31961, 8)
+node (33152, 31959, 8)
+node (33143, 31959, 8)
+node (33132, 31955, 8)
+node (33124, 31951, 8)
+node (33117, 31955, 8)
+node (33120, 31964, 8)
+node (33124, 31970, 8)
+node (33127, 31977, 8)
+node (33133, 31985, 8)
+node (33143, 31990, 8)
+node (33151, 31993, 8)
+node (33157, 31990, 8)
+node (33163, 31987, 8)
+node (33168, 31980, 8)
+node (33176, 31975, 8)
+node (33180, 31970, 8)
+node (33178, 31966, 8)
+node (33188, 31954, 8)
+label check2
+label leave2
+node (33185, 31946, 8)
+node (33192, 31936, 8)
+node (33191, 31924, 8)
+action check
+label leave
+node (33189,31919,8)
+rope (33186,31916,8)
+action walk_mouse
+node (33180,31894,7)
+node (33175,31883,7)
+node (33159,31862,7)
+node (33149,31850,7)
+shovel (33151,31849,7)
+stand (33159,31854,8)
+node (33173,31843,9)
+rope (33173,31843,9)
+door (33177,31842,8)
+ladder (33185,31840,8)
+door (33191,31845,7)
+node (33193,31819,7)
+node (33202,31796,7)
+action check_time
+label train
+action check_train
+label magic
+ladder (33181, 31793, 7)
+action end
+label distance
+ladder (33178, 31793, 7)
+action end
+label club
+ladder (33176, 31790, 7)
+action end
+label sword
+ladder (33178, 31787, 7)
+action end
+label axe
+ladder (33181, 31787, 7)
+action end

@@ -1,0 +1,206 @@
+{
+  "counts": {
+    "lines": 55,
+    "pos_points": 24,
+    "labels": 9,
+    "actions": 22,
+    "unique_actions": 15
+  },
+  "distance": {
+    "total_manhattan": 1112,
+    "total_euclid": 943.1422337333053,
+    "max_manhattan": 485,
+    "max_jump": {
+      "from": {
+        "line_index": 5,
+        "x": 32353,
+        "y": 31124,
+        "z": 6
+      },
+      "to": {
+        "line_index": 9,
+        "x": 31949,
+        "y": 31043,
+        "z": 6
+      },
+      "dx": -404,
+      "dy": -81,
+      "dz": 0,
+      "manhattan": 485,
+      "euclid": 412.0400465974151
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 5,
+          "x": 32353,
+          "y": 31124,
+          "z": 6
+        },
+        "to": {
+          "line_index": 9,
+          "x": 31949,
+          "y": 31043,
+          "z": 6
+        },
+        "dx": -404,
+        "dy": -81,
+        "dz": 0,
+        "manhattan": 485,
+        "euclid": 412.0400465974151
+      },
+      {
+        "from": {
+          "line_index": 49,
+          "x": 31949,
+          "y": 31044,
+          "z": 7
+        },
+        "to": {
+          "line_index": 51,
+          "x": 32341,
+          "y": 31112,
+          "z": 7
+        },
+        "dx": 392,
+        "dy": 68,
+        "dz": 0,
+        "manhattan": 460,
+        "euclid": 397.85424466756666
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 31946,
+          "y": 31046,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 27
+      },
+      {
+        "pos": {
+          "x": 31949,
+          "y": 31044,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 28
+      },
+      {
+        "pos": {
+          "x": 31950,
+          "y": 31044,
+          "z": 6
+        },
+        "first_line": 22,
+        "again_line": 29
+      },
+      {
+        "pos": {
+          "x": 31946,
+          "y": 31046,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 34
+      },
+      {
+        "pos": {
+          "x": 31949,
+          "y": 31044,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 35
+      },
+      {
+        "pos": {
+          "x": 31950,
+          "y": 31044,
+          "z": 6
+        },
+        "first_line": 22,
+        "again_line": 36
+      },
+      {
+        "pos": {
+          "x": 31946,
+          "y": 31046,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 41
+      },
+      {
+        "pos": {
+          "x": 31949,
+          "y": 31044,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 42
+      },
+      {
+        "pos": {
+          "x": 31950,
+          "y": 31044,
+          "z": 6
+        },
+        "first_line": 22,
+        "again_line": 43
+      },
+      {
+        "pos": {
+          "x": 31946,
+          "y": 31046,
+          "z": 7
+        },
+        "first_line": 20,
+        "again_line": 48
+      },
+      {
+        "pos": {
+          "x": 31949,
+          "y": 31044,
+          "z": 7
+        },
+        "first_line": 21,
+        "again_line": 49
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start_svargrond_depot",
+    "debug",
+    "repeat_bait",
+    "telescope",
+    "straight",
+    "starboard",
+    "larboard",
+    "speed",
+    "finish"
+  ],
+  "actions": [
+    "buy_bait",
+    "debug",
+    "end",
+    "give_fish_captain",
+    "go_down",
+    "go_up",
+    "larboard",
+    "passage",
+    "repeat",
+    "set_bait",
+    "speed",
+    "starboard",
+    "straight",
+    "telescope",
+    "travel_venore"
+  ]
+}

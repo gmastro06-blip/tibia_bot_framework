@@ -1,0 +1,246 @@
+{
+  "counts": {
+    "lines": 137,
+    "pos_points": 106,
+    "labels": 12,
+    "actions": 18,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 3698,
+    "total_euclid": 2767.573104721726,
+    "max_manhattan": 730,
+    "max_jump": {
+      "from": {
+        "line_index": 94,
+        "x": 33025,
+        "y": 31553,
+        "z": 14
+      },
+      "to": {
+        "line_index": 96,
+        "x": 33311,
+        "y": 31997,
+        "z": 15
+      },
+      "dx": 286,
+      "dy": 444,
+      "dz": 1,
+      "manhattan": 730,
+      "euclid": 528.140132919285
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 9,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 11,
+          "x": 33293,
+          "y": 31960,
+          "z": 6
+        },
+        "dx": 117,
+        "dy": 196,
+        "dz": 0,
+        "manhattan": 313,
+        "euclid": 228.26519664635694
+      },
+      {
+        "from": {
+          "line_index": 23,
+          "x": 33311,
+          "y": 31988,
+          "z": 15
+        },
+        "to": {
+          "line_index": 25,
+          "x": 33060,
+          "y": 31530,
+          "z": 14
+        },
+        "dx": -251,
+        "dy": -458,
+        "dz": -1,
+        "manhattan": 709,
+        "euclid": 522.2690877316022
+      },
+      {
+        "from": {
+          "line_index": 28,
+          "x": 33061,
+          "y": 31527,
+          "z": 14
+        },
+        "to": {
+          "line_index": 30,
+          "x": 33004,
+          "y": 31557,
+          "z": 4
+        },
+        "dx": -57,
+        "dy": 30,
+        "dz": -10,
+        "manhattan": 87,
+        "euclid": 64.41273166075166
+      },
+      {
+        "from": {
+          "line_index": 87,
+          "x": 32993,
+          "y": 31547,
+          "z": 4
+        },
+        "to": {
+          "line_index": 89,
+          "x": 33060,
+          "y": 31528,
+          "z": 14
+        },
+        "dx": 67,
+        "dy": -19,
+        "dz": 10,
+        "manhattan": 86,
+        "euclid": 69.6419413859206
+      },
+      {
+        "from": {
+          "line_index": 94,
+          "x": 33025,
+          "y": 31553,
+          "z": 14
+        },
+        "to": {
+          "line_index": 96,
+          "x": 33311,
+          "y": 31997,
+          "z": 15
+        },
+        "dx": 286,
+        "dy": 444,
+        "dz": 1,
+        "manhattan": 730,
+        "euclid": 528.140132919285
+      },
+      {
+        "from": {
+          "line_index": 108,
+          "x": 33289,
+          "y": 31956,
+          "z": 6
+        },
+        "to": {
+          "line_index": 110,
+          "x": 33175,
+          "y": 31775,
+          "z": 6
+        },
+        "dx": -114,
+        "dy": -181,
+        "dz": 0,
+        "manhattan": 295,
+        "euclid": 213.9088590965788
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "first_line": 8,
+        "again_line": 9
+      },
+      {
+        "pos": {
+          "x": 33311,
+          "y": 31988,
+          "z": 15
+        },
+        "first_line": 22,
+        "again_line": 23
+      },
+      {
+        "pos": {
+          "x": 33060,
+          "y": 31530,
+          "z": 14
+        },
+        "first_line": 25,
+        "again_line": 26
+      },
+      {
+        "pos": {
+          "x": 33060,
+          "y": 31529,
+          "z": 14
+        },
+        "first_line": 27,
+        "again_line": 90
+      },
+      {
+        "pos": {
+          "x": 33025,
+          "y": 31553,
+          "z": 14
+        },
+        "first_line": 93,
+        "again_line": 94
+      },
+      {
+        "pos": {
+          "x": 33289,
+          "y": 31956,
+          "z": 6
+        },
+        "first_line": 107,
+        "again_line": 108
+      },
+      {
+        "pos": {
+          "x": 33199,
+          "y": 31792,
+          "z": 7
+        },
+        "first_line": 6,
+        "again_line": 135
+      }
+    ],
+    "repeat_positions": 7
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "continue",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start trainer"
+  ],
+  "actions": [
+    "check",
+    "check_down",
+    "check_time",
+    "check_train",
+    "end",
+    "levitate_east_down",
+    "levitate_south_down",
+    "levitate_west_up",
+    "travel_cormaya",
+    "travel_edron",
+    "travel_farmine",
+    "use_elevator"
+  ]
+}

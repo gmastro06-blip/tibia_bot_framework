@@ -1,0 +1,132 @@
+[
+  {
+    "line": 10,
+    "action": "buy_rake",
+    "raw": "action buy_rake"
+  },
+  {
+    "line": 21,
+    "action": "travel_abdendriel",
+    "raw": "action travel_abdendriel"
+  },
+  {
+    "line": 33,
+    "action": "buy_poem",
+    "raw": "action buy_poem"
+  },
+  {
+    "line": 44,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 46,
+    "action": "travel_liberty_bay",
+    "raw": "action travel_liberty_bay"
+  },
+  {
+    "line": 68,
+    "action": "ring",
+    "raw": "action ring"
+  },
+  {
+    "line": 89,
+    "action": "levitate_north_up",
+    "raw": "action levitate_north_up"
+  },
+  {
+    "line": 91,
+    "action": "levitate_north_up",
+    "raw": "action levitate_north_up"
+  },
+  {
+    "line": 99,
+    "action": "levitate_north_up",
+    "raw": "action levitate_north_up"
+  },
+  {
+    "line": 102,
+    "action": "use_rake_north",
+    "raw": "action use_rake_north"
+  },
+  {
+    "line": 105,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 113,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 115,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 134,
+    "action": "give_ring",
+    "raw": "action give_ring"
+  },
+  {
+    "line": 151,
+    "action": "errand",
+    "raw": "action errand"
+  },
+  {
+    "line": 169,
+    "action": "peg_leg",
+    "raw": "action peg_leg"
+  },
+  {
+    "line": 184,
+    "action": "travel_meriana",
+    "raw": "action travel_meriana"
+  },
+  {
+    "line": 191,
+    "action": "raymond",
+    "raw": "action raymond"
+  },
+  {
+    "line": 198,
+    "action": "mermaid",
+    "raw": "action mermaid"
+  },
+  {
+    "line": 213,
+    "action": "djinn",
+    "raw": "action djinn"
+  },
+  {
+    "line": 228,
+    "action": "mermaid2",
+    "raw": "action mermaid2"
+  },
+  {
+    "line": 243,
+    "action": "djinn2",
+    "raw": "action djinn2"
+  },
+  {
+    "line": 258,
+    "action": "mermaid2",
+    "raw": "action mermaid2"
+  },
+  {
+    "line": 269,
+    "action": "travel_liberty_bay",
+    "raw": "action travel_liberty_bay"
+  },
+  {
+    "line": 287,
+    "action": "finish",
+    "raw": "action finish"
+  },
+  {
+    "line": 299,
+    "action": "end",
+    "raw": "action end"
+  }
+]

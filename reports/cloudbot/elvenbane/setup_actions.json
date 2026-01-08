@@ -1,0 +1,76 @@
+{
+  "label_actions": [],
+  "persistent_actions": [],
+  "target_monsters": [
+    {
+      "name": "Minotaur",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Archer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Minotaur Guard",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Hunter",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Warrior",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Spearman",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Berserker",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Wasp",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Troll",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dwarf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Poacher",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40
+    },
+    {
+      "action": "eat_food",
+      "interval": 60
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Killer Caiman",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

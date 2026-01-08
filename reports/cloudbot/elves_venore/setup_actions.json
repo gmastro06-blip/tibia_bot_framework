@@ -1,0 +1,102 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 30
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Elf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Arcanist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Firestarter",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bog Frog",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Thornfire",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Toad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dragon",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Elf Arcanist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Firestarter",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bog Frog",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Thornfire",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Toad",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Dragon",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

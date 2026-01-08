@@ -1,0 +1,27 @@
+[
+  {
+    "line": 4,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 18,
+    "action": "target_on",
+    "raw": "action target_on"
+  },
+  {
+    "line": 67,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 69,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 84,
+    "action": "check_time",
+    "raw": "action check_time"
+  }
+]

@@ -1,0 +1,138 @@
+{
+  "counts": {
+    "lines": 186,
+    "pos_points": 148,
+    "labels": 22,
+    "actions": 9,
+    "unique_actions": 6
+  },
+  "distance": {
+    "total_manhattan": 1711,
+    "total_euclid": 1360.4247070866595,
+    "max_manhattan": 62,
+    "max_jump": {
+      "from": {
+        "line_index": 10,
+        "x": 32619,
+        "y": 31899,
+        "z": 9
+      },
+      "to": {
+        "line_index": 12,
+        "x": 32631,
+        "y": 31949,
+        "z": 7
+      },
+      "dx": 12,
+      "dy": 50,
+      "dz": -2,
+      "manhattan": 62,
+      "euclid": 51.419840528729765
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 10,
+          "x": 32619,
+          "y": 31899,
+          "z": 9
+        },
+        "to": {
+          "line_index": 12,
+          "x": 32631,
+          "y": 31949,
+          "z": 7
+        },
+        "dx": 12,
+        "dy": 50,
+        "dz": -2,
+        "manhattan": 62,
+        "euclid": 51.419840528729765
+      },
+      {
+        "from": {
+          "line_index": 18,
+          "x": 32701,
+          "y": 31910,
+          "z": 7
+        },
+        "to": {
+          "line_index": 19,
+          "x": 32738,
+          "y": 31891,
+          "z": 7
+        },
+        "dx": 37,
+        "dy": -19,
+        "dz": 0,
+        "manhattan": 56,
+        "euclid": 41.593268686170845
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32825,
+          "y": 31767,
+          "z": 7
+        },
+        "first_line": 32,
+        "again_line": 155
+      },
+      {
+        "pos": {
+          "x": 32808,
+          "y": 31791,
+          "z": 7
+        },
+        "first_line": 28,
+        "again_line": 158
+      },
+      {
+        "pos": {
+          "x": 32646,
+          "y": 31946,
+          "z": 8
+        },
+        "first_line": 172,
+        "again_line": 173
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start",
+    "withdraw_ring",
+    "check_stealth",
+    "go_hunt",
+    "after_portal",
+    "hunt",
+    "hunt_north",
+    "skip_hunt_north",
+    "continue_1",
+    "hunt_northeast",
+    "skip_hunt_northeast",
+    "hunt_south",
+    "continue_south_1",
+    "continue_south_2",
+    "skip_south_2",
+    "skip_south_1",
+    "skip_hunt_south",
+    "check_low_stealth",
+    "leave",
+    "wagon",
+    "wagon",
+    "exit"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "deposit",
+    "end",
+    "exit",
+    "wait"
+  ]
+}

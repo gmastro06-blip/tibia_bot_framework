@@ -1,0 +1,143 @@
+{
+  "counts": {
+    "lines": 140,
+    "pos_points": 80,
+    "labels": 29,
+    "actions": 9,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 1230,
+    "total_euclid": 1025.97834667998,
+    "max_manhattan": 56,
+    "max_jump": {
+      "from": {
+        "line_index": 89,
+        "x": 33501,
+        "y": 31901,
+        "z": 9
+      },
+      "to": {
+        "line_index": 92,
+        "x": 33464,
+        "y": 31920,
+        "z": 10
+      },
+      "dx": -37,
+      "dy": 19,
+      "dz": 1,
+      "manhattan": 56,
+      "euclid": 41.593268686170845
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 23,
+          "x": 33466,
+          "y": 31889,
+          "z": 9
+        },
+        "to": {
+          "line_index": 25,
+          "x": 33510,
+          "y": 31883,
+          "z": 9
+        },
+        "dx": 44,
+        "dy": -6,
+        "dz": 0,
+        "manhattan": 50,
+        "euclid": 44.40720662234904
+      },
+      {
+        "from": {
+          "line_index": 89,
+          "x": 33501,
+          "y": 31901,
+          "z": 9
+        },
+        "to": {
+          "line_index": 92,
+          "x": 33464,
+          "y": 31920,
+          "z": 10
+        },
+        "dx": -37,
+        "dy": 19,
+        "dz": 1,
+        "manhattan": 56,
+        "euclid": 41.593268686170845
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33510,
+          "y": 31883,
+          "z": 9
+        },
+        "first_line": 25,
+        "again_line": 27
+      },
+      {
+        "pos": {
+          "x": 33491,
+          "y": 31889,
+          "z": 9
+        },
+        "first_line": 30,
+        "again_line": 96
+      },
+      {
+        "pos": {
+          "x": 33631,
+          "y": 31897,
+          "z": 6
+        },
+        "first_line": 110,
+        "again_line": 111
+      }
+    ],
+    "repeat_positions": 3
+  },
+  "labels": [
+    "start",
+    "gohunt",
+    "levitate_down",
+    "hunt",
+    "skip_task1",
+    "skip_task2",
+    "skip_task3",
+    "skip_task4",
+    "skip_task5",
+    "skip_task6",
+    "skip_task7",
+    "skip_task8",
+    "skip_task9",
+    "skip_task10",
+    "skip_task11",
+    "skip_task12",
+    "skip_task13",
+    "anti_trap",
+    "leave",
+    "levitate_up",
+    "train",
+    "train",
+    "train_oramond",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end"
+  ]
+}

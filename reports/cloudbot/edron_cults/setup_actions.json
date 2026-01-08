@@ -1,0 +1,269 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": [
+        7
+      ]
+    },
+    {
+      "action": "equip_item",
+      "interval": 300,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "f9",
+        "amount": 0,
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 3,
+      "args": {
+        "coords_barrier": [
+          [
+            33159,
+            31902,
+            8
+          ],
+          [
+            33159,
+            31903,
+            8
+          ],
+          [
+            33171,
+            31897,
+            8
+          ],
+          [
+            33163,
+            31913,
+            8
+          ],
+          [
+            33163,
+            31914,
+            8
+          ],
+          [
+            33150,
+            31915,
+            8
+          ],
+          [
+            33150,
+            31916,
+            8
+          ],
+          [
+            33150,
+            31917,
+            8
+          ],
+          [
+            33150,
+            31918,
+            8
+          ],
+          [
+            33154,
+            31932,
+            8
+          ],
+          [
+            33154,
+            31933,
+            8
+          ]
+        ]
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 30,
+      "args": {
+        "coords_barrier": [
+          [
+            33159,
+            31902,
+            8
+          ],
+          [
+            33159,
+            31903,
+            8
+          ],
+          [
+            33171,
+            31897,
+            8
+          ],
+          [
+            33163,
+            31913,
+            8
+          ],
+          [
+            33163,
+            31914,
+            8
+          ],
+          [
+            33150,
+            31915,
+            8
+          ],
+          [
+            33150,
+            31916,
+            8
+          ],
+          [
+            33150,
+            31917,
+            8
+          ],
+          [
+            33150,
+            31918,
+            8
+          ],
+          [
+            33154,
+            31932,
+            8
+          ],
+          [
+            33154,
+            31933,
+            8
+          ]
+        ]
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_diamond_ammo",
+      "interval": 5,
+      "use_in_battle": true
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "args": {
+        "count": 5
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Orc Cult Fanatic",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Inquisitor",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cultist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Minion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orclops Doomhauler",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Priest",
+      "priority": 3,
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Fanatic",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Inquisitor",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cultist",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Minion",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orclops Doomhauler",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Orc Cult Priest",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

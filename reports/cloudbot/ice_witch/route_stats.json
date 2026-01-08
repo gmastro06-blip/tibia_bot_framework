@@ -1,0 +1,172 @@
+{
+  "counts": {
+    "lines": 197,
+    "pos_points": 155,
+    "labels": 15,
+    "actions": 26,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 6023,
+    "total_euclid": 4512.646175578721,
+    "max_manhattan": 1526,
+    "max_jump": {
+      "from": {
+        "line_index": 161,
+        "x": 32342,
+        "y": 31107,
+        "z": 6
+      },
+      "to": {
+        "line_index": 163,
+        "x": 32954,
+        "y": 32021,
+        "z": 6
+      },
+      "dx": 612,
+      "dy": 914,
+      "dz": 0,
+      "manhattan": 1526,
+      "euclid": 1099.9727269346272
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 80,
+          "x": 31952,
+          "y": 31351,
+          "z": 8
+        },
+        "to": {
+          "line_index": 83,
+          "x": 31923,
+          "y": 31377,
+          "z": 8
+        },
+        "dx": -29,
+        "dy": 26,
+        "dz": 0,
+        "manhattan": 55,
+        "euclid": 38.948684188300895
+      },
+      {
+        "from": {
+          "line_index": 156,
+          "x": 32271,
+          "y": 31160,
+          "z": 7
+        },
+        "to": {
+          "line_index": 157,
+          "x": 32294,
+          "y": 31133,
+          "z": 7
+        },
+        "dx": 23,
+        "dy": -27,
+        "dz": 0,
+        "manhattan": 50,
+        "euclid": 35.4682957019364
+      },
+      {
+        "from": {
+          "line_index": 161,
+          "x": 32342,
+          "y": 31107,
+          "z": 6
+        },
+        "to": {
+          "line_index": 163,
+          "x": 32954,
+          "y": 32021,
+          "z": 6
+        },
+        "dx": 612,
+        "dy": 914,
+        "dz": 0,
+        "manhattan": 1526,
+        "euclid": 1099.9727269346272
+      },
+      {
+        "from": {
+          "line_index": 163,
+          "x": 32954,
+          "y": 32021,
+          "z": 6
+        },
+        "to": {
+          "line_index": 166,
+          "x": 33176,
+          "y": 31771,
+          "z": 6
+        },
+        "dx": 222,
+        "dy": -250,
+        "dz": 0,
+        "manhattan": 472,
+        "euclid": 334.3411431457397
+      },
+      {
+        "from": {
+          "line_index": 190,
+          "x": 33176,
+          "y": 31764,
+          "z": 6
+        },
+        "to": {
+          "line_index": 193,
+          "x": 32341,
+          "y": 31111,
+          "z": 6
+        },
+        "dx": -835,
+        "dy": -653,
+        "dz": 0,
+        "manhattan": 1488,
+        "euclid": 1060.0160376145259
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32041,
+          "y": 31257,
+          "z": 7
+        },
+        "first_line": 42,
+        "again_line": 118
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "go_hunt",
+    "hunt",
+    "check_down",
+    "stay",
+    "go_down",
+    "leave",
+    "train",
+    "go_train_edron",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_train"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "check_train",
+    "end",
+    "loot_monsters",
+    "travel_edron",
+    "travel_svargrond",
+    "travel_venore"
+  ]
+}

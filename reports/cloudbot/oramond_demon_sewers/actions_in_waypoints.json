@@ -1,0 +1,82 @@
+[
+  {
+    "line": 4,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 28,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 31,
+    "action": "target_on",
+    "raw": "action target_on"
+  },
+  {
+    "line": 36,
+    "action": "summon",
+    "raw": "action summon"
+  },
+  {
+    "line": 49,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 54,
+    "action": "target_off",
+    "raw": "action target_off"
+  },
+  {
+    "line": 58,
+    "action": "levitate_north_up",
+    "raw": "action levitate_north_up"
+  },
+  {
+    "line": 77,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 81,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 86,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 89,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 92,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 95,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 98,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 101,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 106,
+    "action": "travel_oramond",
+    "raw": "action travel_oramond"
+  }
+]

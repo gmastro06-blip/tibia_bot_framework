@@ -1,0 +1,43 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "use_in_battle": true,
+      "args": {
+        "count": 6
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Putrid Mummy",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Giant Spider",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

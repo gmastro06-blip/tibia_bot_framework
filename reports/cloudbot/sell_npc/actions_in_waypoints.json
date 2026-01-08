@@ -1,0 +1,582 @@
+[
+  {
+    "line": 4,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 8,
+    "action": "stash_all",
+    "raw": "action stash_all"
+  },
+  {
+    "line": 9,
+    "action": "deposit",
+    "raw": "action deposit"
+  },
+  {
+    "line": 10,
+    "action": "refill",
+    "raw": "action refill"
+  },
+  {
+    "line": 14,
+    "action": "check_ammo",
+    "raw": "action check_ammo"
+  },
+  {
+    "line": 19,
+    "action": "buy_ammo",
+    "raw": "action buy_ammo"
+  },
+  {
+    "line": 31,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 32,
+    "action": "buy_potions",
+    "raw": "action buy_potions"
+  },
+  {
+    "line": 36,
+    "action": "check_supplies",
+    "raw": "action check_supplies"
+  },
+  {
+    "line": 45,
+    "action": "check_sell_edron",
+    "raw": "action check_sell_edron"
+  },
+  {
+    "line": 46,
+    "action": "edron",
+    "raw": "action edron"
+  },
+  {
+    "line": 50,
+    "action": "check_sell_edron_tower",
+    "raw": "action check_sell_edron_tower"
+  },
+  {
+    "line": 51,
+    "action": "check_sell_alexander",
+    "raw": "action check_sell_alexander"
+  },
+  {
+    "line": 57,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 63,
+    "action": "check_sell_lailene",
+    "raw": "action check_sell_lailene"
+  },
+  {
+    "line": 67,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 74,
+    "action": "check_sell_telas",
+    "raw": "action check_sell_telas"
+  },
+  {
+    "line": 82,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 97,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 100,
+    "action": "repeat_edron",
+    "raw": "action repeat_edron"
+  },
+  {
+    "line": 107,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 108,
+    "action": "check_sell_flint",
+    "raw": "action check_sell_flint"
+  },
+  {
+    "line": 110,
+    "action": "travel_oramond",
+    "raw": "action travel_oramond"
+  },
+  {
+    "line": 119,
+    "action": "flint",
+    "raw": "action flint"
+  },
+  {
+    "line": 122,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 125,
+    "action": "repeat_flint",
+    "raw": "action repeat_flint"
+  },
+  {
+    "line": 130,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 135,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 137,
+    "action": "check_sell_djinn",
+    "raw": "action check_sell_djinn"
+  },
+  {
+    "line": 139,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 143,
+    "action": "djinn",
+    "raw": "action djinn"
+  },
+  {
+    "line": 154,
+    "action": "check_djinn_type",
+    "raw": "action check_djinn_type"
+  },
+  {
+    "line": 166,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 171,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 203,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 207,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 236,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 239,
+    "action": "repeat_djinn",
+    "raw": "action repeat_djinn"
+  },
+  {
+    "line": 244,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 246,
+    "action": "check_rashid",
+    "raw": "action check_rashid"
+  },
+  {
+    "line": 249,
+    "action": "travel_svargrond",
+    "raw": "action travel_svargrond"
+  },
+  {
+    "line": 257,
+    "action": "rashid_svargrond",
+    "raw": "action rashid_svargrond"
+  },
+  {
+    "line": 261,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 266,
+    "action": "repeat_rashid_svargrond",
+    "raw": "action repeat_rashid_svargrond"
+  },
+  {
+    "line": 270,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 276,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 277,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 280,
+    "action": "travel_carlin",
+    "raw": "action travel_carlin"
+  },
+  {
+    "line": 289,
+    "action": "rashid_carlin",
+    "raw": "action rashid_carlin"
+  },
+  {
+    "line": 291,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 293,
+    "action": "repeat_rashid_carlin",
+    "raw": "action repeat_rashid_carlin"
+  },
+  {
+    "line": 297,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 304,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 305,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 308,
+    "action": "travel_liberty_bay",
+    "raw": "action travel_liberty_bay"
+  },
+  {
+    "line": 316,
+    "action": "rashid_liberty_bay",
+    "raw": "action rashid_liberty_bay"
+  },
+  {
+    "line": 320,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 323,
+    "action": "repeat_rashid_liberty_bay",
+    "raw": "action repeat_rashid_liberty_bay"
+  },
+  {
+    "line": 326,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 334,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 335,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 337,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 346,
+    "action": "rashid_port_hope",
+    "raw": "action rashid_port_hope"
+  },
+  {
+    "line": 350,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 353,
+    "action": "repeat_rashid_port_hope",
+    "raw": "action repeat_rashid_port_hope"
+  },
+  {
+    "line": 357,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 365,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 366,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 368,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 372,
+    "action": "rashid_ankrahmun",
+    "raw": "action rashid_ankrahmun"
+  },
+  {
+    "line": 378,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 383,
+    "action": "repeat_rashid_ankrahmun",
+    "raw": "action repeat_rashid_ankrahmun"
+  },
+  {
+    "line": 388,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 394,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 395,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 397,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 407,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  },
+  {
+    "line": 415,
+    "action": "rashid_darashia",
+    "raw": "action rashid_darashia"
+  },
+  {
+    "line": 420,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 423,
+    "action": "repeat_rashid_darashia",
+    "raw": "action repeat_rashid_darashia"
+  },
+  {
+    "line": 430,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 438,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 439,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 441,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 452,
+    "action": "rashid_edron",
+    "raw": "action rashid_edron"
+  },
+  {
+    "line": 458,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 462,
+    "action": "repeat_rashid_edron",
+    "raw": "action repeat_rashid_edron"
+  },
+  {
+    "line": 466,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 475,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 476,
+    "action": "end_rashid",
+    "raw": "action end_rashid"
+  },
+  {
+    "line": 478,
+    "action": "check_sell_esrik",
+    "raw": "action check_sell_esrik"
+  },
+  {
+    "line": 479,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 489,
+    "action": "travel_farmine",
+    "raw": "action travel_farmine"
+  },
+  {
+    "line": 491,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 495,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 505,
+    "action": "farmine",
+    "raw": "action farmine"
+  },
+  {
+    "line": 513,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 521,
+    "action": "repeat_farmine",
+    "raw": "action repeat_farmine"
+  },
+  {
+    "line": 530,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 534,
+    "action": "use_elevator",
+    "raw": "action use_elevator"
+  },
+  {
+    "line": 536,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 546,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 548,
+    "action": "check_sell_tamoril",
+    "raw": "action check_sell_tamoril"
+  },
+  {
+    "line": 549,
+    "action": "travel_yalahar",
+    "raw": "action travel_yalahar"
+  },
+  {
+    "line": 556,
+    "action": "yalahar",
+    "raw": "action yalahar"
+  },
+  {
+    "line": 584,
+    "action": "sell",
+    "raw": "action sell"
+  },
+  {
+    "line": 605,
+    "action": "bank",
+    "raw": "action bank"
+  },
+  {
+    "line": 610,
+    "action": "repeat_yalahar",
+    "raw": "action repeat_yalahar"
+  },
+  {
+    "line": 618,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 620,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 627,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 630,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 633,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 636,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 639,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 642,
+    "action": "end",
+    "raw": "action end"
+  }
+]

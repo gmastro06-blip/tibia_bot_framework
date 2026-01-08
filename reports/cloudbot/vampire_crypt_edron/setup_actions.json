@@ -1,0 +1,278 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 67
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 1,
+      "args": [
+        3
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "drop_vials",
+      "interval": 60
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": {
+        "hotkey": "v"
+      }
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": [
+        "r"
+      ]
+    },
+    {
+      "action": "eat_food",
+      "interval": 40,
+      "args": {
+        "hotkey": "f11"
+      }
+    },
+    {
+      "action": "refill_ammo",
+      "interval": 5,
+      "use_in_battle": true,
+      "args": {
+        "ammo_name": "crystalline arrow"
+      }
+    },
+    {
+      "action": "recover_full_mana",
+      "interval": 3,
+      "args": [
+        "e"
+      ]
+    },
+    {
+      "action": "dynamic_barrier_rectangles",
+      "interval": 0.4,
+      "use_in_battle": true,
+      "args": {
+        "rectangles": [
+          [
+            [
+              33030,
+              31590,
+              11
+            ],
+            [
+              33046,
+              31601,
+              11
+            ]
+          ],
+          [
+            [
+              33028,
+              31609,
+              11
+            ],
+            [
+              33048,
+              31623,
+              11
+            ]
+          ],
+          [
+            [
+              33028,
+              31628,
+              11
+            ],
+            [
+              33047,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              33006,
+              31626,
+              11
+            ],
+            [
+              33023,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32987,
+              31628,
+              11
+            ],
+            [
+              33002,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32967,
+              31628,
+              11
+            ],
+            [
+              32984,
+              31641,
+              11
+            ]
+          ],
+          [
+            [
+              32967,
+              31601,
+              11
+            ],
+            [
+              32983,
+              31622,
+              11
+            ]
+          ],
+          [
+            [
+              32991,
+              31601,
+              11
+            ],
+            [
+              33009,
+              31621,
+              11
+            ]
+          ],
+          [
+            [
+              32995,
+              31609,
+              12
+            ],
+            [
+              33010,
+              31623,
+              12
+            ]
+          ],
+          [
+            [
+              32980,
+              31609,
+              12
+            ],
+            [
+              32994,
+              31624,
+              12
+            ]
+          ],
+          [
+            [
+              32997,
+              31621,
+              12
+            ],
+            [
+              33011,
+              31635,
+              12
+            ]
+          ]
+        ],
+        "monster_count": 1
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Necromancer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Bonebeast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Demon Skeleton",
+      "action": "follow",
+      "loot": false
+    },
+    {
+      "name": "Vampire",
+      "action": "follow",
+      "#use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Viscount",
+      "action": "follow",
+      "#use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Bride",
+      "action": "follow",
+      "#use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Necromancer",
+      "action": "stand",
+      "loot": true
+    },
+    {
+      "name": "Vampire",
+      "action": "distance",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Viscount",
+      "action": "distance",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    },
+    {
+      "name": "Vampire Bride",
+      "action": "distance",
+      "use_item": "blessed wooden stake",
+      "loot": true
+    }
+  ]
+}

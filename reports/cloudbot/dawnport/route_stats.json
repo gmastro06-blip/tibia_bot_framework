@@ -1,0 +1,111 @@
+{
+  "counts": {
+    "lines": 117,
+    "pos_points": 82,
+    "labels": 10,
+    "actions": 8,
+    "unique_actions": 3
+  },
+  "distance": {
+    "total_manhattan": 769,
+    "total_euclid": 633.3605888993754,
+    "max_manhattan": 22,
+    "max_jump": {
+      "from": {
+        "line_index": 40,
+        "x": 32066,
+        "y": 31890,
+        "z": 10
+      },
+      "to": {
+        "line_index": 41,
+        "x": 32052,
+        "y": 31882,
+        "z": 10
+      },
+      "dx": -14,
+      "dy": -8,
+      "dz": 0,
+      "manhattan": 22,
+      "euclid": 16.1245154965971
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32044,
+          "y": 31878,
+          "z": 10
+        },
+        "first_line": 42,
+        "again_line": 56
+      },
+      {
+        "pos": {
+          "x": 32073,
+          "y": 31895,
+          "z": 4
+        },
+        "first_line": 4,
+        "again_line": 70
+      },
+      {
+        "pos": {
+          "x": 32073,
+          "y": 31895,
+          "z": 5
+        },
+        "first_line": 67,
+        "again_line": 81
+      },
+      {
+        "pos": {
+          "x": 32073,
+          "y": 31895,
+          "z": 4
+        },
+        "first_line": 4,
+        "again_line": 86
+      },
+      {
+        "pos": {
+          "x": 32064,
+          "y": 31878,
+          "z": 5
+        },
+        "first_line": 20,
+        "again_line": 95
+      },
+      {
+        "pos": {
+          "x": 32064,
+          "y": 31876,
+          "z": 5
+        },
+        "first_line": 26,
+        "again_line": 96
+      }
+    ],
+    "repeat_positions": 5
+  },
+  "labels": [
+    "start",
+    "take_free_stuff",
+    "go_hunt_below_level_6",
+    "hunt_below_level_6",
+    "leave_hunt_below_level_6",
+    "buy_new_equipment",
+    "go_hunt_above_level_6",
+    "hunt_above_level_6",
+    "leave_above_level_6",
+    "above_level_8"
+  ],
+  "actions": [
+    "bank",
+    "end",
+    "wait"
+  ]
+}

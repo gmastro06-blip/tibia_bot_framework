@@ -1,0 +1,97 @@
+[
+  {
+    "line": 90,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 92,
+    "action": "travel_ankrahmun",
+    "raw": "action travel_ankrahmun"
+  },
+  {
+    "line": 107,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 117,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 119,
+    "action": "travel_abdendriel",
+    "raw": "action travel_abdendriel"
+  },
+  {
+    "line": 219,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 272,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 311,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 313,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 410,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 417,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 419,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 455,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 534,
+    "action": "travel_darashia",
+    "raw": "action travel_darashia"
+  },
+  {
+    "line": 577,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 618,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 620,
+    "action": "travel_abdendriel",
+    "raw": "action travel_abdendriel"
+  },
+  {
+    "line": 643,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 645,
+    "action": "end",
+    "raw": "action end"
+  }
+]

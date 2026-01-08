@@ -1,0 +1,77 @@
+{
+  "label_actions": [
+    {
+      "label": "go_edron",
+      "action": "talk_npc",
+      "args": {
+        "list_words": [
+          "edron",
+          "yes"
+        ]
+      }
+    },
+    {
+      "label": "travel_lb",
+      "action": "talk_npc",
+      "args": {
+        "list_words": [
+          "liberty bay",
+          "yes"
+        ]
+      }
+    }
+  ],
+  "persistent_actions": [
+    {
+      "action": "use_hotkey",
+      "min_interval": 30,
+      "max_interval": 60,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "j"
+      }
+    },
+    {
+      "action": "drop_vials",
+      "min_interval": 100,
+      "max_interval": 140
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "k"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "f11"
+      ]
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Braindeath",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Elder Bonelord",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": true
+    },
+    {
+      "name": "Bonelord",
+      "action": "distance",
+      "min_dist": 3,
+      "max_dist": 6,
+      "loot": true
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+[
+  {
+    "line": 30,
+    "action": "travel_carlin",
+    "raw": "action travel_carlin"
+  },
+  {
+    "line": 76,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 94,
+    "action": "travel_carlin",
+    "raw": "action travel_carlin"
+  },
+  {
+    "line": 95,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 96,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 101,
+    "action": "travel_passage",
+    "raw": "action travel_passage"
+  },
+  {
+    "line": 119,
+    "action": "travel_kazordoon",
+    "raw": "action travel_kazordoon"
+  },
+  {
+    "line": 121,
+    "action": "buy_ticket",
+    "raw": "action buy_ticket"
+  },
+  {
+    "line": 129,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 148,
+    "action": "walk_keys",
+    "raw": "action walk_keys"
+  },
+  {
+    "line": 159,
+    "action": "walk_mouse",
+    "raw": "action walk_mouse"
+  },
+  {
+    "line": 166,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 171,
+    "action": "travel_cormaya",
+    "raw": "action travel_cormaya"
+  },
+  {
+    "line": 187,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 190,
+    "action": "travel_port_hope",
+    "raw": "action travel_port_hope"
+  },
+  {
+    "line": 195,
+    "action": "travel_east",
+    "raw": "action travel_east"
+  },
+  {
+    "line": 196,
+    "action": "travel_banuta",
+    "raw": "action travel_banuta"
+  },
+  {
+    "line": 205,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 228,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 229,
+    "action": "travel_svargrond",
+    "raw": "action travel_svargrond"
+  },
+  {
+    "line": 283,
+    "action": "levitate_north_up",
+    "raw": "action levitate_north_up"
+  },
+  {
+    "line": 285,
+    "action": "wait",
+    "raw": "action wait"
+  },
+  {
+    "line": 289,
+    "action": "levitate_south_down",
+    "raw": "action levitate_south_down"
+  },
+  {
+    "line": 337,
+    "action": "travel_venore",
+    "raw": "action travel_venore"
+  },
+  {
+    "line": 338,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 345,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 348,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 351,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 354,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 357,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 360,
+    "action": "end",
+    "raw": "action end"
+  }
+]

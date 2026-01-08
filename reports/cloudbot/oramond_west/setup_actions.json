@@ -1,0 +1,136 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 200
+    },
+    {
+      "action": "haste",
+      "interval": 40,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "anti_paralyze",
+      "interval": 1,
+      "args": [
+        "v"
+      ]
+    },
+    {
+      "action": "lure_monsters",
+      "interval": 0.5,
+      "use_in_battle": true,
+      "args": {
+        "count": 9,
+        "min_count": 3,
+        "drop_above_hp_perc": 80
+      }
+    },
+    {
+      "action": "equip_item",
+      "interval": 3,
+      "use_in_battle": true,
+      "args": {
+        "hotkey": "6",
+        "amount": 0,
+        "slot": "ring"
+      }
+    },
+    {
+      "action": "eat_food",
+      "interval": 30,
+      "args": [
+        "f11"
+      ]
+    },
+    {
+      "action": "blacklist_coords",
+      "interval": 1,
+      "use_in_battle": true,
+      "args": {
+        "coords_barrier": [
+          [
+            33624,
+            31976,
+            7
+          ],
+          [
+            33633,
+            31976,
+            7
+          ],
+          [
+            33631,
+            31972,
+            7
+          ],
+          [
+            33640,
+            31963,
+            7
+          ],
+          [
+            33647,
+            31947,
+            7
+          ],
+          [
+            33640,
+            31945,
+            7
+          ]
+        ]
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Rot Elemental",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Devourer",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Blood Beast",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Glooth Anemone",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Constrictor Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Hydromancer Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Pincher Scout",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Quara Predator Scout",
+      "action": "follow",
+      "loot": true
+    }
+  ]
+}

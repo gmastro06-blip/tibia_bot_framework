@@ -1,0 +1,96 @@
+{
+  "counts": {
+    "lines": 71,
+    "pos_points": 57,
+    "labels": 6,
+    "actions": 8,
+    "unique_actions": 8
+  },
+  "distance": {
+    "total_manhattan": 1180,
+    "total_euclid": 971.456731791646,
+    "max_manhattan": 59,
+    "max_jump": {
+      "from": {
+        "line_index": 64,
+        "x": 32940,
+        "y": 32126,
+        "z": 6
+      },
+      "to": {
+        "line_index": 65,
+        "x": 32981,
+        "y": 32108,
+        "z": 6
+      },
+      "dx": 41,
+      "dy": -18,
+      "dz": 0,
+      "manhattan": 59,
+      "euclid": 44.77722635447622
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 64,
+          "x": 32940,
+          "y": 32126,
+          "z": 6
+        },
+        "to": {
+          "line_index": 65,
+          "x": 32981,
+          "y": 32108,
+          "z": 6
+        },
+        "dx": 41,
+        "dy": -18,
+        "dz": 0,
+        "manhattan": 59,
+        "euclid": 44.77722635447622
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32914,
+          "y": 32141,
+          "z": 9
+        },
+        "first_line": 28,
+        "again_line": 56
+      },
+      {
+        "pos": {
+          "x": 32914,
+          "y": 32141,
+          "z": 9
+        },
+        "first_line": 28,
+        "again_line": 59
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "refill",
+    "go_hunt",
+    "hunt",
+    "leave",
+    "logout"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "end",
+    "sell"
+  ]
+}

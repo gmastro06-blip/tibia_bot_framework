@@ -1,0 +1,52 @@
+[
+  {
+    "line": 9,
+    "action": "travel_thais",
+    "raw": "action travel_thais"
+  },
+  {
+    "line": 50,
+    "action": "check",
+    "raw": "action check"
+  },
+  {
+    "line": 72,
+    "action": "travel_edron",
+    "raw": "action travel_edron"
+  },
+  {
+    "line": 77,
+    "action": "check_time",
+    "raw": "action check_time"
+  },
+  {
+    "line": 82,
+    "action": "check_train",
+    "raw": "action check_train"
+  },
+  {
+    "line": 85,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 88,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 91,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 94,
+    "action": "end",
+    "raw": "action end"
+  },
+  {
+    "line": 97,
+    "action": "end",
+    "raw": "action end"
+  }
+]

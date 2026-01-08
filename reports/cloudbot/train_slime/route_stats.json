@@ -1,0 +1,93 @@
+{
+  "counts": {
+    "lines": 77,
+    "pos_points": 45,
+    "labels": 19,
+    "actions": 12,
+    "unique_actions": 12
+  },
+  "distance": {
+    "total_manhattan": 682,
+    "total_euclid": 567.9478013002438,
+    "max_manhattan": 41,
+    "max_jump": {
+      "from": {
+        "line_index": 68,
+        "x": 32897,
+        "y": 32033,
+        "z": 6
+      },
+      "to": {
+        "line_index": 69,
+        "x": 32919,
+        "y": 32052,
+        "z": 6
+      },
+      "dx": 22,
+      "dy": 19,
+      "dz": 0,
+      "manhattan": 41,
+      "euclid": 29.068883707497267
+    },
+    "jump_threshold": 50,
+    "odd_jumps": []
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 32799,
+          "y": 31987,
+          "z": 7
+        },
+        "first_line": 42,
+        "again_line": 47
+      },
+      {
+        "pos": {
+          "x": 32799,
+          "y": 31987,
+          "z": 7
+        },
+        "first_line": 42,
+        "again_line": 50
+      }
+    ],
+    "repeat_positions": 1
+  },
+  "labels": [
+    "start",
+    "equip_strong_weapon",
+    "deactivate_stop_target_low",
+    "withdraw_brown_mushroom",
+    "check_brown_mushroom",
+    "go_hunt",
+    "hunt2",
+    "wait_new_slime",
+    "skip_wait",
+    "equip_weak_weapon",
+    "activate_stop_target_low",
+    "hunt",
+    "check_slime_exists",
+    "slime_ok",
+    "check_low_brown_mushroom",
+    "leave",
+    "deactivate_stop_target_low",
+    "equip_strong_weapon",
+    "exit"
+  ],
+  "actions": [
+    "bank",
+    "buy_potions",
+    "check",
+    "check2",
+    "check_supplies",
+    "check_time",
+    "deposit",
+    "exit",
+    "leave2",
+    "sell",
+    "target_off",
+    "target_on"
+  ]
+}

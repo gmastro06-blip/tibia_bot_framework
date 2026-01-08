@@ -1,0 +1,234 @@
+{
+  "counts": {
+    "lines": 150,
+    "pos_points": 74,
+    "labels": 17,
+    "actions": 4,
+    "unique_actions": 4
+  },
+  "distance": {
+    "total_manhattan": 4650,
+    "total_euclid": 3813.068758187716,
+    "max_manhattan": 1011,
+    "max_jump": {
+      "from": {
+        "line_index": 23,
+        "x": 33021,
+        "y": 32696,
+        "z": 3
+      },
+      "to": {
+        "line_index": 27,
+        "x": 33544,
+        "y": 32208,
+        "z": 7
+      },
+      "dx": 523,
+      "dy": -488,
+      "dz": 4,
+      "manhattan": 1011,
+      "euclid": 715.3132181079837
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 11,
+          "x": 32625,
+          "y": 32740,
+          "z": 4
+        },
+        "to": {
+          "line_index": 18,
+          "x": 32973,
+          "y": 32227,
+          "z": 7
+        },
+        "dx": 348,
+        "dy": -513,
+        "dz": 3,
+        "manhattan": 861,
+        "euclid": 619.8975721843085
+      },
+      {
+        "from": {
+          "line_index": 18,
+          "x": 32973,
+          "y": 32227,
+          "z": 7
+        },
+        "to": {
+          "line_index": 23,
+          "x": 33021,
+          "y": 32696,
+          "z": 3
+        },
+        "dx": 48,
+        "dy": 469,
+        "dz": -4,
+        "manhattan": 517,
+        "euclid": 471.4498912928075
+      },
+      {
+        "from": {
+          "line_index": 23,
+          "x": 33021,
+          "y": 32696,
+          "z": 3
+        },
+        "to": {
+          "line_index": 27,
+          "x": 33544,
+          "y": 32208,
+          "z": 7
+        },
+        "dx": 523,
+        "dy": -488,
+        "dz": 4,
+        "manhattan": 1011,
+        "euclid": 715.3132181079837
+      },
+      {
+        "from": {
+          "line_index": 132,
+          "x": 33540,
+          "y": 32208,
+          "z": 7
+        },
+        "to": {
+          "line_index": 135,
+          "x": 32972,
+          "y": 32227,
+          "z": 7
+        },
+        "dx": -568,
+        "dy": 19,
+        "dz": 0,
+        "manhattan": 587,
+        "euclid": 568.317692844416
+      },
+      {
+        "from": {
+          "line_index": 136,
+          "x": 32971,
+          "y": 32228,
+          "z": 7
+        },
+        "to": {
+          "line_index": 139,
+          "x": 33022,
+          "y": 32698,
+          "z": 3
+        },
+        "dx": 51,
+        "dy": 470,
+        "dz": -4,
+        "manhattan": 521,
+        "euclid": 472.75892376559113
+      },
+      {
+        "from": {
+          "line_index": 139,
+          "x": 33022,
+          "y": 32698,
+          "z": 3
+        },
+        "to": {
+          "line_index": 142,
+          "x": 32628,
+          "y": 32746,
+          "z": 4
+        },
+        "dx": -394,
+        "dy": 48,
+        "dz": 1,
+        "manhattan": 442,
+        "euclid": 396.9130887234635
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [
+      {
+        "pos": {
+          "x": 33572,
+          "y": 32161,
+          "z": 9
+        },
+        "first_line": 92,
+        "again_line": 93
+      },
+      {
+        "pos": {
+          "x": 33589,
+          "y": 32180,
+          "z": 9
+        },
+        "first_line": 99,
+        "again_line": 103
+      },
+      {
+        "pos": {
+          "x": 33601,
+          "y": 32176,
+          "z": 8
+        },
+        "first_line": 43,
+        "again_line": 114
+      },
+      {
+        "pos": {
+          "x": 33560,
+          "y": 32195,
+          "z": 8
+        },
+        "first_line": 34,
+        "again_line": 123
+      },
+      {
+        "pos": {
+          "x": 33551,
+          "y": 32208,
+          "z": 8
+        },
+        "first_line": 126,
+        "again_line": 127
+      },
+      {
+        "pos": {
+          "x": 33544,
+          "y": 32208,
+          "z": 7
+        },
+        "first_line": 27,
+        "again_line": 131
+      }
+    ],
+    "repeat_positions": 6
+  },
+  "labels": [
+    "start",
+    "has_gems",
+    "go_feyrist",
+    "exit_no_gems",
+    "use_gems",
+    "earth_portal_1",
+    "use_gem_north",
+    "earth_portal_2",
+    "use_gem_north",
+    "after_portal",
+    "hunt",
+    "leave",
+    "earth_portal_1",
+    "earth_portal_2",
+    "after_portal2",
+    "train",
+    "start_trainer"
+  ],
+  "actions": [
+    "check",
+    "check_time",
+    "end",
+    "wait"
+  ]
+}

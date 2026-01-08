@@ -1,0 +1,38 @@
+{
+  "label_actions": [],
+  "persistent_actions": [
+    {
+      "action": "drop_vials",
+      "interval": 300
+    },
+    {
+      "action": "eat_food",
+      "interval": 60,
+      "args": {
+        "hotkey": "f3"
+      }
+    }
+  ],
+  "target_monsters": [
+    {
+      "name": "Mutated Human",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mutated Rat",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Mercury Blob",
+      "action": "follow",
+      "loot": true
+    },
+    {
+      "name": "Slime",
+      "action": "follow",
+      "loot": false
+    }
+  ]
+}

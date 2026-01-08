@@ -1,0 +1,151 @@
+{
+  "counts": {
+    "lines": 120,
+    "pos_points": 85,
+    "labels": 17,
+    "actions": 18,
+    "unique_actions": 14
+  },
+  "distance": {
+    "total_manhattan": 2900,
+    "total_euclid": 2474.008121170369,
+    "max_manhattan": 738,
+    "max_jump": {
+      "from": {
+        "line_index": 82,
+        "x": 33271,
+        "y": 32441,
+        "z": 6
+      },
+      "to": {
+        "line_index": 84,
+        "x": 33189,
+        "y": 31785,
+        "z": 3
+      },
+      "dx": -82,
+      "dy": -656,
+      "dz": -3,
+      "manhattan": 738,
+      "euclid": 661.1051353604811
+    },
+    "jump_threshold": 50,
+    "odd_jumps": [
+      {
+        "from": {
+          "line_index": 34,
+          "x": 33260,
+          "y": 32342,
+          "z": 7
+        },
+        "to": {
+          "line_index": 35,
+          "x": 33277,
+          "y": 32309,
+          "z": 7
+        },
+        "dx": 17,
+        "dy": -33,
+        "dz": 0,
+        "manhattan": 50,
+        "euclid": 37.12142238654117
+      },
+      {
+        "from": {
+          "line_index": 73,
+          "x": 33240,
+          "y": 32383,
+          "z": 7
+        },
+        "to": {
+          "line_index": 74,
+          "x": 33215,
+          "y": 32419,
+          "z": 7
+        },
+        "dx": -25,
+        "dy": 36,
+        "dz": 0,
+        "manhattan": 61,
+        "euclid": 43.829214001622255
+      },
+      {
+        "from": {
+          "line_index": 82,
+          "x": 33271,
+          "y": 32441,
+          "z": 6
+        },
+        "to": {
+          "line_index": 84,
+          "x": 33189,
+          "y": 31785,
+          "z": 3
+        },
+        "dx": -82,
+        "dy": -656,
+        "dz": -3,
+        "manhattan": 738,
+        "euclid": 661.1051353604811
+      },
+      {
+        "from": {
+          "line_index": 114,
+          "x": 33194,
+          "y": 31782,
+          "z": 3
+        },
+        "to": {
+          "line_index": 116,
+          "x": 33265,
+          "y": 32441,
+          "z": 6
+        },
+        "dx": 71,
+        "dy": 659,
+        "dz": 3,
+        "manhattan": 730,
+        "euclid": 662.8136993152751
+      }
+    ]
+  },
+  "loops": {
+    "repeats": [],
+    "repeat_positions": 0
+  },
+  "labels": [
+    "start",
+    "go_bank",
+    "withdraw_ring",
+    "skip_ammo",
+    "gohunt",
+    "hunt",
+    "check_go_down",
+    "hunt_down",
+    "skip_down",
+    "leave",
+    "train",
+    "magic",
+    "distance",
+    "club",
+    "sword",
+    "axe",
+    "start_trainer"
+  ],
+  "actions": [
+    "bank",
+    "buy_ammo",
+    "buy_potions",
+    "check",
+    "check_ammo",
+    "check_supplies",
+    "check_time",
+    "check_train",
+    "deposit",
+    "end",
+    "refill",
+    "sell",
+    "travel_darashia",
+    "travel_edron"
+  ]
+}
