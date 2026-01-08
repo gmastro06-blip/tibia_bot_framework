@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import cv2
+from typing import Dict
 
 class DebugOverlay:
     def draw(self, frame: cv2.Mat, rois: Dict, target: str):

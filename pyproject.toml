@@ -3,6 +3,7 @@ name = "tibia-bot-framework"
 version = "0.1.0"
 description = "Framework para bot de Tibia-like"
 authors = ["TuNombre <tuemail@example.com>"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
@@ -31,11 +32,14 @@ pywin32 = "^311"
 onnxruntime-gpu = "^1.23.2"
 ultralytics = "^8.3.249"
 pytest = "^9.0.2"
+obsws-python = "^1.8.0"
+roboflow = "^1.2.11"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
 flake8 = "*"
 opencv-stubs = "^0.1.1"
+mypy = "*"
 
 [[tool.poetry.source]]
 name = "pytorch"

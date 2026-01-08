@@ -1,26 +1,36 @@
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Sequence, Union
 import cv2
 import win32gui
 import win32ui
 import win32con
 import numpy as np
 import time
+import os
 from mss import mss
 
 class DXGICapture:
-    def __init__(self, title_partial: str = "Tibia"):
-        self.title_partial = title_partial
+    def __init__(self, title_partial: Union[str, Sequence[str]] = "Tibia"):
+        # Acepta un string o una lista de strings para matchear títulos de ventanas.
+        if isinstance(title_partial, str):
+            self.title_partials = [title_partial]
+        else:
+            self.title_partials = [p for p in title_partial if p]
         self.hwnd = self.find_window()
         self.fps = 0.0
         self.latency_ms = 0.0
         self.dropped = 0
+        self._verbose = os.getenv("CAPTURE_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
+        self._last_hwnd_state: Optional[bool] = None
 
     def find_window(self) -> int:
         def enum_handler(hwnd, ctx):
             if win32gui.IsWindowVisible(hwnd):
                 title = win32gui.GetWindowText(hwnd)
-                if self.title_partial in title:
-                    ctx.append(hwnd)
+                title_l = title.lower()
+                for partial in self.title_partials:
+                    if partial.lower() in title_l:
+                        ctx.append(hwnd)
+                        break
         hwnds: list[int] = []
         win32gui.EnumWindows(enum_handler, hwnds)
         return hwnds[0] if hwnds else 0
@@ -34,14 +44,16 @@ class DXGICapture:
 
                 # Primero, intentar el monitor donde está la ventana de Tibia (si se encontró)
                 tibia_monitor = self.find_window_monitor()
-                if tibia_monitor is not None and tibia_monitor < len(sct.monitors):
+                if tibia_monitor is not None and tibia_monitor < len(sct.monitors) and tibia_monitor != 0:
                     monitor_indices.append(tibia_monitor)
-                    print(f"Priorizando monitor {tibia_monitor} donde está Tibia")
+                    print(f"Priorizando monitor {tibia_monitor} donde está la ventana")
 
-                # Luego los otros monitores individuales
-                for i in range(len(sct.monitors)):
+                # Luego priorizar monitores individuales (1..n) antes del monitor 0 combinado
+                for i in range(1, len(sct.monitors)):
                     if i not in monitor_indices:
                         monitor_indices.append(i)
+                if 0 < len(sct.monitors) and 0 not in monitor_indices:
+                    monitor_indices.append(0)
 
                 # Intentar capturar en cada monitor en orden de prioridad
                 for i in monitor_indices:
@@ -176,28 +188,40 @@ class DXGICapture:
         return best_monitor
 
     def capture(self) -> Optional[np.ndarray]:
+        # Reintentar buscar ventana si todavía no se encontró (p.ej. abres el proyector luego)
         if not self.hwnd:
-            print(f"No se encontró ventana con título '{self.title_partial}', usando captura de pantalla completa")
+            self.hwnd = self.find_window()
+
+        if not self.hwnd:
+            if self._verbose or self._last_hwnd_state is not False:
+                print(f"No se encontró ventana con título '{' | '.join(self.title_partials)}', usando captura de pantalla completa")
+            self._last_hwnd_state = False
             frame = self.capture_fullscreen()
         else:
-            print(f"Ventana encontrada (HWND: {self.hwnd:08X}), intentando captura directa...")
+            if self._verbose or self._last_hwnd_state is not True:
+                print(f"Ventana encontrada (HWND: {self.hwnd:08X}), intentando captura directa...")
+            self._last_hwnd_state = True
             frame = self.capture_window()
             if frame is None:
-                print(f"BitBlt failed, intentando captura del monitor específico de la ventana")
+                if self._verbose:
+                    print(f"BitBlt failed, intentando captura del monitor específico de la ventana")
                 # Intentar capturar el monitor donde está la ventana
                 tibia_monitor = self.find_window_monitor()
                 if tibia_monitor is not None:
-                    print(f"Detectado que la ventana está en monitor {tibia_monitor}, capturando ese monitor...")
+                    if self._verbose:
+                        print(f"Detectado que la ventana está en monitor {tibia_monitor}, capturando ese monitor...")
                     frame = self.capture_specific_monitor(tibia_monitor)
                 if frame is None:
-                    print(f"Captura del monitor específico falló, usando captura de pantalla completa")
+                    if self._verbose:
+                        print(f"Captura del monitor específico falló, usando captura de pantalla completa")
                     frame = self.capture_fullscreen()
 
         # Validar que la captura es útil
         if frame is not None and self.validate_capture(frame):
             return frame
         else:
-            print("Warning: Captura no válida, retornando None")
+            if self._verbose:
+                print("Warning: Captura no válida, retornando None")
             return None
 
     def capture_window(self) -> Optional[np.ndarray]:

@@ -1,0 +1,13 @@
+{
+  "include": ["src", "scripts"],
+  "exclude": [
+    ".venv",
+    "**/__pycache__",
+    "logs",
+    "debug_images",
+    "runs",
+    "datasets/temp_*"
+  ],
+  "extraPaths": ["src"],
+  "reportMissingImports": false
+}

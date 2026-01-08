@@ -1,31 +1,21 @@
-import sys
 import os
+import sys
 
-# Configurar path para imports absolutos desde el directorio del proyecto
+# Configurar sys.path para imports absolutos del proyecto.
+# Este repo usa imports tipo `from capture...` (módulos dentro de `src/`).
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src_dir = os.path.dirname(os.path.abspath(__file__))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import pyautogui
-from typing import Optional, Dict, List
 import threading
 from queue import Queue
 import time
-import numpy as np
 import json
-from capture.dxgi_capture import DXGICapture
-# from calibration.ui_calibrator import UICalibrator
-# from vision.inference import VisionInference
-from vision.ocr import OCRProcessor
-from gamestate.builder import GameState, GameStateBuilder
-# from battlelist.extractor import BattlelistExtractor
-# from bestiary.matcher import BestiaryMatcher
-# from navigation.navigator import Navigator
-# from decision.behavior_tree import BehaviorTree
-# from action.executor import ActionExecutor
-# from safety.manager import SafetyManager
-# from telemetry.replay import Replay
-
+from capture.obs_websocket_capture import OBSWebSocketCapture
+from gamestate.builder import GameStateBuilder
 
 def load_roi_config(resolution: tuple) -> tuple:
     """Carga configuración de ROIs según la resolución detectada"""
@@ -33,9 +23,10 @@ def load_roi_config(resolution: tuple) -> tuple:
     config_files = {
         (2048, 1076): "configs/rois_guess.json",
         (1920, 1080): "configs/rois_guess_1920x1080.json",
+        (1920, 1009): "configs/rois_guess_1920x1080.json",
     }
 
-    config_file = config_files.get((width, height), "configs/rois_guess.json")  # fallback
+    config_file = config_files.get((width, height), "configs/rois_guess_1920x1080.json")  # fallback
 
     try:
         with open(config_file, 'r') as f:
@@ -47,8 +38,8 @@ def load_roi_config(resolution: tuple) -> tuple:
         # Configuración por defecto (2048x1076)
         default_rois = {
             "hpmp_top_strip": {"x": 0.000000, "y": 0.000000, "w": 0.822754, "h": 0.037174},
-            "hp_top_ocr": {"x": 0.052734, "y": 0.000000, "w": 0.107422, "h": 0.037174},
-            "mp_top_ocr": {"x": 0.568359, "y": 0.000000, "w": 0.107422, "h": 0.037174},
+            "hp_top_ocr": {"x": 0.052734, "y": 0.060000, "w": 0.107422, "h": 0.037174},
+            "mp_top_ocr": {"x": 0.568359, "y": 0.060000, "w": 0.107422, "h": 0.037174},
             "skills_panel": {"x": 0.822754, "y": 0.000000, "w": 0.084961, "h": 0.375464},
             "battlelist_panel": {"x": 0.822754, "y": 0.375464, "w": 0.084961, "h": 0.251860},
             "battlelist_rows": {"x": 0.822754, "y": 0.397769, "w": 0.084961, "h": 0.229554},
@@ -66,41 +57,88 @@ def load_roi_config(resolution: tuple) -> tuple:
 
 
 def main() -> None:
-    print("Iniciando sistema de captura y análisis de HP/MP...")
+    """Entry-point estable: ejecuta el bot."""
+    run_bot()
 
-    # Probar la captura
-    capture = DXGICapture("Tibia - Loterinne")  # Título específico encontrado
-    print(f"Buscando ventana con título que contenga: '{capture.title_partial}'")
 
-    # Intentar capturar
-    frame = capture.capture()
-    if frame is not None:
-        print(f"✅ Captura exitosa: {frame.shape}")
+def run_bot():
+    """Ejecuta el bot completo con pipeline threaded usando OBS WebSocket + DXCam"""
+    print("🚀 Iniciando Tibia Bot Framework...")
 
-        # Cargar configuración de ROIs
-        resolution = (frame.shape[1], frame.shape[0])  # (width, height)
-        rois, source_resolution = load_roi_config(resolution)
-        print(f"Resolución detectada: {resolution}, ROIs cargadas para: {source_resolution}")
+    # Configurar queues
+    frame_queue = Queue(maxsize=5)  # Capture → Vision
+    gs_queue = Queue(maxsize=5)     # Vision → Decision
 
-        # Inicializar procesadores
-        gamestate_builder = GameStateBuilder()
+    # Inicializar componentes
+    capture = OBSWebSocketCapture(capture_method="dxcam", source_name="Tibia_Fuente")
+    gamestate_builder = GameStateBuilder()
 
-        # Extraer HP/MP del frame
-        gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
+    # Cargar ROIs
+    resolution = (1920, 1009)  # Resolución de la ventana del proyector
+    rois, source_resolution = load_roi_config(resolution)
+    # Metadata para reescalar ROIs (p.ej. source 1920x1080 -> frame 1920x1009)
+    rois["_source_resolution"] = source_resolution
 
-        # Mostrar valores por consola
-        print("\n" + "="*50)
-        print("VALORES EXTRAÍDOS:")
-        print("="*50)
-        print(f"HP Actual: {gamestate.hp_current}")
-        print(f"MP Actual: {gamestate.mp_current}")
-        print(f"Estado completo: {gamestate}")
-        print("="*50)
+    # Thread de captura
+    def capture_thread():
+        print("📸 Thread de captura iniciado")
+        if not capture.connect():
+            print("❌ Error en captura")
+            return
 
-    else:
-        print("❌ No se pudo capturar")
+        while True:
+            frame = capture.capture()
+            if frame is not None:
+                try:
+                    frame_queue.put_nowait(frame)
+                except Exception:
+                    pass  # Drop old frames
+            time.sleep(0.1)  # ~10 FPS
 
-    print("Sistema de análisis probado.")
+    # Thread de visión
+    def vision_thread():
+        print("👁️  Thread de visión iniciado")
+        while True:
+            try:
+                frame = frame_queue.get(timeout=1)
+                gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
+                try:
+                    gs_queue.put_nowait(gamestate)
+                except Exception:
+                    pass
+            except Exception:
+                continue
+
+    # Thread de decisión (simplificado)
+    def decision_thread():
+        print("🧠 Thread de decisión iniciado")
+        while True:
+            try:
+                gamestate = gs_queue.get(timeout=1)
+                print(f"🎮 Estado: HP {gamestate.hp_current}, MP {gamestate.mp_current}")
+                # Aquí iría el BehaviorTree.tick()
+                # Por ahora, solo log
+            except Exception:
+                continue
+
+    # Iniciar threads
+    threads = [
+        threading.Thread(target=capture_thread, daemon=True),
+        threading.Thread(target=vision_thread, daemon=True),
+        threading.Thread(target=decision_thread, daemon=True)
+    ]
+
+    for t in threads:
+        t.start()
+
+    print("✅ Bot ejecutándose. Presiona Ctrl+C para detener.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("🛑 Deteniendo bot...")
+        capture.disconnect()
+        print("✅ Bot detenido.")
 
 
 if __name__ == "__main__":
