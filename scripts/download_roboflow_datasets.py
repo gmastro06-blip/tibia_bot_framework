@@ -105,6 +105,12 @@ def main() -> None:
         location=base / "temp_tibia",
     )
 
-
-if __name__ == "__main__":
-    main()
+    # 4) hp-mp bars
+    _download(
+        rf=rf,
+        workspace="levelup-12nnc",
+        project="hp-f3dd6",
+        version=1,
+        fmt="yolov8",
+        location=base / "temp_hpmp",
+    )

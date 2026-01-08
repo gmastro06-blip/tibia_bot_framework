@@ -15,6 +15,7 @@ class RoboflowConfig:
     version: int
     confidence: float = 0.25
     overlap: float = 0.3
+    local_model_path: Optional[str] = None
 
 
 class RoboflowInference:
@@ -34,16 +35,23 @@ class RoboflowInference:
     def __init__(self, config: RoboflowConfig):
         self.config = config
 
-        # Import lazy para que el proyecto funcione aunque roboflow no esté instalado.
-        from roboflow import Roboflow  # type: ignore
+        if config.local_model_path:
+            # Use local YOLO model
+            from ultralytics import YOLO
+            self._model = YOLO(config.local_model_path)
+            self._is_local = True
+        else:
+            # Use Roboflow hosted
+            from roboflow import Roboflow  # type: ignore
 
-        rf = Roboflow(api_key=config.api_key)
-        self._model = (
-            rf.workspace(config.workspace)
-            .project(config.project)
-            .version(config.version)
-            .model
-        )
+            rf = Roboflow(api_key=config.api_key)
+            self._model = (
+                rf.workspace(config.workspace)
+                .project(config.project)
+                .version(config.version)
+                .model
+            )
+            self._is_local = False
 
     @staticmethod
     def from_env() -> Optional["RoboflowInference"]:
@@ -62,30 +70,91 @@ class RoboflowInference:
 
         confidence = float(os.getenv("ROBOFLOW_CONFIDENCE", "0.25"))
         overlap = float(os.getenv("ROBOFLOW_OVERLAP", "0.3"))
-        return RoboflowInference(
-            RoboflowConfig(
-                api_key=api_key,
-                workspace=workspace,
-                project=project,
-                version=version,
-                confidence=confidence,
-                overlap=overlap,
+    @staticmethod
+    def from_env_hpmp() -> Optional["RoboflowInference"]:
+        local_model = os.getenv("ROBOFLOW_HPMP_LOCAL_MODEL", "").strip()
+        if local_model and os.path.exists(local_model):
+            # Use local model
+            confidence = float(os.getenv("ROBOFLOW_CONFIDENCE", "0.25"))
+            overlap = float(os.getenv("ROBOFLOW_OVERLAP", "0.3"))
+            return RoboflowInference(
+                RoboflowConfig(
+                    api_key="",  # Not needed for local
+                    workspace="",
+                    project="",
+                    version=1,
+                    confidence=confidence,
+                    overlap=overlap,
+                    local_model_path=local_model,
+                )
             )
-        )
+        else:
+            # Use hosted or none
+            api_key = os.getenv("ROBOFLOW_API_KEY", "").strip()
+            workspace = os.getenv("ROBOFLOW_HPMP_WORKSPACE", "levelup-12nnc").strip()
+            project = os.getenv("ROBOFLOW_HPMP_PROJECT", "hp-f3dd6").strip()
+            version_raw = os.getenv("ROBOFLOW_HPMP_VERSION", "1").strip()
 
+            if not (api_key and workspace and project and version_raw):
+                return None
+
+            try:
+                version = int(version_raw)
+            except ValueError:
+                return None
+
+            confidence = float(os.getenv("ROBOFLOW_CONFIDENCE", "0.25"))
+            overlap = float(os.getenv("ROBOFLOW_OVERLAP", "0.3"))
+            return RoboflowInference(
+                RoboflowConfig(
+                    api_key=api_key,
+                    workspace=workspace,
+                    project=project,
+                    version=version,
+                    confidence=confidence,
+                    overlap=overlap,
+                )
+            )
     def predict(self, frame_bgr: np.ndarray) -> Dict[str, Any]:
-        """Devuelve el JSON de predicciones de Roboflow."""
+        """Devuelve el JSON de predicciones."""
         # Roboflow acepta numpy arrays; la mayoría de modelos esperan RGB.
         frame_rgb = frame_bgr[:, :, ::-1]
-        prediction = (
-            self._model.predict(
+        if self._is_local:
+            # Local YOLO model
+            results = self._model.predict(
                 frame_rgb,
-                confidence=self.config.confidence,
-                overlap=self.config.overlap,
+                conf=self.config.confidence,
+                iou=self.config.overlap,
             )
-            .json()
-        )
-        return prediction
+            # Convert to similar format as Roboflow
+            predictions = []
+            for result in results:
+                boxes = result.boxes
+                for i, box in enumerate(boxes):
+                    x, y, w, h = box.xywh[0].cpu().numpy()
+                    cls = int(box.cls[0].cpu().numpy())
+                    conf = float(box.conf[0].cpu().numpy())
+                    class_name = result.names[cls]
+                    predictions.append({
+                        "x": float(x),
+                        "y": float(y),
+                        "width": float(w),
+                        "height": float(h),
+                        "class": class_name,
+                        "confidence": conf,
+                    })
+            return {"predictions": predictions}
+        else:
+            # Roboflow hosted
+            prediction = (
+                self._model.predict(
+                    frame_rgb,
+                    confidence=self.config.confidence,
+                    overlap=self.config.overlap,
+                )
+                .json()
+            )
+            return prediction
 
     @staticmethod
     def extract_boxes(prediction: Dict[str, Any]) -> List[Dict[str, Any]]:

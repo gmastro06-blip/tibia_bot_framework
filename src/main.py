@@ -14,7 +14,7 @@ import threading
 from queue import Queue
 import time
 import json
-from capture.obs_websocket_capture import OBSWebSocketCapture
+from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
 
 def load_roi_config(resolution: tuple) -> tuple:
@@ -70,25 +70,38 @@ def run_bot():
     gs_queue = Queue(maxsize=5)     # Vision → Decision
 
     # Inicializar componentes
-    capture = OBSWebSocketCapture(capture_method="dxcam", source_name="Tibia_Fuente")
+    # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
+    # si ese monitor falla, DXGICapture captura buscando en todos los monitores.
+    force_monitor_raw = os.getenv("FORCE_MONITOR", "").strip()
+    force_monitor = 2
+    if force_monitor_raw:
+        try:
+            force_monitor = int(force_monitor_raw)
+        except Exception:
+            force_monitor = 2
+        print(f"🖥️  FORCE_MONITOR activo: {force_monitor}")
+    else:
+        print("🖥️  FORCE_MONITOR no configurado; usando monitor 2 por defecto")
+
+    capture = DXGICapture(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
 
-    # Cargar ROIs
-    resolution = (1920, 1009)  # Resolución de la ventana del proyector
-    rois, source_resolution = load_roi_config(resolution)
-    # Metadata para reescalar ROIs (p.ej. source 1920x1080 -> frame 1920x1009)
-    rois["_source_resolution"] = source_resolution
+    # Cargar ROIs (se inicializa con el primer frame real para evitar desalineaciones)
+    rois = None
+    resolution = None
 
     # Thread de captura
     def capture_thread():
         print("📸 Thread de captura iniciado")
-        if not capture.connect():
-            print("❌ Error en captura")
-            return
-
         while True:
             frame = capture.capture()
             if frame is not None:
+                nonlocal rois, resolution
+                if rois is None or resolution is None:
+                    resolution = (int(frame.shape[1]), int(frame.shape[0]))
+                    rois_loaded, source_resolution = load_roi_config(resolution)
+                    rois_loaded["_source_resolution"] = source_resolution
+                    rois = rois_loaded
                 try:
                     frame_queue.put_nowait(frame)
                 except Exception:
@@ -101,6 +114,9 @@ def run_bot():
         while True:
             try:
                 frame = frame_queue.get(timeout=1)
+                if rois is None or resolution is None:
+                    continue
+
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
                 try:
                     gs_queue.put_nowait(gamestate)
@@ -137,7 +153,6 @@ def run_bot():
             time.sleep(1)
     except KeyboardInterrupt:
         print("🛑 Deteniendo bot...")
-        capture.disconnect()
         print("✅ Bot detenido.")
 
 

@@ -261,6 +261,63 @@ class OCRProcessor:
                             mp_current, mp_max = self._parse_current_and_max(mp_text, "MP")
 
             # Fallback: OCR fijo por ROIs
+            # (0) Fallback robusto: OCR sobre el strip superior completo.
+            # Usamos detail=1 para obtener bbox y separar izquierda (HP) / derecha (MP).
+            if 'hpmp_top_strip' in rois and (hp_current is None or mp_current is None):
+                strip_roi = normalize_to_px(rois['hpmp_top_strip'])
+                strip_crop = frame[strip_roi[1]:strip_roi[1]+strip_roi[3], strip_roi[0]:strip_roi[0]+strip_roi[2]]
+                if strip_crop.size > 0:
+                    try:
+                        processed = self.preprocess_image(strip_crop)
+                        results = self.reader.readtext(processed, detail=1, allowlist="0123456789/")
+
+                        parsed = []
+                        for item in results or []:
+                            try:
+                                bbox, text, conf = item
+                            except Exception:
+                                continue
+                            cleaned = re.sub(r'[^0-9/]', '', str(text))
+                            if not cleaned:
+                                continue
+
+                            cur, mx = self._parse_current_and_max(cleaned, "STRIP")
+                            if cur is None:
+                                continue
+
+                            # x_center del bbox (promedio de los 4 puntos)
+                            try:
+                                xs = [pt[0] for pt in bbox]
+                                x_center = float(sum(xs)) / max(1, len(xs))
+                            except Exception:
+                                x_center = 0.0
+
+                            parsed.append((x_center, cur, mx, float(conf) if conf is not None else 0.0, cleaned))
+
+                        # ordenar por X (izquierda→derecha)
+                        parsed.sort(key=lambda t: t[0])
+
+                        # Elegir candidatos con max (formato cur/max) primero
+                        with_max = [t for t in parsed if t[2] is not None]
+
+                        def _assign_from(cands):
+                            nonlocal hp_current, hp_max, mp_current, mp_max
+                            if not cands:
+                                return
+                            if hp_current is None:
+                                x, cur, mx, _conf, _txt = cands[0]
+                                hp_current, hp_max = cur, mx
+                            if mp_current is None and len(cands) >= 2:
+                                x, cur, mx, _conf, _txt = cands[-1]
+                                mp_current, mp_max = cur, mx
+
+                        _assign_from(with_max)
+                        # Si aún falta alguno, usar cualquier número detectado
+                        if hp_current is None or mp_current is None:
+                            _assign_from(parsed)
+                    except Exception as e:
+                        print(f"Error OCR strip superior: {e}")
+
             if 'hp_top_ocr' in rois and hp_current is None:
                 hp_roi = normalize_to_px(rois['hp_top_ocr'])
                 hp_crop = frame[hp_roi[1]:hp_roi[1]+hp_roi[3], hp_roi[0]:hp_roi[0]+hp_roi[2]]

@@ -25,12 +25,14 @@ class GameStateBuilder:
         self.ocr_processor = OCRProcessor()
         self.frame_history = []  # Para suavizado de valores
         self._rf = RoboflowInference.from_env()
+        self._rf_hpmp = RoboflowInference.from_env_hpmp()  # Separate for HP/MP
         self._rf_last_ts = 0.0
         self._rf_min_interval_s = float(os.getenv("ROBOFLOW_MIN_INTERVAL_S", "0.5"))
 
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
         rf_boxes: Optional[List[Dict[str, Any]]] = None
+        rf_hpmp_boxes: Optional[List[Dict[str, Any]]] = None
         if self._rf is not None:
             now = time.time()
             if now - self._rf_last_ts >= self._rf_min_interval_s:
@@ -40,6 +42,14 @@ class GameStateBuilder:
                 except Exception:
                     rf_boxes = None
                 self._rf_last_ts = now
+
+        # Separate inference for HP/MP
+        if self._rf_hpmp is not None:
+            try:
+                pred_hpmp = self._rf_hpmp.predict(frame)
+                rf_hpmp_boxes = self._rf_hpmp.extract_boxes(pred_hpmp)
+            except Exception:
+                rf_hpmp_boxes = None
 
         # (A) Extraer HP/MP usando OCR (y si hay Roboflow boxes, usarlas como override)
         hp_current, hp_max, mp_current, mp_max = self.ocr_processor.extract_hp_mp_full(
@@ -67,17 +77,17 @@ class GameStateBuilder:
         # Intentar usar boxes Roboflow si existen; si no, usar ROIs del config.
         hp_ratio: Optional[float] = None
         mp_ratio: Optional[float] = None
-        if rf_boxes and self._rf is not None:
+        if rf_hpmp_boxes and self._rf_hpmp is not None:
             hp_bar_classes = os.getenv("ROBOFLOW_HP_BAR_CLASSES", "hp_bar,hp_low_bar,health_bar").split(",")
             mp_bar_classes = os.getenv("ROBOFLOW_MP_BAR_CLASSES", "mp_bar,mp_low_bar,mana_bar").split(",")
-            hp_box = self._rf.best_box_by_class(rf_boxes, [c.strip() for c in hp_bar_classes])
-            mp_box = self._rf.best_box_by_class(rf_boxes, [c.strip() for c in mp_bar_classes])
+            hp_box = self._rf_hpmp.best_box_by_class(rf_hpmp_boxes, [c.strip() for c in hp_bar_classes])
+            mp_box = self._rf_hpmp.best_box_by_class(rf_hpmp_boxes, [c.strip() for c in mp_bar_classes])
             if hp_box:
-                crop = self._rf.crop_from_box(frame, hp_box)
+                crop = self._rf_hpmp.crop_from_box(frame, hp_box)
                 if crop is not None:
                     hp_ratio = estimate_bar_fill_ratio(crop, (0, 0, crop.shape[1], crop.shape[0]), "hp")
             if mp_box:
-                crop = self._rf.crop_from_box(frame, mp_box)
+                crop = self._rf_hpmp.crop_from_box(frame, mp_box)
                 if crop is not None:
                     mp_ratio = estimate_bar_fill_ratio(crop, (0, 0, crop.shape[1], crop.shape[0]), "mp")
 
