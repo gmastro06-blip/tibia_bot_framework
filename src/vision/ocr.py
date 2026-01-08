@@ -3,12 +3,16 @@ import numpy as np
 import easyocr
 import re
 import os
-from typing import Optional, Tuple, Dict, Any, List, Sequence
+from typing import Optional, Tuple, Dict, Any, List, Sequence, Mapping, cast
 import json
-import os
+
 
 class OCRProcessor:
     def __init__(self):
+        self._debug = os.getenv("OCR_DEBUG", "").strip().lower() in {"1", "true", "yes"} or os.getenv(
+            "BOT_DEBUG", ""
+        ).strip().lower() in {"1", "true", "yes"}
+
         # Inicializar EasyOCR con GPU si está disponible
         try:
             self.reader = easyocr.Reader(['en'], gpu=True)
@@ -57,7 +61,8 @@ class OCRProcessor:
             thresh = cv2.bitwise_not(thresh)
 
         # Escalar a 2x para mejor reconocimiento
-        scaled = cv2.resize(thresh, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        # OpenCV permite dsize=None cuando se usan fx/fy, pero los stubs tipados no.
+        scaled = cv2.resize(thresh, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
 
         # Aplicar denoising
         denoised = cv2.medianBlur(scaled, 3)
@@ -78,21 +83,23 @@ class OCRProcessor:
             results = self.reader.readtext(processed, detail=0, allowlist=allowlist)
 
             if results:
-                text = results[0]  # Tomar el primer resultado
-                print(f"OCR encontró: '{text}'")
+                text = str(results[0])  # Tomar el primer resultado
+                if self._debug:
+                    print(f"OCR encontró: '{text}'")
                 # Limpiar texto: solo números y /
                 cleaned = re.sub(r'[^0-9/]', '', text)
                 # Aplicar correcciones
-                return self.corrections.get(cleaned, cleaned)
+                return str(self.corrections.get(cleaned, cleaned))
             else:
-                print("OCR no encontró texto")
+                if self._debug:
+                    print("OCR no encontró texto")
                 return ""
 
         except Exception as e:
             print(f"Error en OCR: {e}")
             return ""
 
-    def extract_hp_mp(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> Tuple[Optional[int], Optional[int]]:
+    def extract_hp_mp(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Tuple[Optional[int], Optional[int]]:
         """Compat: devuelve solo HP/MP actuales."""
         hp_cur, _hp_max, mp_cur, _mp_max = self.extract_hp_mp_full(frame, rois, resolution)
         return hp_cur, mp_cur
@@ -100,14 +107,14 @@ class OCRProcessor:
     def _roi_to_px(
         self,
         frame: np.ndarray,
-        rois: Dict[str, Dict[str, float]],
+        rois: Mapping[str, Any],
         resolution: Tuple[int, int],
-        roi_def: Dict[str, Any],
+        roi_def: Mapping[str, Any],
     ) -> Tuple[int, int, int, int]:
         """Convierte una ROI (normalizada o en px) al frame actual, compensando letterboxing."""
         frame_w, frame_h = frame.shape[1], frame.shape[0]
 
-        source_resolution = rois.get("_source_resolution")
+        source_resolution = rois.get("_source_resolution") if hasattr(rois, "get") else None
         if (
             isinstance(source_resolution, (list, tuple))
             and len(source_resolution) == 2
@@ -124,11 +131,19 @@ class OCRProcessor:
         offset_x = (frame_w - content_w) / 2.0
         offset_y = (frame_h - content_h) / 2.0
 
-        unit = str(roi_def.get("unit", "")).lower()
-        x_val = roi_def.get("x")
-        y_val = roi_def.get("y")
-        w_val = roi_def.get("w")
-        h_val = roi_def.get("h")
+        unit = str(roi_def.get("unit", "") if hasattr(roi_def, "get") else "").lower()
+        x_val = roi_def.get("x") if hasattr(roi_def, "get") else None
+        y_val = roi_def.get("y") if hasattr(roi_def, "get") else None
+        w_val = roi_def.get("w") if hasattr(roi_def, "get") else None
+        h_val = roi_def.get("h") if hasattr(roi_def, "get") else None
+
+        def _f(v: Any, default: float) -> float:
+            try:
+                if v is None:
+                    return default
+                return float(v)
+            except Exception:
+                return default
 
         def _is_normalized(v: Any) -> bool:
             try:
@@ -146,15 +161,15 @@ class OCRProcessor:
         )
 
         if is_norm:
-            x_src = float(x_val) * source_w
-            y_src = float(y_val) * source_h
-            w_src = float(w_val) * source_w
-            h_src = float(h_val) * source_h
+            x_src = _f(x_val, 0.0) * source_w
+            y_src = _f(y_val, 0.0) * source_h
+            w_src = _f(w_val, 0.0) * source_w
+            h_src = _f(h_val, 0.0) * source_h
         else:
-            x_src = float(x_val)
-            y_src = float(y_val)
-            w_src = float(w_val)
-            h_src = float(h_val)
+            x_src = _f(x_val, 0.0)
+            y_src = _f(y_val, 0.0)
+            w_src = _f(w_val, 0.0)
+            h_src = _f(h_val, 0.0)
 
         x = int(round(offset_x + x_src * scale))
         y = int(round(offset_y + y_src * scale))
@@ -171,11 +186,19 @@ class OCRProcessor:
     def _best_box_by_class(boxes: List[Dict[str, Any]], class_names: Sequence[str]) -> Optional[Dict[str, Any]]:
         if not boxes or not class_names:
             return None
-        wanted = {c.lower() for c in class_names if c}
+
+        def _norm(name: str) -> str:
+            s = (name or "").strip().lower()
+            s = re.sub(r"[\s\-]+", "_", s)
+            s = re.sub(r"[^a-z0-9_]+", "", s)
+            s = re.sub(r"_+", "_", s)
+            return s
+
+        wanted = {_norm(c) for c in class_names if c and _norm(c)}
         best = None
         best_conf = -1.0
         for b in boxes:
-            cls = str(b.get("class", "")).lower()
+            cls = _norm(str(b.get("class", "")))
             if cls not in wanted:
                 continue
             try:
@@ -211,7 +234,7 @@ class OCRProcessor:
     def extract_hp_mp_full(
         self,
         frame: np.ndarray,
-        rois: Dict[str, Dict[str, float]],
+        rois: Mapping[str, Any],
         resolution: Tuple[int, int],
         rf_boxes: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
@@ -229,15 +252,16 @@ class OCRProcessor:
                 return self._roi_to_px(frame, rois, resolution, roi_def)
 
             # Mostrar información de debug de la imagen
-            print(f"Imagen de entrada: {frame.shape}, tipo: {frame.dtype}")
-            print(f"Valor promedio de píxeles: {frame.mean():.2f}")
+            if self._debug:
+                print(f"Imagen de entrada: {frame.shape}, tipo: {frame.dtype}")
+                print(f"Valor promedio de píxeles: {frame.mean():.2f}")
 
             # Verificar si la imagen está mayoritariamente negra (posible ventana minimizada)
             if frame.mean() < 5.0:
                 print("⚠️  ADVERTENCIA: La imagen capturada está mayoritariamente negra")
                 print("   Esto puede indicar que la ventana de Tibia está minimizada o no visible")
                 print("   Asegúrate de que Tibia esté maximizado y en primer plano")
-                return None, None
+                return None, None, None, None
 
             # (A) Si hay detecciones Roboflow, intentar OCR sobre boxes de texto primero
             if rf_boxes:
@@ -287,7 +311,8 @@ class OCRProcessor:
 
                             # x_center del bbox (promedio de los 4 puntos)
                             try:
-                                xs = [pt[0] for pt in bbox]
+                                pts = cast(Sequence[Sequence[Any]], bbox)
+                                xs = [float(pt[0]) for pt in pts]
                                 x_center = float(sum(xs)) / max(1, len(xs))
                             except Exception:
                                 x_center = 0.0
@@ -321,9 +346,11 @@ class OCRProcessor:
             if 'hp_top_ocr' in rois and hp_current is None:
                 hp_roi = normalize_to_px(rois['hp_top_ocr'])
                 hp_crop = frame[hp_roi[1]:hp_roi[1]+hp_roi[3], hp_roi[0]:hp_roi[0]+hp_roi[2]]
-                print(f"HP ROI: {hp_roi}, crop shape: {hp_crop.shape if hp_crop.size > 0 else 'empty'}")
+                if self._debug:
+                    print(f"HP ROI: {hp_roi}, crop shape: {hp_crop.shape if hp_crop.size > 0 else 'empty'}")
                 if hp_crop.size > 0:
-                    print(f"HP crop - valor promedio: {hp_crop.mean():.2f}")
+                    if self._debug:
+                        print(f"HP crop - valor promedio: {hp_crop.mean():.2f}")
                     hp_text = self.extract_text(hp_crop, allowlist="0123456789/")
                     # Fallback: si no aparece nada, probar un crop más grande alrededor
                     if not hp_text:
@@ -334,10 +361,12 @@ class OCRProcessor:
                         x1 = min(frame.shape[1], hp_roi[0] + hp_roi[2] + pad_x)
                         y1 = min(frame.shape[0], hp_roi[1] + hp_roi[3] + pad_y)
                         hp_crop2 = frame[y0:y1, x0:x1]
-                        print(f"HP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {hp_crop2.shape if hp_crop2.size > 0 else 'empty'}")
+                        if self._debug:
+                            print(f"HP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {hp_crop2.shape if hp_crop2.size > 0 else 'empty'}")
                         if hp_crop2.size > 0:
                             hp_text = self.extract_text(hp_crop2, allowlist="0123456789/")
-                    print(f"HP texto crudo: '{hp_text}'")
+                    if self._debug:
+                        print(f"HP texto crudo: '{hp_text}'")
                     if hp_text:
                         hp_current, hp_max = self._parse_current_and_max(hp_text, "HP")
 
@@ -345,9 +374,11 @@ class OCRProcessor:
             if 'mp_top_ocr' in rois and mp_current is None:
                 mp_roi = normalize_to_px(rois['mp_top_ocr'])
                 mp_crop = frame[mp_roi[1]:mp_roi[1]+mp_roi[3], mp_roi[0]:mp_roi[0]+mp_roi[2]]
-                print(f"MP ROI: {mp_roi}, crop shape: {mp_crop.shape if mp_crop.size > 0 else 'empty'}")
+                if self._debug:
+                    print(f"MP ROI: {mp_roi}, crop shape: {mp_crop.shape if mp_crop.size > 0 else 'empty'}")
                 if mp_crop.size > 0:
-                    print(f"MP crop - valor promedio: {mp_crop.mean():.2f}")
+                    if self._debug:
+                        print(f"MP crop - valor promedio: {mp_crop.mean():.2f}")
                     mp_text = self.extract_text(mp_crop, allowlist="0123456789/")
                     if not mp_text:
                         pad_x = int(mp_roi[2] * 0.6)
@@ -357,10 +388,12 @@ class OCRProcessor:
                         x1 = min(frame.shape[1], mp_roi[0] + mp_roi[2] + pad_x)
                         y1 = min(frame.shape[0], mp_roi[1] + mp_roi[3] + pad_y)
                         mp_crop2 = frame[y0:y1, x0:x1]
-                        print(f"MP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {mp_crop2.shape if mp_crop2.size > 0 else 'empty'}")
+                        if self._debug:
+                            print(f"MP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {mp_crop2.shape if mp_crop2.size > 0 else 'empty'}")
                         if mp_crop2.size > 0:
                             mp_text = self.extract_text(mp_crop2, allowlist="0123456789/")
-                    print(f"MP texto crudo: '{mp_text}'")
+                    if self._debug:
+                        print(f"MP texto crudo: '{mp_text}'")
                     if mp_text:
                         mp_current, mp_max = self._parse_current_and_max(mp_text, "MP")
 
@@ -388,10 +421,12 @@ class OCRProcessor:
                 for num_str in numbers:
                     num = int(num_str)
                     if 0 < num <= 10000:
-                        print(f"{label}: Usando valor único encontrado: {num}")
+                        if self._debug:
+                            print(f"{label}: Usando valor único encontrado: {num}")
                         return num, None
 
-            print(f"{label}: No se pudo parsear valor de: '{text}'")
+            if self._debug:
+                print(f"{label}: No se pudo parsear valor de: '{text}'")
             return None, None
 
         except Exception as e:

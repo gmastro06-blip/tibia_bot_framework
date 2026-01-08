@@ -19,6 +19,27 @@ poetry install
 poetry run python -m src.main
 ```
 
+## Tests (regresión)
+
+Ejecuta la suite de tests para validar que no se pierde funcionalidad clave (config runtime, selección de ROIs, etc.):
+
+```bash
+poetry run pytest
+```
+
+## UI (iniciar / parar)
+
+UI mínima con Tkinter para iniciar y detener el bot:
+
+```bash
+poetry run python run_bot_ui.py
+```
+
+La UI incluye pestañas:
+- **Control**: iniciar/parar
+- **Healing**: configuración básica (se aplica en tiempo real)
+- **Cavebot**: configuración básica (se aplica en tiempo real)
+
 ## Captura de pantalla (multi-monitor)
 
 La captura usa `MSS` como fallback robusto y soporta múltiples monitores.
@@ -38,6 +59,11 @@ PowerShell:
 $env:FORCE_MONITOR='2'
 poetry run python -m src.main
 ```
+
+### Verbose / Debug logs
+
+- `CAPTURE_VERBOSE=1`: logs detallados de captura
+- `OCR_DEBUG=1` o `BOT_DEBUG=1`: logs detallados de OCR (por defecto el OCR es silencioso para no spamear consola)
 
 ### Diagnóstico: capturar todos los monitores
 

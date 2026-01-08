@@ -33,7 +33,7 @@ class NDICapture:
             # Usar FFmpeg para consumir NDI
             # Nota: Requiere FFmpeg con libndi_newtek instalado
             ffmpeg_cmd = f"ffmpeg -f libndi_newtek -i '{self.ndi_source}' -f rawvideo -pix_fmt bgr24 -"
-            self.cap = cv2.VideoCapture(ffmpeg_cmd, cv2.CAP_FFMPEG)
+            self.cap = cv2.VideoCapture(ffmpeg_cmd, cv2.CAP_FFMPEG)  # type: ignore[call-arg]
             if not self.cap.isOpened():
                 print(f"Error: No se pudo abrir el stream NDI '{self.ndi_source}'. Verifica FFmpeg y OBS NDI.")
                 return False

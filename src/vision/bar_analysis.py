@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, cast
 
 import cv2
 import numpy as np
@@ -30,14 +30,23 @@ def estimate_bar_fill_ratio(frame_bgr: np.ndarray, roi: Tuple[int, int, int, int
 
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
 
+    # OpenCV stubs are overly strict about argument types (Mat vs ndarray).
+    hsv_mat = cast(Any, hsv)
+
     if kind.lower() == "hp":
         # Rojo: doble rango por wrap de Hue.
-        mask_low = cv2.inRange(hsv, (0, 70, 50), (10, 255, 255))
-        mask_high = cv2.inRange(hsv, (170, 70, 50), (180, 255, 255))
+        low1 = cast(Any, np.array([0, 70, 50], dtype=np.uint8))
+        high1 = cast(Any, np.array([10, 255, 255], dtype=np.uint8))
+        low2 = cast(Any, np.array([170, 70, 50], dtype=np.uint8))
+        high2 = cast(Any, np.array([180, 255, 255], dtype=np.uint8))
+        mask_low = cv2.inRange(hsv_mat, low1, high1)
+        mask_high = cv2.inRange(hsv_mat, low2, high2)
         mask = cv2.bitwise_or(mask_low, mask_high)
     elif kind.lower() == "mp":
         # Azul típico (puede ajustarse si tu UI usa otro tono)
-        mask = cv2.inRange(hsv, (90, 70, 50), (135, 255, 255))
+        low = cast(Any, np.array([90, 70, 50], dtype=np.uint8))
+        high = cast(Any, np.array([135, 255, 255], dtype=np.uint8))
+        mask = cv2.inRange(hsv_mat, low, high)
     else:
         return None
 

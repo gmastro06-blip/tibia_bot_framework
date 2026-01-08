@@ -47,7 +47,8 @@ class DXGICapture:
                 tibia_monitor = self.find_window_monitor()
                 if tibia_monitor is not None and tibia_monitor < len(sct.monitors) and tibia_monitor != 0:
                     monitor_indices.append(tibia_monitor)
-                    print(f"Priorizando monitor {tibia_monitor} donde está la ventana")
+                    if self._verbose:
+                        print(f"Priorizando monitor {tibia_monitor} donde está la ventana")
 
                 # Luego priorizar monitores individuales (1..n) antes del monitor 0 combinado
                 for i in range(1, len(sct.monitors)):
@@ -63,22 +64,26 @@ class DXGICapture:
                         screenshot = sct.grab(monitor)
                         frame = np.frombuffer(screenshot.bgra, dtype=np.uint8)
                         frame = frame.reshape((screenshot.height, screenshot.width, 4))
-                        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
                         # Verificar que la captura es válida antes de retornarla
                         if self.validate_capture(frame):
                             monitor_info = f"{monitor.get('width', 'unknown')}x{monitor.get('height', 'unknown')}"
-                            print(f"Captura de pantalla completa exitosa en monitor {i} ({monitor_info}): {frame.shape}")
+                            if self._verbose:
+                                print(f"Captura de pantalla completa exitosa en monitor {i} ({monitor_info}): {frame.shape}")
                             return frame
                         else:
-                            print(f"Monitor {i} no válido, intentando siguiente...")
+                            if self._verbose:
+                                print(f"Monitor {i} no válido, intentando siguiente...")
                             continue
 
                     except Exception as e:
-                        print(f"Error en monitor {i}: {e}")
+                        if self._verbose:
+                            print(f"Error en monitor {i}: {e}")
                         continue
 
-                print("No se pudo capturar en ningún monitor")
+                if self._verbose:
+                    print("No se pudo capturar en ningún monitor")
                 return None
 
         except Exception as e:
@@ -95,18 +100,21 @@ class DXGICapture:
             rect = win32gui.GetWindowRect(self.hwnd)
             window_x, window_y = rect[0], rect[1]
             window_width, window_height = rect[2] - rect[0], rect[3] - rect[1]
-            print(f"Ventana en posición: ({window_x}, {window_y}) tamaño: {window_width}x{window_height}")
+            if self._verbose:
+                print(f"Ventana en posición: ({window_x}, {window_y}) tamaño: {window_width}x{window_height}")
 
             # Obtener información de todos los monitores
             with mss() as sct:
-                print(f"Monitores disponibles: {len(sct.monitors)}")
+                if self._verbose:
+                    print(f"Monitores disponibles: {len(sct.monitors)}")
                 best_monitor = None
                 best_overlap_ratio = 0
 
                 for i, monitor in enumerate(sct.monitors):
                     mon_x, mon_y = monitor['left'], monitor['top']
                     mon_width, mon_height = monitor['width'], monitor['height']
-                    print(f"  Monitor {i}: pos ({mon_x}, {mon_y}) tamaño {mon_width}x{mon_height}")
+                    if self._verbose:
+                        print(f"  Monitor {i}: pos ({mon_x}, {mon_y}) tamaño {mon_width}x{mon_height}")
 
                     # Calcular overlap entre ventana y monitor
                     overlap_x = max(0, min(window_x + window_width, mon_x + mon_width) - max(window_x, mon_x))
@@ -116,7 +124,8 @@ class DXGICapture:
                     if overlap_area > 0:
                         monitor_area = mon_width * mon_height
                         overlap_ratio = overlap_area / monitor_area
-                        print(f"    Overlap con monitor {i}: {overlap_ratio:.2f}")
+                        if self._verbose:
+                            print(f"    Overlap con monitor {i}: {overlap_ratio:.2f}")
 
                         if overlap_ratio > best_overlap_ratio:
                             best_overlap_ratio = overlap_ratio
@@ -145,7 +154,7 @@ class DXGICapture:
                 screenshot = sct.grab(monitor)
                 frame = np.frombuffer(screenshot.bgra, dtype=np.uint8)
                 frame = frame.reshape((screenshot.height, screenshot.width, 4))
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
                 # Verificar que la captura es válida
                 if self.validate_capture(frame):
@@ -163,7 +172,7 @@ class DXGICapture:
     def find_most_active_monitor(self, sct) -> Optional[dict]:
         """Encuentra el monitor con más actividad/contenido basado en variación de color"""
         best_monitor = None
-        max_variation = 0
+        max_variation = 0.0
 
         # Empezar desde el monitor 1 (índice 1 en la lista de monitors)
         for i in range(1, len(sct.monitors)):
@@ -173,11 +182,11 @@ class DXGICapture:
                 screenshot = sct.grab(monitor)
                 frame = np.frombuffer(screenshot.bgra, dtype=np.uint8)
                 frame = frame.reshape((screenshot.height, screenshot.width, 4))
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
                 # Calcular variación de color como indicador de actividad
                 if len(frame.shape) == 3:
-                    variation = sum(np.std(frame[:, :, c]) for c in range(3))
+                    variation = float(sum(float(np.std(frame[:, :, c])) for c in range(3)))
                     if variation > max_variation:
                         max_variation = variation
                         best_monitor = monitor

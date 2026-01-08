@@ -30,7 +30,7 @@ class ObsCapture:
             True si la conexión es exitosa, False en caso contrario.
         """
         try:
-            self.cap = cv2.VideoCapture(self.rtmp_url, cv2.CAP_FFMPEG)
+            self.cap = cv2.VideoCapture(self.rtmp_url, cv2.CAP_FFMPEG)  # type: ignore[call-arg]
             if not self.cap.isOpened():
                 print("Error: No se pudo abrir el stream RTMP. Verifica que OBS esté transmitiendo.")
                 return False

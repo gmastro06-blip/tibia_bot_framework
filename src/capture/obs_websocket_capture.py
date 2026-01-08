@@ -1,5 +1,5 @@
 import obsws_python as obs
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 import time
 import numpy as np
 import base64
@@ -45,7 +45,8 @@ class OBSWebSocketCapture:
             self.client = obs.ReqClient(host=self.host, port=self.port, password=self.password)
             # Verificar conexión obteniendo la versión
             version = self.client.get_version()
-            print(f"Conectado a OBS WebSocket: {version.obs_version}")
+            obs_version = getattr(version, "obs_version", None)
+            print(f"Conectado a OBS WebSocket: {obs_version}")
 
             # Configurar método de captura
             if self.capture_method == "obs_source":
@@ -78,8 +79,9 @@ class OBSWebSocketCapture:
                     print("⚠️  Ventana del proyector no encontrada aún; usando fallback en captura (MSS/monitores)")
 
             # Conectar el cliente de captura si tiene método connect
-            if hasattr(self.capture_client, 'connect'):
-                if not self.capture_client.connect():
+            capture_client = self.capture_client
+            if capture_client is not None and hasattr(capture_client, 'connect'):
+                if not capture_client.connect():
                     print("Error: No se pudo conectar el método de captura.")
                     return False
             # Si no tiene connect (como DXCam), asumir que está listo
@@ -104,9 +106,9 @@ class OBSWebSocketCapture:
             scene = self.client.get_current_program_scene()
             streaming = self.client.get_stream_status()
             return {
-                "current_scene": scene.current_program_scene_name,
-                "is_streaming": streaming.output_active,
-                "is_recording": streaming.output_active  # Ajustar si es recording
+                "current_scene": getattr(scene, "current_program_scene_name", None),
+                "is_streaming": getattr(streaming, "output_active", False),
+                "is_recording": getattr(streaming, "output_active", False)  # Ajustar si es recording
             }
         except Exception as e:
             print(f"Error obteniendo estado OBS: {e}")
@@ -161,9 +163,16 @@ class OBSWebSocketCapture:
         Returns:
             Frame como array numpy.
         """
+        if self.client is None:
+            return None
         try:
             # Tomar screenshot de la fuente
-            response = self.client.call("TakeSourceScreenshot", {
+            if not hasattr(self.client, "call"):
+                print("Error: obsws-python ReqClient no expone 'call'; revisa la versión del paquete.")
+                return None
+
+            call_fn = cast(Any, getattr(self.client, "call"))
+            response = call_fn("TakeSourceScreenshot", {
                 "sourceName": self.source_name,
                 "imageFormat": "png",
                 "imageWidth": 1920,  # Ajustar resolución si necesario

@@ -29,7 +29,7 @@ class VirtualCamCapture:
             True si la conexión es exitosa, False en caso contrario.
         """
         try:
-            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_MSMF)  # Usar Media Foundation para Windows
+            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_MSMF)  # type: ignore[call-arg]
             if not self.cap.isOpened():
                 print(f"Error: No se pudo abrir la webcam virtual en índice {self.camera_index}. Verifica que OBS VirtualCam esté activo.")
                 return False

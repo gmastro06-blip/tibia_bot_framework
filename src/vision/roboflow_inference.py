@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -34,6 +35,8 @@ class RoboflowInference:
 
     def __init__(self, config: RoboflowConfig):
         self.config = config
+        self._model: Any
+        self._is_local: bool
 
         if config.local_model_path:
             # Use local YOLO model
@@ -70,6 +73,18 @@ class RoboflowInference:
 
         confidence = float(os.getenv("ROBOFLOW_CONFIDENCE", "0.25"))
         overlap = float(os.getenv("ROBOFLOW_OVERLAP", "0.3"))
+
+        return RoboflowInference(
+            RoboflowConfig(
+                api_key=api_key,
+                workspace=workspace,
+                project=project,
+                version=version,
+                confidence=confidence,
+                overlap=overlap,
+            )
+        )
+
     @staticmethod
     def from_env_hpmp() -> Optional["RoboflowInference"]:
         local_model = os.getenv("ROBOFLOW_HPMP_LOCAL_MODEL", "").strip()
@@ -130,7 +145,7 @@ class RoboflowInference:
             predictions = []
             for result in results:
                 boxes = result.boxes
-                for i, box in enumerate(boxes):
+                for box in boxes:
                     x, y, w, h = box.xywh[0].cpu().numpy()
                     cls = int(box.cls[0].cpu().numpy())
                     conf = float(box.conf[0].cpu().numpy())
@@ -146,14 +161,12 @@ class RoboflowInference:
             return {"predictions": predictions}
         else:
             # Roboflow hosted
-            prediction = (
-                self._model.predict(
-                    frame_rgb,
-                    confidence=self.config.confidence,
-                    overlap=self.config.overlap,
-                )
-                .json()
+            prediction_obj = self._model.predict(
+                frame_rgb,
+                confidence=self.config.confidence,
+                overlap=self.config.overlap,
             )
+            prediction = prediction_obj.json()
             return prediction
 
     @staticmethod
@@ -186,11 +199,20 @@ class RoboflowInference:
         """Devuelve la detección con mayor confidence cuya class esté en class_names."""
         if not boxes or not class_names:
             return None
-        wanted = {c.lower() for c in class_names if c}
+
+        def _norm(name: str) -> str:
+            # Normalize common label variations: case, spaces, hyphens, punctuation.
+            s = (name or "").strip().lower()
+            s = re.sub(r"[\s\-]+", "_", s)
+            s = re.sub(r"[^a-z0-9_]+", "", s)
+            s = re.sub(r"_+", "_", s)
+            return s
+
+        wanted = {_norm(c) for c in class_names if c and _norm(c)}
         best: Optional[Dict[str, Any]] = None
         best_conf = -1.0
         for b in boxes:
-            cls = str(b.get("class", "")).lower()
+            cls = _norm(str(b.get("class", "")))
             if cls not in wanted:
                 continue
             try:

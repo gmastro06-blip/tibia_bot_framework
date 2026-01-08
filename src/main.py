@@ -11,11 +11,40 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import threading
-from queue import Queue
+from queue import Queue, Empty
 import time
 import json
 from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
+from runtime_config import RuntimeConfig
+from decision.targeting import TargetSelector, format_target, Target
+from navigation.route import load_route
+from navigation.navigator import Navigator
+from navigation.step_navigator import StepNavigator
+from action.movement import MoveExecutor
+
+
+def _toggle_transition_lines(
+    healing_cfg,
+    cavebot_cfg,
+    last_healing_enabled: bool | None,
+    last_cavebot_enabled: bool | None,
+) -> tuple[list[str], bool | None, bool | None]:
+    lines: list[str] = []
+
+    if healing_cfg is not None:
+        if last_healing_enabled is None or last_healing_enabled != healing_cfg.enabled:
+            lines.append(f"🩹 Healing {'ON' if healing_cfg.enabled else 'OFF'}")
+            last_healing_enabled = healing_cfg.enabled
+
+    if cavebot_cfg is not None:
+        if last_cavebot_enabled is None or last_cavebot_enabled != cavebot_cfg.enabled:
+            lines.append(f"🧭 Cavebot {'ON' if cavebot_cfg.enabled else 'OFF'}")
+            if cavebot_cfg.enabled:
+                lines.append(f"🧭 Ruta: {cavebot_cfg.route_path}")
+            last_cavebot_enabled = cavebot_cfg.enabled
+
+    return lines, last_healing_enabled, last_cavebot_enabled
 
 def load_roi_config(resolution: tuple) -> tuple:
     """Carga configuración de ROIs según la resolución detectada"""
@@ -61,13 +90,20 @@ def main() -> None:
     run_bot()
 
 
-def run_bot():
-    """Ejecuta el bot completo con pipeline threaded usando OBS WebSocket + DXCam"""
+def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeConfig | None = None) -> None:
+    """Ejecuta el bot completo con pipeline threaded.
+
+    Si `stop_event` se provee, el bot se detiene cuando el evento está seteado.
+    Esto permite controlarlo desde una UI.
+    """
     print("🚀 Iniciando Tibia Bot Framework...")
 
+    if stop_event is None:
+        stop_event = threading.Event()
+
     # Configurar queues
-    frame_queue = Queue(maxsize=5)  # Capture → Vision
-    gs_queue = Queue(maxsize=5)     # Vision → Decision
+    frame_queue: Queue = Queue(maxsize=5)  # Capture → Vision
+    gs_queue: Queue = Queue(maxsize=5)     # Vision → Decision
 
     # Inicializar componentes
     # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
@@ -93,7 +129,7 @@ def run_bot():
     # Thread de captura
     def capture_thread():
         print("📸 Thread de captura iniciado")
-        while True:
+        while not stop_event.is_set():
             frame = capture.capture()
             if frame is not None:
                 nonlocal rois, resolution
@@ -111,7 +147,7 @@ def run_bot():
     # Thread de visión
     def vision_thread():
         print("👁️  Thread de visión iniciado")
-        while True:
+        while not stop_event.is_set():
             try:
                 frame = frame_queue.get(timeout=1)
                 if rois is None or resolution is None:
@@ -128,14 +164,163 @@ def run_bot():
     # Thread de decisión (simplificado)
     def decision_thread():
         print("🧠 Thread de decisión iniciado")
-        while True:
+        last_healing_enabled: bool | None = None
+        last_cavebot_enabled: bool | None = None
+        selector = TargetSelector()
+        last_target: Target | None = None
+        bot_debug = os.getenv("BOT_DEBUG", "").strip().lower() in {"1", "true", "yes"}
+
+        navigator: Navigator | None = None
+        step_navigator: StepNavigator | None = None
+        navigator_route_path: str | None = None
+        mover = MoveExecutor(step_interval_s=float(os.getenv("CAVEBOT_STEP_INTERVAL_S", "0.35")))
+        last_pos_warn_ts = 0.0
+        while not stop_event.is_set():
+            gamestate = None
             try:
                 gamestate = gs_queue.get(timeout=1)
-                print(f"🎮 Estado: HP {gamestate.hp_current}, MP {gamestate.mp_current}")
-                # Aquí iría el BehaviorTree.tick()
-                # Por ahora, solo log
+            except Empty:
+                gamestate = None
             except Exception:
                 continue
+
+            healing_cfg, cavebot_cfg = (
+                runtime_config.snapshot() if runtime_config is not None else (None, None)
+            )
+
+            # Log de cambios de toggles (para ver que aplica en tiempo real)
+            lines, last_healing_enabled, last_cavebot_enabled = _toggle_transition_lines(
+                healing_cfg,
+                cavebot_cfg,
+                last_healing_enabled,
+                last_cavebot_enabled,
+            )
+            for line in lines:
+                print(line)
+
+            if gamestate is None:
+                continue
+
+            # Targeting de criaturas (si hay detecciones Roboflow).
+            # Por defecto solo loggea cuando cambia el target.
+            try:
+                if resolution is not None:
+                    new_target = selector.select_target(
+                        gamestate.roboflow_boxes or [],
+                        resolution,
+                        prev=last_target,
+                    )
+                    if new_target != last_target:
+                        last_target = new_target
+                        print(f"🎯 Target: {format_target(last_target)}")
+                    elif bot_debug and last_target is not None:
+                        print(f"🎯 Target (sticky): {format_target(last_target)}")
+            except Exception:
+                pass
+
+            print(f"🎮 Estado: HP {gamestate.hp_current}/{gamestate.hp_max}, MP {gamestate.mp_current}/{gamestate.mp_max}")
+
+            # Cavebot básico (ruta + teclas) usando posición por env vars.
+            if cavebot_cfg is not None and cavebot_cfg.enabled:
+                cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
+                # Reload route if needed
+                if (navigator is None and step_navigator is None) or navigator_route_path != cavebot_cfg.route_path:
+                    try:
+                        route = load_route(cavebot_cfg.route_path)
+                        navigator = None
+                        step_navigator = None
+                        if cavebot_mode in {"steps", "step"}:
+                            step_navigator = StepNavigator(route)
+                        else:
+                            navigator = Navigator(route)
+                        navigator_route_path = cavebot_cfg.route_path
+                        print(f"🧭 Cavebot: ruta cargada ({len(route)} waypoints)")
+                    except Exception as e:
+                        navigator = None
+                        step_navigator = None
+                        navigator_route_path = None
+                        print(f"🧭 Cavebot: no pude cargar ruta ({cavebot_cfg.route_path}): {e}")
+
+                if step_navigator is not None:
+                    try:
+                        decision = step_navigator.decide()
+                        if decision.reached_waypoint and decision.waypoint is not None:
+                            wp = decision.waypoint
+                            label = wp.name or f"({wp.x},{wp.y})"
+                            if wp.action:
+                                print(f"🧭 Waypoint: {label} action={wp.action}")
+                            else:
+                                print(f"🧭 Waypoint: {label}")
+
+                        stepped = mover.maybe_step(decision.direction)
+                        if bot_debug and decision.direction and not stepped:
+                            print(f"🧭 Move (cooldown): {decision.direction}")
+                    except Exception:
+                        pass
+
+                elif navigator is not None:
+                    # Current position (temporary): PLAYER_X/PLAYER_Y
+                    px_raw = os.getenv("PLAYER_X", "").strip()
+                    py_raw = os.getenv("PLAYER_Y", "").strip()
+                    pos = None
+                    if px_raw and py_raw:
+                        try:
+                            pos = (int(px_raw), int(py_raw))
+                        except Exception:
+                            pos = None
+
+                    if pos is None:
+                        now = time.time()
+                        if now - last_pos_warn_ts >= 5.0:
+                            last_pos_warn_ts = now
+                            print("🧭 Cavebot: setea PLAYER_X y PLAYER_Y o usa CAVEBOT_MODE=steps")
+                    else:
+                        try:
+                            decision = navigator.decide(pos)
+                            if decision.reached_waypoint and decision.waypoint is not None:
+                                wp = decision.waypoint
+                                label = wp.name or f"({wp.x},{wp.y})"
+                                if wp.action:
+                                    print(f"🧭 Waypoint: {label} action={wp.action}")
+                                else:
+                                    print(f"🧭 Waypoint: {label}")
+
+                            stepped = mover.maybe_step(decision.direction)
+                            if bot_debug and decision.direction and not stepped:
+                                print(f"🧭 Move (cooldown): {decision.direction}")
+                        except Exception:
+                            pass
+
+            # Healing en tiempo real (lógica mínima: solo decide + log)
+            if healing_cfg is not None and healing_cfg.enabled:
+                try:
+                    if gamestate.hp_current is not None and gamestate.hp_max:
+                        hp_pct = (gamestate.hp_current / gamestate.hp_max) * 100.0
+                    else:
+                        hp_pct = None
+
+                    if gamestate.mp_current is not None and gamestate.mp_max:
+                        mp_pct = (gamestate.mp_current / gamestate.mp_max) * 100.0
+                    else:
+                        mp_pct = None
+
+                    trigger = False
+                    if hp_pct is not None and hp_pct < float(healing_cfg.hp_below_pct):
+                        trigger = True
+                    if mp_pct is not None and mp_pct < float(healing_cfg.mp_below_pct):
+                        trigger = True
+
+                    if trigger:
+                        action = healing_cfg.action.strip()
+                        if action:
+                            print(f"🩹 Healing TRIGGER ({action})")
+                        else:
+                            print("🩹 Healing TRIGGER")
+                except Exception:
+                    pass
+
+            # Aquí iría el BehaviorTree.tick()
+            # Por ahora, solo log
 
     # Iniciar threads
     threads = [
@@ -149,11 +334,24 @@ def run_bot():
 
     print("✅ Bot ejecutándose. Presiona Ctrl+C para detener.")
     try:
-        while True:
+        while not stop_event.is_set():
             time.sleep(1)
     except KeyboardInterrupt:
         print("🛑 Deteniendo bot...")
-        print("✅ Bot detenido.")
+        stop_event.set()
+
+    # Esperar un poco a que los threads terminen
+    try:
+        for t in threads:
+            try:
+                t.join(timeout=2)
+            except Exception:
+                pass
+    except KeyboardInterrupt:
+        # Si el usuario presiona Ctrl+C durante el join, salir sin traceback.
+        stop_event.set()
+
+    print("✅ Bot detenido.")
 
 
 if __name__ == "__main__":
