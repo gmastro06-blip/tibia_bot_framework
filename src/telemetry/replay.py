@@ -27,6 +27,56 @@ def _json_default(o: object) -> object:
     return str(o)
 
 
+def _parse_ts_from_filename(name: str) -> float | None:
+    try:
+        stem = Path(name).stem
+        # JSON: "123.456789" ; PNG: "123.456789_hp_top_ocr"
+        head = stem.split("_", 1)[0]
+        return float(head)
+    except Exception:
+        return None
+
+
+def _prune_replays(base: Path, *, keep_json: int) -> None:
+    try:
+        if keep_json <= 0:
+            return
+        json_files = [p for p in base.glob("*.json") if p.is_file()]
+        if len(json_files) <= keep_json:
+            return
+
+        def key(p: Path):
+            ts = _parse_ts_from_filename(p.name)
+            return (ts if ts is not None else 0.0)
+
+        json_files.sort(key=key)
+        to_delete = json_files[: max(0, len(json_files) - keep_json)]
+
+        rois_dir = base / "rois"
+        for jf in to_delete:
+            ts = _parse_ts_from_filename(jf.name)
+            try:
+                jf.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            if ts is None:
+                continue
+
+            # Borra PNGs que correspondan a ese timestamp.
+            try:
+                prefix = f"{ts:.6f}_"
+                for png in rois_dir.glob(f"{prefix}*.png"):
+                    try:
+                        png.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 class ReplayRecorder:
     """Guarda snapshots (JSON + crops de ROIs) en disco.
 
@@ -90,6 +140,15 @@ class ReplayRecorder:
             pass
 
         self._last_ts = t
+
+        # Pruning opcional para evitar crecimiento infinito.
+        try:
+            raw = os.getenv("REPLAY_MAX_JSON", "").strip()
+            if raw:
+                keep = int(raw)
+                _prune_replays(base, keep_json=keep)
+        except Exception:
+            pass
 
 
 def crop_named_rois(

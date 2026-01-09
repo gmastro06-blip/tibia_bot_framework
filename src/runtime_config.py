@@ -94,6 +94,7 @@ class RuntimeConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
     _advance_counter: int = field(default=0, init=False, repr=False)
+    _replay_force_counter: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def snapshot(self) -> tuple[HealingConfig, CavebotConfig]:
@@ -269,6 +270,16 @@ class RuntimeConfig:
     def advance_counter_snapshot(self) -> int:
         with self._lock:
             return int(self._advance_counter)
+
+    def request_replay_snapshot(self) -> int:
+        """Solicita forzar un snapshot de replay en el próximo frame disponible."""
+        with self._lock:
+            self._replay_force_counter += 1
+            return int(self._replay_force_counter)
+
+    def replay_force_counter_snapshot(self) -> int:
+        with self._lock:
+            return int(self._replay_force_counter)
 
     def update_telemetry(
         self,

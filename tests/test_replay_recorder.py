@@ -44,6 +44,29 @@ def test_replay_recorder_writes_json_and_pngs(tmp_path):
     assert len(pngs) == 2
 
 
+def test_replay_recorder_prunes_when_env_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("REPLAY_MAX_JSON", "2")
+    rr = ReplayRecorder()
+
+    crops = {"a": __make_img(4, 4)}
+    payload = {"foo": "bar"}
+
+    rr.record_crops(out_dir=str(tmp_path), crops=crops, payload=payload, ts=1.0)
+    rr.record_crops(out_dir=str(tmp_path), crops=crops, payload=payload, ts=2.0)
+    rr.record_crops(out_dir=str(tmp_path), crops=crops, payload=payload, ts=3.0)
+
+    json_files = sorted([p.name for p in tmp_path.glob("*.json")])
+    assert len(json_files) == 2
+    assert any(name.startswith("2.000000") for name in json_files)
+    assert any(name.startswith("3.000000") for name in json_files)
+
+    roi_dir = tmp_path / "rois"
+    pngs = sorted([p.name for p in roi_dir.glob("*.png")])
+    assert len(pngs) == 2
+    assert any(name.startswith("2.000000_") for name in pngs)
+    assert any(name.startswith("3.000000_") for name in pngs)
+
+
 def __make_img(h: int, w: int):
     import numpy as np
 

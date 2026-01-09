@@ -78,6 +78,16 @@ def test_runtime_config_assistant_snapshot_and_advance_counter() -> None:
     c1 = cfg.advance_counter_snapshot()
     assert c1 == c0 + 1
 
+def test_runtime_config_replay_force_counter() -> None:
+    from src.runtime_config import RuntimeConfig
+
+    rc = RuntimeConfig()
+    assert rc.replay_force_counter_snapshot() == 0
+    assert rc.request_replay_snapshot() == 1
+    assert rc.replay_force_counter_snapshot() == 1
+    assert rc.request_replay_snapshot() == 2
+    assert rc.replay_force_counter_snapshot() == 2
+
 
 def test_runtime_config_thread_safety_smoke() -> None:
     cfg = RuntimeConfig()

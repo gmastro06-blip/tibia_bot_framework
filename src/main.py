@@ -154,6 +154,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     # Thread de visión
     def vision_thread():
         print("👁️  Thread de visión iniciado")
+        last_force_seen = 0
         while not stop_event.is_set():
             try:
                 frame = frame_queue.get(timeout=1)
@@ -166,7 +167,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 if runtime_config is not None:
                     try:
                         rep_cfg = runtime_config.replay_snapshot()
-                        if replay.should_record(enabled=rep_cfg.enabled, interval_ms=rep_cfg.interval_ms):
+                        force = False
+                        try:
+                            cur_force = runtime_config.replay_force_counter_snapshot()
+                            force = cur_force != last_force_seen
+                            if force:
+                                last_force_seen = cur_force
+                        except Exception:
+                            force = False
+
+                        should = replay.should_record(enabled=rep_cfg.enabled, interval_ms=rep_cfg.interval_ms)
+                        if rep_cfg.enabled and (force or should):
                             crops = crop_named_rois(
                                 frame,
                                 roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
@@ -202,6 +213,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     "cavebot_action": tel.cavebot_action,
                                     "note": tel.note,
                                 },
+                                "forced": bool(force),
                             }
                             replay.record_crops(out_dir=rep_cfg.out_dir, crops=crops, payload=payload)
                     except Exception:
@@ -230,6 +242,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_beep_ts = 0.0
         last_pos_warn_ts = 0.0
         last_gs_ts = 0.0
+        last_event_target = ""
+        last_event_reco = ""
+        last_event_wp = ""
+        last_event_action = ""
+        last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
         while not stop_event.is_set():
             gamestate = None
             try:
@@ -477,6 +494,58 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 except Exception:
                     pass
 
+            # Export JSONL de eventos (opt-in): cambios relevantes.
+            if runtime_config is not None and sig is not None:
+                try:
+                    log_cfg = runtime_config.logging_snapshot()
+                    if log_cfg.enabled:
+                        flags = (
+                            bool(sig.low_hp),
+                            bool(sig.low_mp),
+                            bool(sig.paralyzed),
+                            bool(sig.haste_active),
+                            bool(sig.utamo_active),
+                            bool(sig.hungry),
+                        )
+
+                        def emit(kind: str, data: dict) -> None:
+                            try:
+                                jsonl.append(out_file=log_cfg.out_file, event={"kind": kind, **data})
+                            except Exception:
+                                pass
+
+                        if target_str != last_event_target:
+                            emit("event.target", {"target": target_str})
+                            last_event_target = target_str
+
+                        if recommendation != last_event_reco:
+                            emit("event.recommendation", {"recommendation": recommendation})
+                            last_event_reco = recommendation
+
+                        if cavebot_waypoint != last_event_wp or cavebot_action != last_event_action:
+                            emit(
+                                "event.cavebot",
+                                {"cavebot_waypoint": cavebot_waypoint, "cavebot_action": cavebot_action, "cavebot_next": cavebot_next},
+                            )
+                            last_event_wp = cavebot_waypoint
+                            last_event_action = cavebot_action
+
+                        if last_event_flags is None or flags != last_event_flags:
+                            emit(
+                                "event.flags",
+                                {
+                                    "low_hp": flags[0],
+                                    "low_mp": flags[1],
+                                    "paralyzed": flags[2],
+                                    "haste_active": flags[3],
+                                    "utamo_active": flags[4],
+                                    "hungry": flags[5],
+                                },
+                            )
+                            last_event_flags = flags
+                except Exception:
+                    pass
+
             # Export JSONL de telemetría (opt-in).
             if runtime_config is not None:
                 try:
@@ -486,6 +555,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         jsonl.append(
                             out_file=log_cfg.out_file,
                             event={
+                                "kind": "telemetry",
                                 "hp_current": tel.hp_current,
                                 "hp_max": tel.hp_max,
                                 "hp_pct": tel.hp_pct,

@@ -1,4 +1,4 @@
-Hacer un “route viewer” (dibujar la ruta, detectar saltos raros, loops, distancias, acciones presentes).# Tibia Bot Framework
+# Tibia Bot Framework
 
 Framework de bot en tiempo real para Tibia-like MMORPGs usando un pipeline threaded: **captura → visión → decisión → acción**.
 
@@ -39,6 +39,50 @@ La UI incluye pestañas:
 - **Control**: iniciar/parar
 - **Healing**: configuración básica (se aplica en tiempo real)
 - **Cavebot**: configuración básica (se aplica en tiempo real)
+
+## Replay (ROI + JSON) y export JSONL
+
+### Replay (snapshots)
+- Actívalo en la UI: **Configuración → Guardar replays (ROI+JSON)**.
+- Ajusta:
+  - `Replay interval (ms)`
+  - `Replay out_dir` (por defecto: `logs/replay`)
+- Botón **Snapshot ahora**: fuerza un snapshot en el próximo frame (aunque no toque por intervalo).
+- Botón **Abrir carpeta**: abre el directorio de replays en Windows.
+
+Archivos generados:
+- `logs/replay/<ts>.json`
+- `logs/replay/rois/<ts>_<roi_name>.png`
+
+### Pruning (opcional)
+Para evitar crecimiento infinito de `logs/replay/`, usa:
+
+```powershell
+$env:REPLAY_MAX_JSON='200'
+poetry run python -m src.main
+```
+
+Mantiene los N JSON más recientes y borra los PNG asociados al mismo timestamp.
+
+### Export de telemetría y eventos (JSONL)
+- Actívalo en la UI: **Configuración → Exportar telemetría JSONL**.
+- Ajusta:
+  - `Log interval (ms)`
+  - `Log out_file` (por defecto: `logs/telemetry.jsonl`)
+- Botones **Abrir archivo** / **Abrir carpeta** para acceder rápido.
+
+El archivo incluye:
+- `kind="telemetry"` (muestreo periódico)
+- `kind` tipo `event.*` cuando cambian target/recommendation/cavebot o cambian flags.
+
+### Inspeccionar un replay (montage)
+Genera una imagen con los crops en grilla y un header con telemetría:
+
+```bash
+poetry run python tools/replay_inspect.py logs/replay/<ts>.json
+```
+
+Salida por defecto: `logs/replay/<ts>.montage.png`
 
 ## Captura de pantalla (multi-monitor)
 

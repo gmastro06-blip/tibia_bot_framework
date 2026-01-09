@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 
@@ -41,6 +43,7 @@ class BotUI:
 
         # Estado general
         self.status_var = tk.StringVar(value="Detenido")
+        self.stale_var = tk.StringVar(value="-")
 
         # Configuración (en memoria por ahora)
         self.healing_enabled = tk.BooleanVar(value=False)
@@ -124,6 +127,9 @@ class BotUI:
 
         tk.Label(tab_control, text="Waypoint:").grid(row=7, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(row=7, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Estado stream:").grid(row=8, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.stale_var, width=40, anchor="w").grid(row=8, column=1, sticky="w", pady=(6, 0))
 
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
@@ -230,6 +236,27 @@ class BotUI:
             row=12, column=1, sticky="w", pady=(6, 0)
         )
 
+        def open_replay_dir() -> None:
+            try:
+                p = str(self.replay_out_dir.get()).strip() or "logs/replay"
+                os.makedirs(p, exist_ok=True)
+                os.startfile(os.path.abspath(p))
+            except Exception:
+                pass
+
+        def force_replay_snapshot() -> None:
+            try:
+                self._config.request_replay_snapshot()
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
+            row=12, column=2, sticky="w", padx=(8, 0)
+        )
+        tk.Button(tab_config, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
+            row=11, column=2, sticky="w", padx=(8, 0)
+        )
+
         tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
             row=13, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
@@ -241,6 +268,35 @@ class BotUI:
         tk.Label(tab_config, text="Log out_file").grid(row=15, column=0, sticky="w", pady=(6, 0))
         tk.Entry(tab_config, textvariable=self.log_out_file, width=34).grid(
             row=15, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def open_log_parent() -> None:
+            try:
+                p = str(self.log_out_file.get()).strip() or "logs/telemetry.jsonl"
+                parent = os.path.dirname(p) or "."
+                os.makedirs(parent, exist_ok=True)
+                os.startfile(os.path.abspath(parent))
+            except Exception:
+                pass
+
+        def open_log_file() -> None:
+            try:
+                p = str(self.log_out_file.get()).strip() or "logs/telemetry.jsonl"
+                parent = os.path.dirname(p) or "."
+                os.makedirs(parent, exist_ok=True)
+                # crear si no existe para que startfile funcione
+                if not os.path.exists(p):
+                    with open(p, "a", encoding="utf-8"):
+                        pass
+                os.startfile(os.path.abspath(p))
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_log_parent).grid(
+            row=15, column=2, sticky="w", padx=(8, 0)
+        )
+        tk.Button(tab_config, text="Abrir archivo", width=12, command=open_log_file).grid(
+            row=14, column=2, sticky="w", padx=(8, 0)
         )
 
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
@@ -351,6 +407,16 @@ class BotUI:
                 self.cavebot_next_text.set(tel.cavebot_next or "-")
                 self.cavebot_wp_text.set(tel.cavebot_waypoint or "-")
                 self.cavebot_action_text.set(tel.cavebot_action or "-")
+
+                now = time.time()
+                if tel.ts and tel.ts > 0:
+                    age = max(0.0, now - float(tel.ts))
+                    if age >= 2.0:
+                        self.stale_var.set(f"stale {age:.1f}s")
+                    else:
+                        self.stale_var.set("OK")
+                else:
+                    self.stale_var.set("-")
             except Exception:
                 pass
             self.root.after(250, poll_telemetry)
