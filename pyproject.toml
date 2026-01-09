@@ -52,3 +52,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.mypy]
 disable_error_code = ["misc"]
+
+[tool.pytest.ini_options]
+markers = [
+	"ui: tests que requieren UI/display (Tkinter)",
+	"slow: tests lentos o de integración",
+]

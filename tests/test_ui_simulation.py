@@ -6,6 +6,9 @@ import types
 import pytest
 
 
+pytestmark = pytest.mark.ui
+
+
 def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
     # Tkinter puede no estar disponible en algunos entornos headless; en ese caso skip.
     try:
