@@ -84,6 +84,17 @@ poetry run python tools/replay_inspect.py logs/replay/<ts>.json
 
 Salida por defecto: `logs/replay/<ts>.montage.png`
 
+## Smoke test: HP/MP real + estados simulados
+
+Si quieres validar rápido que el OCR/barras leen HP/MP en vivo, pero mantener el resto simulado:
+
+```powershell
+$env:FORCE_MONITOR='2'
+poetry run python tools/smoke_live_hpmp.py --seconds 20 --fps 10 --paralyzed --utamo
+```
+
+Esto imprime HP/MP reales y flags simulados (paralyzed/haste/utamo/hungry) sin ejecutar inputs.
+
 ## Captura de pantalla (multi-monitor)
 
 La captura usa `MSS` como fallback robusto y soporta múltiples monitores.
@@ -108,6 +119,43 @@ poetry run python -m src.main
 
 - `CAPTURE_VERBOSE=1`: logs detallados de captura
 - `OCR_DEBUG=1` o `BOT_DEBUG=1`: logs detallados de OCR (por defecto el OCR es silencioso para no spamear consola)
+
+## Performance tuning
+
+Variables de entorno útiles para balancear (A) FPS, (B) latencia/jitter, (C) CPU/GPU:
+
+- `CAPTURE_FPS` (default 10): FPS objetivo de captura.
+- `OCR_MIN_INTERVAL_S` (default 0.0): throttling del OCR (0 = OCR en cada ciclo de visión).
+- `ROBOFLOW_MIN_INTERVAL_S` (default 0.5): throttling de detección de criaturas.
+- `ROBOFLOW_HPMP_MIN_INTERVAL_S` (default 0.0): throttling de detección de barras HP/MP por Roboflow.
+
+Ejemplo (reduce CPU/GPU manteniendo el bot usable):
+
+```powershell
+$env:CAPTURE_FPS='20'
+$env:OCR_MIN_INTERVAL_S='0.25'
+$env:ROBOFLOW_MIN_INTERVAL_S='0.5'
+$env:ROBOFLOW_HPMP_MIN_INTERVAL_S='0.2'
+poetry run python -m src.main
+```
+
+Preset recomendado (i9 + RTX 4070, 2×1080p, Tibia en monitor 2, OBS en monitor 1):
+
+```powershell
+$env:FORCE_MONITOR='2'
+$env:CAPTURE_FPS='60'
+$env:OCR_MIN_INTERVAL_S='0.10'
+$env:ROBOFLOW_MIN_INTERVAL_S='0.20'
+$env:ROBOFLOW_HPMP_MIN_INTERVAL_S='0.10'
+$env:BOT_PROFILE='1'
+poetry run python -m src.main
+```
+
+Cuando confirmes que va bien, apaga el profiling:
+
+```powershell
+Remove-Item Env:BOT_PROFILE -ErrorAction SilentlyContinue
+```
 
 ### Diagnóstico: capturar todos los monitores
 

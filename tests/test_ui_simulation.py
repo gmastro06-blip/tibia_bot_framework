@@ -9,7 +9,7 @@ import pytest
 def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
     # Tkinter puede no estar disponible en algunos entornos headless; en ese caso skip.
     try:
-        import tkinter  # noqa: F401
+        import tkinter as tk
     except Exception as e:
         pytest.skip(f"Tkinter no disponible: {e}")
 
@@ -29,9 +29,8 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
     assistant_calls: list[dict[str, object]] = []
     replay_calls: list[dict[str, object]] = []
     logging_calls: list[dict[str, object]] = []
-    OriginalRuntimeConfig = rc.RuntimeConfig
 
-    class SpyRuntimeConfig(OriginalRuntimeConfig):
+    class SpyRuntimeConfig(rc.RuntimeConfig):
         def update_simulation(self, **kwargs):  # type: ignore[override]
             calls.append(dict(kwargs))
             return super().update_simulation(**kwargs)
@@ -52,13 +51,28 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
 
     import run_bot_ui
 
-    ui = run_bot_ui.BotUI()
+    try:
+        ui = run_bot_ui.BotUI()
+    except (SystemExit, tk.TclError) as e:
+        # En entornos headless, Tk puede importar pero fallar al crear la ventana.
+        pytest.skip(f"Tk no disponible/usable en este entorno: {e}")
+
+    def _flush_ui() -> None:
+        # Asegura que callbacks de trace_add y tareas pendientes se ejecuten.
+        try:
+            ui.root.update_idletasks()
+            ui.root.update()
+        except Exception:
+            pass
+
     try:
         # Minimizar UI real (no abrir ventana visible)
         try:
             ui.root.withdraw()
         except Exception:
             pass
+
+        _flush_ui()
 
         # Estado inicial ya llama sync_simulation()
         assert calls, "Se esperaba al menos una llamada inicial a update_simulation()"
@@ -70,6 +84,8 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
         ui.sim_utamo_active.set(True)
         ui.sim_hungry.set(True)
 
+        _flush_ui()
+
         sim = ui._config.simulation_snapshot()
         assert sim.enabled is True
         assert sim.paralyzed is True
@@ -79,6 +95,7 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
 
         # Deshabilitar simulación debe actualizar enabled.
         ui.sim_enabled.set(False)
+        _flush_ui()
         sim2 = ui._config.simulation_snapshot()
         assert sim2.enabled is False
 
@@ -91,6 +108,8 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
         ui.asst_enabled.set(True)
         ui.asst_confirm.set(True)
         ui.asst_sound.set(False)
+
+        _flush_ui()
 
         a = ui._config.assistant_snapshot()
         assert a.enabled is True
@@ -111,6 +130,8 @@ def test_ui_configuration_tab_calls_update_simulation(monkeypatch) -> None:
         ui.log_enabled.set(True)
         ui.log_interval_ms.set(500)
         ui.log_out_file.set("logs/telemetry_test.jsonl")
+
+        _flush_ui()
 
         rep = ui._config.replay_snapshot()
         assert rep.enabled is True

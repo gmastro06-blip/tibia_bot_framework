@@ -25,6 +25,7 @@ from navigation.step_navigator import StepNavigator
 
 from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names
 from telemetry.jsonl_logger import JsonlLogger
+from telemetry.jsonl_writer import JsonlWriter
 
 
 
@@ -109,6 +110,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     frame_queue: Queue = Queue(maxsize=5)  # Capture → Vision
     gs_queue: Queue = Queue(maxsize=5)     # Vision → Decision
 
+    def _put_drop_oldest(q: Queue, item) -> None:
+        """Put non-blocking; if full, drop one oldest and try again."""
+        try:
+            q.put_nowait(item)
+            return
+        except Exception:
+            pass
+        try:
+            q.get_nowait()
+        except Exception:
+            return
+        try:
+            q.put_nowait(item)
+        except Exception:
+            pass
+
     # Inicializar componentes
     # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
     # si ese monitor falla, DXGICapture captura buscando en todos los monitores.
@@ -128,6 +145,48 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     replay = ReplayRecorder()
     jsonl = JsonlLogger()
+    jsonl_writer = JsonlWriter()
+
+    replay_write_q: Queue = Queue(maxsize=10)
+    jsonl_write_q: Queue = Queue(maxsize=100)
+
+    def writer_thread() -> None:
+        # Thread dedicado a I/O (evita jitter en visión/decisión)
+        while not stop_event.is_set():
+            did = False
+            try:
+                kind, payload = replay_write_q.get(timeout=0.05)
+                did = True
+                if kind == "replay":
+                    out_dir, crops, data = payload
+                    try:
+                        replay.record_crops(out_dir=out_dir, crops=crops, payload=data)
+                    except Exception:
+                        pass
+            except Empty:
+                pass
+            except Exception:
+                pass
+
+            try:
+                while True:
+                    kind, payload = jsonl_write_q.get_nowait()
+                    did = True
+                    if kind == "jsonl":
+                        out_file, event = payload
+                        try:
+                            jsonl_writer.append(out_file=out_file, event=event)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            if not did:
+                # Pequeño respiro
+                try:
+                    time.sleep(0.01)
+                except Exception:
+                    pass
 
     # Cargar ROIs (se inicializa con el primer frame real para evitar desalineaciones)
     rois = None
@@ -136,8 +195,25 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     # Thread de captura
     def capture_thread():
         print("📸 Thread de captura iniciado")
+        profile = os.getenv("BOT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
+        prof_every_s = 5.0
+        last_prof = time.time()
+        n_cap = 0
+        cap_ms_sum = 0.0
+        fps_raw = os.getenv("CAPTURE_FPS", "").strip()
+        target_fps = 10.0
+        if fps_raw:
+            try:
+                target_fps = max(1.0, float(fps_raw))
+            except Exception:
+                target_fps = 10.0
+        target_period = 1.0 / max(1.0, target_fps)
         while not stop_event.is_set():
+            t0 = time.time()
             frame = capture.capture()
+            if profile:
+                cap_ms_sum += (time.time() - t0) * 1000.0
+                n_cap += 1
             if frame is not None:
                 nonlocal rois, resolution
                 if rois is None or resolution is None:
@@ -145,23 +221,49 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     rois_loaded, source_resolution = load_roi_config(resolution)
                     rois_loaded["_source_resolution"] = source_resolution
                     rois = rois_loaded
-                try:
-                    frame_queue.put_nowait(frame)
-                except Exception:
-                    pass  # Drop old frames
-            time.sleep(0.1)  # ~10 FPS
+                _put_drop_oldest(frame_queue, frame)
+
+            # Sleep adaptativo (mantiene FPS objetivo sin spin)
+            elapsed = time.time() - t0
+            to_sleep = max(0.0, target_period - elapsed)
+            if to_sleep:
+                time.sleep(to_sleep)
+
+            if profile:
+                now = time.time()
+                if now - last_prof >= prof_every_s and n_cap:
+                    avg = cap_ms_sum / max(1, n_cap)
+                    print(f"⏱️  capture avg {avg:.1f}ms ({n_cap} frames/{prof_every_s:.0f}s)")
+                    last_prof = now
+                    n_cap = 0
+                    cap_ms_sum = 0.0
 
     # Thread de visión
     def vision_thread():
         print("👁️  Thread de visión iniciado")
+        profile = os.getenv("BOT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
+        prof_every_s = 5.0
+        last_prof = time.time()
+        n_vis = 0
+        vis_ms_sum = 0.0
         last_force_seen = 0
         while not stop_event.is_set():
             try:
                 frame = frame_queue.get(timeout=1)
+                # Drena frames viejos para procesar el más reciente (menor latencia)
+                try:
+                    while True:
+                        frame = frame_queue.get_nowait()
+                except Exception:
+                    pass
                 if rois is None or resolution is None:
                     continue
 
+                t0 = time.time()
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
+                if profile:
+                    vis_ms_sum += (time.time() - t0) * 1000.0
+                    n_vis += 1
 
                 # Replay (ROI crops + JSON) - opt-in via UI config.
                 if runtime_config is not None:
@@ -215,20 +317,34 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 },
                                 "forced": bool(force),
                             }
-                            replay.record_crops(out_dir=rep_cfg.out_dir, crops=crops, payload=payload)
+                            _put_drop_oldest(replay_write_q, ("replay", (rep_cfg.out_dir, crops, payload)))
                     except Exception:
                         pass
 
                 try:
-                    gs_queue.put_nowait(gamestate)
+                    _put_drop_oldest(gs_queue, gamestate)
                 except Exception:
                     pass
+
+                if profile:
+                    now = time.time()
+                    if now - last_prof >= prof_every_s and n_vis:
+                        avg = vis_ms_sum / max(1, n_vis)
+                        print(f"⏱️  vision avg {avg:.1f}ms ({n_vis} updates/{prof_every_s:.0f}s)")
+                        last_prof = now
+                        n_vis = 0
+                        vis_ms_sum = 0.0
             except Exception:
                 continue
 
     # Thread de decisión (simplificado)
     def decision_thread():
         print("🧠 Thread de decisión iniciado")
+        profile = os.getenv("BOT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
+        prof_every_s = 5.0
+        last_prof = time.time()
+        n_dec = 0
+        dec_ms_sum = 0.0
         last_healing_enabled: bool | None = None
         last_cavebot_enabled: bool | None = None
         selector = TargetSelector()
@@ -248,9 +364,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_action = ""
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
         while not stop_event.is_set():
+            loop_t0 = time.time()
             gamestate = None
             try:
                 gamestate = gs_queue.get(timeout=1)
+                # Drena estados viejos para actuar sobre el más reciente
+                try:
+                    while True:
+                        gamestate = gs_queue.get_nowait()
+                except Exception:
+                    pass
             except Empty:
                 gamestate = None
             except Exception:
@@ -510,7 +633,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         def emit(kind: str, data: dict) -> None:
                             try:
-                                jsonl.append(out_file=log_cfg.out_file, event={"kind": kind, **data})
+                                _put_drop_oldest(jsonl_write_q, ("jsonl", (log_cfg.out_file, {"kind": kind, **data})))
                             except Exception:
                                 pass
 
@@ -552,29 +675,35 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     log_cfg = runtime_config.logging_snapshot()
                     if jsonl.should_log(enabled=log_cfg.enabled, interval_ms=log_cfg.interval_ms):
                         tel = runtime_config.telemetry_snapshot()
-                        jsonl.append(
-                            out_file=log_cfg.out_file,
-                            event={
-                                "kind": "telemetry",
-                                "hp_current": tel.hp_current,
-                                "hp_max": tel.hp_max,
-                                "hp_pct": tel.hp_pct,
-                                "mp_current": tel.mp_current,
-                                "mp_max": tel.mp_max,
-                                "mp_pct": tel.mp_pct,
-                                "low_hp": tel.low_hp,
-                                "low_mp": tel.low_mp,
-                                "paralyzed": tel.paralyzed,
-                                "haste_active": tel.haste_active,
-                                "utamo_active": tel.utamo_active,
-                                "hungry": tel.hungry,
-                                "target": tel.target,
-                                "recommendation": tel.recommendation,
-                                "cavebot_next": tel.cavebot_next,
-                                "cavebot_waypoint": tel.cavebot_waypoint,
-                                "cavebot_action": tel.cavebot_action,
-                                "note": tel.note,
-                            },
+                        _put_drop_oldest(
+                            jsonl_write_q,
+                            (
+                                "jsonl",
+                                (
+                                    log_cfg.out_file,
+                                    {
+                                        "kind": "telemetry",
+                                        "hp_current": tel.hp_current,
+                                        "hp_max": tel.hp_max,
+                                        "hp_pct": tel.hp_pct,
+                                        "mp_current": tel.mp_current,
+                                        "mp_max": tel.mp_max,
+                                        "mp_pct": tel.mp_pct,
+                                        "low_hp": tel.low_hp,
+                                        "low_mp": tel.low_mp,
+                                        "paralyzed": tel.paralyzed,
+                                        "haste_active": tel.haste_active,
+                                        "utamo_active": tel.utamo_active,
+                                        "hungry": tel.hungry,
+                                        "target": tel.target,
+                                        "recommendation": tel.recommendation,
+                                        "cavebot_next": tel.cavebot_next,
+                                        "cavebot_waypoint": tel.cavebot_waypoint,
+                                        "cavebot_action": tel.cavebot_action,
+                                        "note": tel.note,
+                                    },
+                                ),
+                            ),
                         )
                 except Exception:
                     pass
@@ -594,8 +723,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Aquí iría el BehaviorTree.tick()
             # Por ahora, solo log
 
+            if profile:
+                dec_ms_sum += (time.time() - loop_t0) * 1000.0
+                n_dec += 1
+                now = time.time()
+                if now - last_prof >= prof_every_s and n_dec:
+                    avg = dec_ms_sum / max(1, n_dec)
+                    print(f"⏱️  decision avg {avg:.1f}ms ({n_dec} loops/{prof_every_s:.0f}s)")
+                    last_prof = now
+                    n_dec = 0
+                    dec_ms_sum = 0.0
+
     # Iniciar threads
     threads = [
+        threading.Thread(target=writer_thread, daemon=True),
         threading.Thread(target=capture_thread, daemon=True),
         threading.Thread(target=vision_thread, daemon=True),
         threading.Thread(target=decision_thread, daemon=True)

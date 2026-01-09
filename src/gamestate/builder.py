@@ -32,12 +32,24 @@ class GameStateBuilder:
         self._rf_last_ts = 0.0
         self._rf_min_interval_s = float(os.getenv("ROBOFLOW_MIN_INTERVAL_S", "0.5"))
 
+        # Throttling opcional (por defecto 0.0 = sin throttle)
+        self._rf_hpmp_last_ts = 0.0
+        self._rf_hpmp_min_interval_s = float(os.getenv("ROBOFLOW_HPMP_MIN_INTERVAL_S", "0.0"))
+        self._ocr_last_ts = 0.0
+        self._ocr_min_interval_s = float(os.getenv("OCR_MIN_INTERVAL_S", "0.0"))
+
+        # Caché de últimos valores OCR (para cuando OCR está throttled)
+        self._last_hp_current: Optional[int] = None
+        self._last_hp_max: Optional[int] = None
+        self._last_mp_current: Optional[int] = None
+        self._last_mp_max: Optional[int] = None
+
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
         rf_boxes: Optional[List[Dict[str, Any]]] = None
         rf_hpmp_boxes: Optional[List[Dict[str, Any]]] = None
+        now = time.time()
         if self._rf is not None:
-            now = time.time()
             if now - self._rf_last_ts >= self._rf_min_interval_s:
                 try:
                     pred = self._rf.predict(frame)
@@ -48,19 +60,43 @@ class GameStateBuilder:
 
         # Separate inference for HP/MP
         if self._rf_hpmp is not None:
-            try:
-                pred_hpmp = self._rf_hpmp.predict(frame)
-                rf_hpmp_boxes = self._rf_hpmp.extract_boxes(pred_hpmp)
-            except Exception:
-                rf_hpmp_boxes = None
+            if now - self._rf_hpmp_last_ts >= self._rf_hpmp_min_interval_s:
+                try:
+                    pred_hpmp = self._rf_hpmp.predict(frame)
+                    rf_hpmp_boxes = self._rf_hpmp.extract_boxes(pred_hpmp)
+                except Exception:
+                    rf_hpmp_boxes = None
+                self._rf_hpmp_last_ts = now
 
-        # (A) Extraer HP/MP usando OCR (y si hay Roboflow boxes, usarlas como override)
-        hp_current, hp_max, mp_current, mp_max = self.ocr_processor.extract_hp_mp_full(
-            frame,
-            rois,
-            resolution,
-            rf_boxes=rf_boxes,
-        )
+        # (A) Extraer HP/MP usando OCR (throttled opcionalmente)
+        hp_current: Optional[int] = None
+        hp_max: Optional[int] = None
+        mp_current: Optional[int] = None
+        mp_max: Optional[int] = None
+
+        do_ocr = (now - self._ocr_last_ts) >= self._ocr_min_interval_s
+        if do_ocr:
+            try:
+                hp_current, hp_max, mp_current, mp_max = self.ocr_processor.extract_hp_mp_full(
+                    frame,
+                    rois,
+                    resolution,
+                    rf_boxes=rf_boxes,
+                )
+            except Exception:
+                hp_current, hp_max, mp_current, mp_max = None, None, None, None
+
+            self._ocr_last_ts = now
+            self._last_hp_current = hp_current
+            self._last_hp_max = hp_max
+            self._last_mp_current = mp_current
+            self._last_mp_max = mp_max
+        else:
+            # Reusar lo último conocido
+            hp_current = self._last_hp_current
+            hp_max = self._last_hp_max
+            mp_current = self._last_mp_current
+            mp_max = self._last_mp_max
 
         # Defaults de max (útiles si solo usamos barras)
         if hp_max is None:

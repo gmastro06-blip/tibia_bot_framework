@@ -22,6 +22,20 @@ class DXGICapture:
         self.dropped = 0
         self._verbose = os.getenv("CAPTURE_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
         self._last_hwnd_state: Optional[bool] = None
+        self._last_ok_log_ts = 0.0
+
+    def _log_ok(self, msg: str) -> None:
+        if not self._verbose:
+            return
+        now = time.time()
+        # rate-limit para evitar spam
+        if now - self._last_ok_log_ts < 2.0:
+            return
+        self._last_ok_log_ts = now
+        try:
+            print(msg)
+        except Exception:
+            pass
 
     def find_window(self) -> int:
         def enum_handler(hwnd, ctx):
@@ -159,14 +173,18 @@ class DXGICapture:
                 # Verificar que la captura es válida
                 if self.validate_capture(frame):
                     monitor_info = f"{monitor.get('width', 'unknown')}x{monitor.get('height', 'unknown')}"
-                    print(f"Captura de monitor específico exitosa en monitor {monitor_index} ({monitor_info}): {frame.shape}")
+                    self._log_ok(
+                        f"Captura de monitor específico exitosa en monitor {monitor_index} ({monitor_info}): {frame.shape}"
+                    )
                     return frame
                 else:
-                    print(f"Monitor {monitor_index} no válido")
+                    if self._verbose:
+                        print(f"Monitor {monitor_index} no válido")
                     return None
 
         except Exception as e:
-            print(f"Error capturando monitor {monitor_index}: {e}")
+            if self._verbose:
+                print(f"Error capturando monitor {monitor_index}: {e}")
             return None
 
     def find_most_active_monitor(self, sct) -> Optional[dict]:
