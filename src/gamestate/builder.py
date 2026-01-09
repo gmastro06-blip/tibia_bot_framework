@@ -7,6 +7,7 @@ from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio
 from vision.obstacles import compute_viewport_tile_offsets
+from vision.presence import is_hungry_hsv, is_nonempty_icon
 
 @dataclass
 class GameState:
@@ -15,6 +16,10 @@ class GameState:
     hp_max: Optional[int] = None
     mp_current: Optional[int] = None
     mp_max: Optional[int] = None
+    cap_current: Optional[int] = None
+    ring_equipped: Optional[bool] = None
+    amulet_equipped: Optional[bool] = None
+    hungry: Optional[bool] = None
     # Señales derivadas (útiles para thresholds/decisiones, aunque no haya OCR perfecto)
     hp_pct: Optional[float] = None
     mp_pct: Optional[float] = None
@@ -23,7 +28,10 @@ class GameState:
 
     def __str__(self) -> str:
         rf_n = len(self.roboflow_boxes) if self.roboflow_boxes else 0
-        return f"HP: {self.hp_current}/{self.hp_max}, MP: {self.mp_current}/{self.mp_max}, RF: {rf_n}"
+        return (
+            f"HP: {self.hp_current}/{self.hp_max}, MP: {self.mp_current}/{self.mp_max}, "
+            f"Cap: {self.cap_current}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, hungry: {self.hungry}, RF: {rf_n}"
+        )
 
 class GameStateBuilder:
     def __init__(self):
@@ -45,6 +53,7 @@ class GameStateBuilder:
         self._last_hp_max: Optional[int] = None
         self._last_mp_current: Optional[int] = None
         self._last_mp_max: Optional[int] = None
+        self._last_cap_current: Optional[int] = None
 
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
@@ -76,6 +85,7 @@ class GameStateBuilder:
         hp_max: Optional[int] = None
         mp_current: Optional[int] = None
         mp_max: Optional[int] = None
+        cap_current: Optional[int] = None
 
         do_ocr = (now - self._ocr_last_ts) >= self._ocr_min_interval_s
         if do_ocr:
@@ -89,17 +99,24 @@ class GameStateBuilder:
             except Exception:
                 hp_current, hp_max, mp_current, mp_max = None, None, None, None
 
+            try:
+                cap_current = self.ocr_processor.extract_capacity(frame, rois, resolution)
+            except Exception:
+                cap_current = None
+
             self._ocr_last_ts = now
             self._last_hp_current = hp_current
             self._last_hp_max = hp_max
             self._last_mp_current = mp_current
             self._last_mp_max = mp_max
+            self._last_cap_current = cap_current
         else:
             # Reusar lo último conocido
             hp_current = self._last_hp_current
             hp_max = self._last_hp_max
             mp_current = self._last_mp_current
             mp_max = self._last_mp_max
+            cap_current = self._last_cap_current
 
         # Defaults de max (útiles si solo usamos barras)
         if hp_max is None:
@@ -163,11 +180,38 @@ class GameStateBuilder:
             hp_max=hp_max,
             mp_current=mp_current,
             mp_max=mp_max,
+            cap_current=cap_current,
             hp_pct=hp_pct,
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
             viewport_tile_offsets=None,
         )
+
+        # (C) Equipment + status icons (best-effort, depends on calibrated ROIs)
+        try:
+            # Prefer dedicated ROIs if present.
+            if isinstance(rois, dict):
+                if rois.get("ring_slot") is not None:
+                    rx, ry, rw, rh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["ring_slot"])
+                    gamestate.ring_equipped = bool(is_nonempty_icon(frame[ry : ry + rh, rx : rx + rw]))
+                if rois.get("amulet_slot") is not None:
+                    ax, ay, aw, ah = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["amulet_slot"])
+                    gamestate.amulet_equipped = bool(is_nonempty_icon(frame[ay : ay + ah, ax : ax + aw]))
+
+                # Hunger icon: prefer tight ROI if available; else fall back to HSV heuristic on states_icons.
+                if rois.get("hungry_icon") is not None:
+                    hx, hy, hw, hh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["hungry_icon"])
+                    gamestate.hungry = bool(is_nonempty_icon(frame[hy : hy + hh, hx : hx + hw]))
+                elif rois.get("states_icons") is not None:
+                    sx, sy, sw, sh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["states_icons"])
+                    crop = frame[sy : sy + sh, sx : sx + sw]
+                    # Tunables via env vars
+                    min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.012"))
+                    low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
+                    high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
+                    gamestate.hungry = bool(is_hungry_hsv(crop, min_pct=min_pct, low_h=low_h, high_h=high_h))
+        except Exception:
+            pass
 
         # Derivar obstáculos dinámicos (tile offsets) desde detecciones Roboflow.
         # Esto es útil para pathfinding local con replan.

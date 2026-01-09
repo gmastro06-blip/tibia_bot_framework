@@ -68,9 +68,13 @@ class TelemetrySnapshot:
     mp_current: int | None = None
     mp_max: int | None = None
     mp_pct: float | None = None
+    cap_current: int | None = None
+    ring_equipped: bool | None = None
+    amulet_equipped: bool | None = None
     # Señales/estados
     low_hp: bool | None = None
     low_mp: bool | None = None
+    low_cap: bool | None = None
     paralyzed: bool | None = None
     haste_active: bool | None = None
     utamo_active: bool | None = None
@@ -135,8 +139,12 @@ class RuntimeConfig:
                 mp_current=self.telemetry.mp_current,
                 mp_max=self.telemetry.mp_max,
                 mp_pct=self.telemetry.mp_pct,
+                cap_current=self.telemetry.cap_current,
+                ring_equipped=self.telemetry.ring_equipped,
+                amulet_equipped=self.telemetry.amulet_equipped,
                 low_hp=self.telemetry.low_hp,
                 low_mp=self.telemetry.low_mp,
+                low_cap=self.telemetry.low_cap,
                 paralyzed=self.telemetry.paralyzed,
                 haste_active=self.telemetry.haste_active,
                 utamo_active=self.telemetry.utamo_active,
@@ -295,8 +303,12 @@ class RuntimeConfig:
         mp_current: int | None = None,
         mp_max: int | None = None,
         mp_pct: float | None = None,
+        cap_current: int | None = None,
+        ring_equipped: bool | None = None,
+        amulet_equipped: bool | None = None,
         low_hp: bool | None = None,
         low_mp: bool | None = None,
+        low_cap: bool | None = None,
         paralyzed: bool | None = None,
         haste_active: bool | None = None,
         utamo_active: bool | None = None,
@@ -324,10 +336,18 @@ class RuntimeConfig:
                 self.telemetry.mp_max = int(mp_max)
             if mp_pct is not None:
                 self.telemetry.mp_pct = float(mp_pct)
+            if cap_current is not None:
+                self.telemetry.cap_current = int(cap_current)
+            if ring_equipped is not None:
+                self.telemetry.ring_equipped = bool(ring_equipped)
+            if amulet_equipped is not None:
+                self.telemetry.amulet_equipped = bool(amulet_equipped)
             if low_hp is not None:
                 self.telemetry.low_hp = bool(low_hp)
             if low_mp is not None:
                 self.telemetry.low_mp = bool(low_mp)
+            if low_cap is not None:
+                self.telemetry.low_cap = bool(low_cap)
             if paralyzed is not None:
                 self.telemetry.paralyzed = bool(paralyzed)
             if haste_active is not None:

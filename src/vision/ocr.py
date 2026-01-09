@@ -99,6 +99,151 @@ class OCRProcessor:
             print(f"Error en OCR: {e}")
             return ""
 
+    def _readtext_strings(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> List[str]:
+        """Devuelve una lista de strings OCR (sin limpiar a solo dígitos)."""
+        try:
+            processed = self.preprocess_image(image)
+            results = self.reader.readtext(processed, detail=0, allowlist=allowlist)
+            out: List[str] = []
+            for r in results or []:
+                try:
+                    s = str(r)
+                    if s:
+                        out.append(s)
+                except Exception:
+                    continue
+            if self._debug and out:
+                print(f"OCR raw strings: {out}")
+            return out
+        except Exception:
+            return []
+
+    @staticmethod
+    def _parse_capacity_from_text(text: str) -> Optional[int]:
+        if not text:
+            return None
+        try:
+            m = re.search(r"\bcap\b\s*[:\-]?\s*(\d{1,6})", text, flags=re.IGNORECASE)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+        return None
+
+    def extract_capacity(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Optional[int]:
+        """Extrae capacidad (cap) vía OCR.
+
+        Estrategia:
+        1) Si existe ROI `cap_ocr`, OCR solo dígitos (más robusto).
+        2) Si no, intentar parsear "Cap: 123" desde `skills_panel` (OCR raw).
+        """
+
+        def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
+            return self._roi_to_px(frame, rois, resolution, roi_def)
+
+        # (1) ROI específico de cap (recomendado)
+        try:
+            if hasattr(rois, "get") and rois.get("cap_ocr") is not None:
+                x, y, w, h = normalize_to_px(cast(Dict[str, Any], rois["cap_ocr"]))
+                crop = frame[y : y + h, x : x + w]
+                # Try several OCR variants; CAP digits can be tiny.
+                candidates: List[str] = []
+
+                try:
+                    candidates.extend(self._readtext_strings(crop, allowlist="0123456789"))
+                except Exception:
+                    pass
+
+                try:
+                    # Sometimes allowing all chars improves digit detection.
+                    candidates.extend(self._readtext_strings(crop, allowlist=None))
+                except Exception:
+                    pass
+
+                try:
+                    processed = self.preprocess_image(crop)
+                    inv = cv2.bitwise_not(processed)
+                    extra = self.reader.readtext(inv, detail=0, allowlist="0123456789")
+                    for r in extra or []:
+                        s = str(r)
+                        if s:
+                            candidates.append(s)
+                except Exception:
+                    pass
+
+                joined = " ".join(candidates)
+                nums = re.findall(r"\d{1,6}", joined)
+                if nums:
+                    # If OCR returns multiple, use the max (usually the only one).
+                    return int(max(nums, key=lambda s: int(s)))
+        except Exception:
+            pass
+
+        # (2) Parse dentro del skills_panel
+        try:
+            if hasattr(rois, "get") and rois.get("skills_panel") is not None:
+                x, y, w, h = normalize_to_px(cast(Dict[str, Any], rois["skills_panel"]))
+                crop = frame[y : y + h, x : x + w]
+                texts = self._readtext_strings(crop, allowlist=None)
+                joined = " ".join(texts)
+                cap = self._parse_capacity_from_text(joined)
+                if cap is not None:
+                    return cap
+
+                # BBox-based fallback: find the cap/capacity label and read the number on the same row.
+                try:
+                    if re.search(r"\bcap\b|capac", joined, flags=re.IGNORECASE):
+                        processed = self.preprocess_image(crop)
+                        # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
+                        results = self.reader.readtext(processed, detail=1, allowlist=None)
+                        entries: list[tuple[str, float, float, float, float, float]] = []
+                        for bbox, text, conf in results or []:
+                            try:
+                                s = str(text or "")
+                                if not s:
+                                    continue
+                                xs = [p[0] for p in bbox]
+                                ys = [p[1] for p in bbox]
+                                x0, y0, x1, y1 = float(min(xs)), float(min(ys)), float(max(xs)), float(max(ys))
+                                entries.append((s, float(conf or 0.0), x0, y0, x1, y1))
+                            except Exception:
+                                continue
+
+                        cap_labels = [e for e in entries if "cap" in e[0].lower() or "capac" in e[0].lower()]
+                        if cap_labels:
+                            cap_label = max(cap_labels, key=lambda e: e[1])
+                            _s, _c, lx0, ly0, lx1, ly1 = cap_label
+                            ly_mid = (ly0 + ly1) / 2.0
+
+                            num_pairs: list[tuple[int, float]] = []
+                            for s, conf, x0, y0, x1, y1 in entries:
+                                if x0 <= lx1:
+                                    continue
+                                y_mid = (y0 + y1) / 2.0
+                                if abs(y_mid - ly_mid) > max(10.0, (ly1 - ly0) * 1.5):
+                                    continue
+                                found = [int(n) for n in re.findall(r"\d{1,6}", s)]
+                                for v in found:
+                                    num_pairs.append((v, conf))
+
+                            if num_pairs:
+                                # Prefer higher confidence; if ties, larger value.
+                                num_pairs.sort(key=lambda t: (t[1], t[0]), reverse=True)
+                                return int(num_pairs[0][0])
+
+                        # Last resort: digit-only OCR on full panel and pick a reasonable maximum.
+                        digit_texts = self._readtext_strings(crop, allowlist="0123456789")
+                        djoined = " ".join(digit_texts)
+                        vals = [int(n) for n in re.findall(r"\d{1,6}", djoined)]
+                        if vals:
+                            return int(max(vals))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return None
+
     def extract_hp_mp(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Tuple[Optional[int], Optional[int]]:
         """Compat: devuelve solo HP/MP actuales."""
         hp_cur, _hp_max, mp_cur, _mp_max = self.extract_hp_mp_full(frame, rois, resolution)

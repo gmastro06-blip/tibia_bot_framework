@@ -82,6 +82,12 @@ def evaluate_signals(
     utamo_active: bool | None = None
     hungry: bool | None = None
 
+    # If vision provided a real hungry flag, use it (unless simulation overrides).
+    try:
+        hungry = getattr(gamestate, "hungry", None)
+    except Exception:
+        hungry = None
+
     if simulation_cfg is not None and bool(getattr(simulation_cfg, "enabled", False)):
         paralyzed = bool(getattr(simulation_cfg, "paralyzed", False))
         haste_active = bool(getattr(simulation_cfg, "haste_active", False))

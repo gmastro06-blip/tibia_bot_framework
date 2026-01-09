@@ -77,6 +77,7 @@ class BotUI:
         # Telemetría (solo lectura, viene del loop)
         self.hp_text = tk.StringVar(value="?")
         self.mp_text = tk.StringVar(value="?")
+        self.cap_text = tk.StringVar(value="?")
         self.signals_text = tk.StringVar(value="-")
         self.target_text = tk.StringVar(value="-")
         self.reco_text = tk.StringVar(value="-")
@@ -116,20 +117,23 @@ class BotUI:
         tk.Label(tab_control, text="MP:").grid(row=3, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.mp_text, width=22, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Señales:").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.signals_text, width=40, anchor="w").grid(row=4, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Cap:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.cap_text, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Target:").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.target_text, width=40, anchor="w").grid(row=5, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Señales:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.signals_text, width=40, anchor="w").grid(row=5, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Recomendación:").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.reco_text, width=40, anchor="w").grid(row=6, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Target:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.target_text, width=40, anchor="w").grid(row=6, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Waypoint:").grid(row=7, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(row=7, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Recomendación:").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.reco_text, width=40, anchor="w").grid(row=7, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Estado stream:").grid(row=8, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.stale_var, width=40, anchor="w").grid(row=8, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Waypoint:").grid(row=8, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(row=8, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Estado stream:").grid(row=9, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.stale_var, width=40, anchor="w").grid(row=9, column=1, sticky="w", pady=(6, 0))
 
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
@@ -372,6 +376,7 @@ class BotUI:
                 tel = self._config.telemetry_snapshot()
                 hp_str = "?"
                 mp_str = "?"
+                cap_str = "?"
                 if tel.hp_current is not None and tel.hp_max is not None:
                     if tel.hp_pct is not None:
                         hp_str = f"{tel.hp_current}/{tel.hp_max} ({tel.hp_pct:.1f}%)"
@@ -383,14 +388,24 @@ class BotUI:
                     else:
                         mp_str = f"{tel.mp_current}/{tel.mp_max}"
 
+                if tel.cap_current is not None:
+                    cap_str = f"{tel.cap_current}"
+
                 self.hp_text.set(hp_str)
                 self.mp_text.set(mp_str)
+                self.cap_text.set(cap_str)
 
                 parts = []
                 if tel.low_hp:
                     parts.append("low_hp")
                 if tel.low_mp:
                     parts.append("low_mp")
+                if tel.low_cap:
+                    parts.append("low_cap")
+                if getattr(tel, "ring_equipped", None) is True:
+                    parts.append("ring")
+                if getattr(tel, "amulet_equipped", None) is True:
+                    parts.append("amulet")
                 if tel.paralyzed:
                     parts.append("paralyzed")
                 if tel.haste_active:

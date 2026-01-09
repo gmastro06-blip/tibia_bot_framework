@@ -13,7 +13,7 @@ def main() -> None:
     from ultralytics import YOLO  # type: ignore[attr-defined]
 
     # Pick device automatically (cuda if available AND torchvision NMS works on CUDA).
-    device = "cpu"
+    device: str | int = "cpu"
     try:
         import torch
         if torch.cuda.is_available():

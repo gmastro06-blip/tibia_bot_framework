@@ -19,11 +19,14 @@ from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
 from decision.targeting import TargetSelector, format_target, Target
 from decision.signals import evaluate_signals
+from decision.scheduler import PeriodicTrigger
+from decision.waypoint_actions import build_requests_from_waypoint_action
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
 
 from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names
+from telemetry.overlay_export import OverlayExporter, overlay_config_from_env
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 
@@ -149,6 +152,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     gamestate_builder = GameStateBuilder()
 
     replay = ReplayRecorder()
+    overlay = OverlayExporter(overlay_config_from_env())
     jsonl = JsonlLogger()
     jsonl_writer = JsonlWriter()
 
@@ -303,6 +307,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     "mp_current": getattr(gamestate, "mp_current", None),
                                     "mp_max": getattr(gamestate, "mp_max", None),
                                     "mp_pct": getattr(gamestate, "mp_pct", None),
+                                    "cap_current": getattr(gamestate, "cap_current", None),
                                 },
                                 "telemetry": {
                                     "hp_pct": tel.hp_pct,
@@ -327,6 +332,38 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             _put_drop_oldest(replay_write_q, ("replay", (rep_cfg.out_dir, crops, payload)))
                     except Exception:
                         pass
+
+                # Debug overlay exporter (writes annotated frames) - opt-in via env.
+                try:
+                    viewport_rect = None
+                    try:
+                        if rois is not None and resolution is not None and "game_viewport" in rois:
+                            x, y, w, h = gamestate_builder.ocr_processor._roi_to_px(
+                                frame, rois, resolution, rois["game_viewport"]
+                            )
+                            viewport_rect = (int(x), int(y), int(w), int(h))
+                    except Exception:
+                        viewport_rect = None
+
+                    boxes = getattr(gamestate, "roboflow_boxes", None)
+                    blocked = getattr(gamestate, "viewport_tile_offsets", None)
+
+                    target_label = ""
+                    try:
+                        if runtime_config is not None:
+                            target_label = str(runtime_config.telemetry_snapshot().target or "")
+                    except Exception:
+                        target_label = ""
+
+                    overlay.maybe_export(
+                        frame,
+                        viewport_rect=viewport_rect,
+                        boxes=boxes,
+                        blocked_offsets=blocked,
+                        target_label=target_label,
+                    )
+                except Exception:
+                    pass
 
                 try:
                     _put_drop_oldest(gs_queue, gamestate)
@@ -358,6 +395,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_target: Target | None = None
         bot_debug = os.getenv("BOT_DEBUG", "").strip().lower() in {"1", "true", "yes"}
 
+        # Cap leave check (assistant recommendation).
+        cap_leave_enabled = os.getenv("CAP_LEAVE_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+        try:
+            cap_leave_threshold = int(float(os.getenv("CAP_LEAVE_THRESHOLD", "50").strip() or "50"))
+        except Exception:
+            cap_leave_threshold = 50
+
         navigator: Navigator | None = None
         step_navigator: StepNavigator | None = None
         navigator_route_path: str | None = None
@@ -382,6 +426,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             ActionRequest = None  # type: ignore[assignment]
             mock_driver = None
+
+        # Periodic maintenance (assistant mode) e.g. eat food.
+        try:
+            food_interval_s = float(os.getenv("ASSIST_EAT_FOOD_INTERVAL_S", "0").strip() or "0")
+        except Exception:
+            food_interval_s = 0.0
+        food_trigger = PeriodicTrigger(interval_s=max(0.0, food_interval_s))
         while not stop_event.is_set():
             loop_t0 = time.time()
             gamestate = None
@@ -435,6 +486,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 sig = None
 
+            cap_current = getattr(gamestate, "cap_current", None)
+            ring_equipped = getattr(gamestate, "ring_equipped", None)
+            amulet_equipped = getattr(gamestate, "amulet_equipped", None)
+            low_cap = None
+            try:
+                if cap_leave_enabled and cap_current is not None:
+                    low_cap = bool(int(cap_current) <= int(cap_leave_threshold))
+            except Exception:
+                low_cap = None
+
             # Targeting de criaturas (si hay detecciones Roboflow).
             # Por defecto solo loggea cuando cambia el target.
             target_str = ""
@@ -462,14 +523,46 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 if sig is not None and sig.mp_pct is not None:
                     mp_pct_str = f"{sig.mp_pct:.1f}%"
 
+                cap_str = "?"
+                try:
+                    if cap_current is not None:
+                        cap_str = str(int(cap_current))
+                except Exception:
+                    cap_str = "?"
+
+                extras: list[str] = []
+                try:
+                    if ring_equipped is not None:
+                        extras.append(f"Ring {'Y' if bool(ring_equipped) else 'N'}")
+                    if amulet_equipped is not None:
+                        extras.append(f"Amulet {'Y' if bool(amulet_equipped) else 'N'}")
+                    if sig is not None and getattr(sig, "hungry", None) is not None:
+                        extras.append(f"Hungry {'Y' if bool(sig.hungry) else 'N'}")
+                except Exception:
+                    extras = []
+                extra_str = (", " + ", ".join(extras)) if extras else ""
+
                 print(
                     f"🎮 Estado: HP {getattr(gamestate, 'hp_current', None)}/{getattr(gamestate, 'hp_max', None)} ({hp_pct_str}), "
-                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)} ({mp_pct_str})"
+                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)} ({mp_pct_str}), "
+                    f"Cap {cap_str}{extra_str}"
                 )
             except Exception:
+                extras: list[str] = []
+                try:
+                    if ring_equipped is not None:
+                        extras.append(f"Ring {'Y' if bool(ring_equipped) else 'N'}")
+                    if amulet_equipped is not None:
+                        extras.append(f"Amulet {'Y' if bool(amulet_equipped) else 'N'}")
+                    if sig is not None and getattr(sig, "hungry", None) is not None:
+                        extras.append(f"Hungry {'Y' if bool(sig.hungry) else 'N'}")
+                except Exception:
+                    extras = []
+                extra_str = (", " + ", ".join(extras)) if extras else ""
                 print(
                     f"🎮 Estado: HP {getattr(gamestate, 'hp_current', None)}/{getattr(gamestate, 'hp_max', None)}, "
-                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)}"
+                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)}, "
+                    f"Cap {cap_current}{extra_str}"
                 )
 
             # Cavebot básico (ruta + teclas) usando posición por env vars.
@@ -606,6 +699,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
                 action = (healing_cfg.action or "").strip()
                 recommendation = f"heal: {action}" if action else "heal"
+
+            if low_cap:
+                if recommendation:
+                    recommendation = f"{recommendation} | leave depot"
+                else:
+                    recommendation = "leave depot"
             if cavebot_next:
                 if recommendation:
                     recommendation = f"{recommendation} | move: {cavebot_next}"
@@ -633,6 +732,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     note = "committed" if committed else "preview"
                     if ActionRequest is not None:
                         reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
+
+                # Waypoint 'action' string can request loot/tools/trade/etc.
+                try:
+                    if cavebot_action:
+                        reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(committed)))
+                except Exception:
+                    pass
+
+                # Periodic maintenance: eat food.
+                try:
+                    if food_trigger.interval_s > 0.0 and food_trigger.should_fire():
+                        if ActionRequest is not None:
+                            reqs.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
+                except Exception:
+                    pass
 
                 if reqs:
                     action_committed = any(getattr(r, "note", "") == "committed" for r in reqs)
@@ -682,8 +796,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         mp_current=sig.mp_current,
                         mp_max=sig.mp_max,
                         mp_pct=sig.mp_pct,
+                        cap_current=cap_current,
+                        ring_equipped=ring_equipped,
+                        amulet_equipped=amulet_equipped,
                         low_hp=sig.low_hp,
                         low_mp=sig.low_mp,
+                        low_cap=low_cap,
                         paralyzed=sig.paralyzed,
                         haste_active=sig.haste_active,
                         utamo_active=sig.utamo_active,
@@ -780,8 +898,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                         "mp_current": tel.mp_current,
                                         "mp_max": tel.mp_max,
                                         "mp_pct": tel.mp_pct,
+                                        "cap_current": getattr(tel, "cap_current", None),
+                                        "ring_equipped": getattr(tel, "ring_equipped", None),
+                                        "amulet_equipped": getattr(tel, "amulet_equipped", None),
                                         "low_hp": tel.low_hp,
                                         "low_mp": tel.low_mp,
+                                        "low_cap": getattr(tel, "low_cap", None),
                                         "paralyzed": tel.paralyzed,
                                         "haste_active": tel.haste_active,
                                         "utamo_active": tel.utamo_active,

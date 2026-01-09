@@ -51,7 +51,9 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
         hp_current=50,
         hp_max=100,
         hp_pct=50.0,
+        cap_current=55,
         low_hp=True,
+        low_cap=True,
         action_request="move:north",
         action_committed=True,
         note="ok",
@@ -65,7 +67,9 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     assert t2.hp_current == 50
     assert t2.hp_max == 100
     assert t2.hp_pct == 50.0
+    assert t2.cap_current == 55
     assert t2.low_hp is True
+    assert t2.low_cap is True
     assert t2.action_request == "move:north"
     assert t2.action_committed is True
     assert t2.note == "ok"

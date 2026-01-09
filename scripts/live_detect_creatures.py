@@ -120,7 +120,7 @@ def main() -> None:
             if int(time.time()) % 2 == 0:
                 try:
                     names = r0.names or {}
-                    counts = {}
+                    counts: dict[str, int] = {}
                     if r0.boxes is not None and len(r0.boxes) > 0:
                         for cls_id in r0.boxes.cls.tolist():
                             cls_id_i = int(cls_id)
