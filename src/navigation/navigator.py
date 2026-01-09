@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from navigation.route import Waypoint
+from navigation.pathfinding import astar, clamp_int, make_bounded_walkable
 
 
 @dataclass
@@ -30,6 +31,18 @@ class Navigator:
         self.idx = 0
         self.loop = os.getenv("CAVEBOT_LOOP", "1").strip().lower() in {"1", "true", "yes"}
         self.tol = int(os.getenv("CAVEBOT_WAYPOINT_TOL", "0"))
+        # Pathfinding mode:
+        # - axis: cheap greedy step towards waypoint (default)
+        # - astar: local A* with optional dynamic blockers
+        self.pathfind_mode = os.getenv("CAVEBOT_PATHFIND", "axis").strip().lower()
+        try:
+            self.astar_radius = max(5, int(os.getenv("CAVEBOT_ASTAR_RADIUS", "30")))
+        except Exception:
+            self.astar_radius = 30
+        try:
+            self.astar_max_nodes = max(100, int(os.getenv("CAVEBOT_ASTAR_MAX_NODES", "8000")))
+        except Exception:
+            self.astar_max_nodes = 8000
 
     def reset(self) -> None:
         self.idx = 0
@@ -50,7 +63,7 @@ class Navigator:
         x, y = pos
         return abs(x - wp.x) <= self.tol and abs(y - wp.y) <= self.tol
 
-    def decide(self, pos: Tuple[int, int]) -> NavDecision:
+    def decide(self, pos: Tuple[int, int], blocked: set[Tuple[int, int]] | None = None) -> NavDecision:
         wp = self.current_waypoint()
         if wp is None:
             return NavDecision(direction=None, reached_waypoint=False, waypoint=None)
@@ -63,6 +76,37 @@ class Navigator:
         x, y = pos
         dx = wp.x - x
         dy = wp.y - y
+
+        # Local A* (dynamic obstacles) - only if enabled via env.
+        if self.pathfind_mode in {"astar", "a*"}:
+            r = int(self.astar_radius)
+
+            # If goal is far away, plan towards a local goal inside the radius window.
+            gx = x + clamp_int(dx, -r, r)
+            gy = y + clamp_int(dy, -r, r)
+            goal_local = (int(gx), int(gy))
+
+            is_walkable = make_bounded_walkable(
+                min_x=int(x - r),
+                max_x=int(x + r),
+                min_y=int(y - r),
+                max_y=int(y + r),
+                blocked=blocked,
+                base_is_walkable=None,
+            )
+
+            res = astar((int(x), int(y)), goal_local, is_walkable=is_walkable, max_nodes=int(self.astar_max_nodes))
+            if res is not None and len(res.path) >= 2:
+                nx, ny = res.path[1]
+                if nx == x + 1 and ny == y:
+                    return NavDecision(direction="east", reached_waypoint=False, waypoint=wp)
+                if nx == x - 1 and ny == y:
+                    return NavDecision(direction="west", reached_waypoint=False, waypoint=wp)
+                if nx == x and ny == y + 1:
+                    return NavDecision(direction="south", reached_waypoint=False, waypoint=wp)
+                if nx == x and ny == y - 1:
+                    return NavDecision(direction="north", reached_waypoint=False, waypoint=wp)
+            # Fallback to axis-greedy if A* can't find a path.
 
         # Move one tile step, prefer axis with larger absolute distance.
         if abs(dx) >= abs(dy):

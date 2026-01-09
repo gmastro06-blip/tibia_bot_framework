@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio
+from vision.obstacles import compute_viewport_tile_offsets
 
 @dataclass
 class GameState:
@@ -18,6 +19,7 @@ class GameState:
     hp_pct: Optional[float] = None
     mp_pct: Optional[float] = None
     roboflow_boxes: Optional[List[Dict[str, Any]]] = None
+    viewport_tile_offsets: Optional[List[Tuple[int, int]]] = None
 
     def __str__(self) -> str:
         rf_n = len(self.roboflow_boxes) if self.roboflow_boxes else 0
@@ -48,6 +50,7 @@ class GameStateBuilder:
         """Actualiza el estado del juego desde un frame"""
         rf_boxes: Optional[List[Dict[str, Any]]] = None
         rf_hpmp_boxes: Optional[List[Dict[str, Any]]] = None
+        viewport_offsets: Optional[List[Tuple[int, int]]] = None
         now = time.time()
         if self._rf is not None:
             if now - self._rf_last_ts >= self._rf_min_interval_s:
@@ -163,7 +166,29 @@ class GameStateBuilder:
             hp_pct=hp_pct,
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
+            viewport_tile_offsets=None,
         )
+
+        # Derivar obstáculos dinámicos (tile offsets) desde detecciones Roboflow.
+        # Esto es útil para pathfinding local con replan.
+        try:
+            if rf_boxes and isinstance(rois, dict) and "game_viewport" in rois:
+                vp = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["game_viewport"])
+                tile_px_raw = os.getenv("TIBIA_TILE_PX", "32").strip()
+                try:
+                    tile_px = max(8, int(tile_px_raw))
+                except Exception:
+                    tile_px = 32
+                viewport_offsets = compute_viewport_tile_offsets(
+                    rf_boxes,
+                    viewport_rect=vp,
+                    tile_px=tile_px,
+                    min_conf=float(os.getenv("OBSTACLE_MIN_CONF", "0.25")),
+                    max_abs_offset=None,
+                )
+                gamestate.viewport_tile_offsets = viewport_offsets
+        except Exception:
+            pass
 
         # Aquí podríamos implementar lógica adicional para determinar hp_max/mp_max
         # Por ahora, los dejamos como None o podríamos estimarlos

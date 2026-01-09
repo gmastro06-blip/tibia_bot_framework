@@ -363,6 +363,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_wp = ""
         last_event_action = ""
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
+        last_block_log_ts = 0.0
         while not stop_event.is_set():
             loop_t0 = time.time()
             gamestate = None
@@ -534,7 +535,32 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             print("🧭 Cavebot: setea PLAYER_X y PLAYER_Y o usa CAVEBOT_MODE=steps")
                     else:
                         try:
-                            decision = navigator.decide(pos)
+                            blocked_abs = None
+                            try:
+                                # If A* pathfinding is enabled, feed dynamic blockers.
+                                if getattr(navigator, "pathfind_mode", "") in {"astar", "a*"}:
+                                    offs = getattr(gamestate, "viewport_tile_offsets", None)
+                                    if offs:
+                                        blocked_abs = {(pos[0] + int(dx), pos[1] + int(dy)) for dx, dy in offs}
+
+                                    # Debug observability (rate-limited): show what we feed into A*.
+                                    if bot_debug:
+                                        now = time.time()
+                                        if now - last_block_log_ts >= 2.0:
+                                            last_block_log_ts = now
+                                            n_offs = len(offs) if offs else 0
+                                            sample = []
+                                            try:
+                                                if offs:
+                                                    # stable-ish sample: nearest first
+                                                    sample = sorted(offs, key=lambda p: (abs(int(p[0])) + abs(int(p[1])), int(p[0]), int(p[1])))[:5]
+                                            except Exception:
+                                                sample = []
+                                            print(f"🧱 A* blockers: {n_offs} sample={sample}")
+                            except Exception:
+                                blocked_abs = None
+
+                            decision = navigator.decide(pos, blocked=blocked_abs)
                             if decision.reached_waypoint and decision.waypoint is not None:
                                 wp = decision.waypoint
                                 label = wp.name or f"({wp.x},{wp.y})"
