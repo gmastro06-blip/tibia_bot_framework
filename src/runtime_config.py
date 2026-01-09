@@ -80,6 +80,9 @@ class TelemetrySnapshot:
     cavebot_next: str = ""
     cavebot_waypoint: str = ""
     cavebot_action: str = ""
+    # What the bot would do (assistant mode): serialized mock action(s)
+    action_request: str = ""
+    action_committed: bool = False
     # Texto amigable opcional
     note: str = ""
 
@@ -143,6 +146,8 @@ class RuntimeConfig:
                 cavebot_next=str(self.telemetry.cavebot_next),
                 cavebot_waypoint=str(self.telemetry.cavebot_waypoint),
                 cavebot_action=str(self.telemetry.cavebot_action),
+                action_request=str(self.telemetry.action_request),
+                action_committed=bool(self.telemetry.action_committed),
                 note=str(self.telemetry.note),
             )
 
@@ -301,6 +306,8 @@ class RuntimeConfig:
         cavebot_next: str | None = None,
         cavebot_waypoint: str | None = None,
         cavebot_action: str | None = None,
+        action_request: str | None = None,
+        action_committed: bool | None = None,
         note: str | None = None,
     ) -> None:
         with self._lock:
@@ -339,5 +346,9 @@ class RuntimeConfig:
                 self.telemetry.cavebot_waypoint = str(cavebot_waypoint)
             if cavebot_action is not None:
                 self.telemetry.cavebot_action = str(cavebot_action)
+            if action_request is not None:
+                self.telemetry.action_request = str(action_request)
+            if action_committed is not None:
+                self.telemetry.action_committed = bool(action_committed)
             if note is not None:
                 self.telemetry.note = str(note)

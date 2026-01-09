@@ -47,7 +47,15 @@ def test_runtime_config_simulation_snapshot_is_copy() -> None:
 
 def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     cfg = RuntimeConfig()
-    cfg.update_telemetry(hp_current=50, hp_max=100, hp_pct=50.0, low_hp=True, note="ok")
+    cfg.update_telemetry(
+        hp_current=50,
+        hp_max=100,
+        hp_pct=50.0,
+        low_hp=True,
+        action_request="move:north",
+        action_committed=True,
+        note="ok",
+    )
 
     t1 = cfg.telemetry_snapshot()
     t1.hp_current = 1
@@ -58,6 +66,8 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     assert t2.hp_max == 100
     assert t2.hp_pct == 50.0
     assert t2.low_hp is True
+    assert t2.action_request == "move:north"
+    assert t2.action_committed is True
     assert t2.note == "ok"
 
 

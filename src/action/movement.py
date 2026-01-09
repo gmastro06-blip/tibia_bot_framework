@@ -24,6 +24,11 @@ class MoveExecutor:
 
     def maybe_step(self, direction: Optional[str]) -> bool:
         """Hace un paso en la dirección si corresponde y respeta cooldown."""
+        # NOTE:
+        # - This function injects *real* OS-level keypresses via `keyboard`.
+        # - The project defaults to assistant mode (no input injection).
+        # - For safe testing/logging, prefer the mock driver in
+        #   `action/input_driver.py`.
         if not direction:
             return False
 

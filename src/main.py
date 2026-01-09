@@ -27,6 +27,11 @@ from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 
+# Assistant-first design: no real input injection.
+# If you want to test “actions we would take”, use a mock driver:
+#   from action.input_driver import MockInputDriver, ActionRequest
+# and record/log ActionRequest objects instead of sending OS/game inputs.
+
 
 
 def _toggle_transition_lines(
@@ -313,6 +318,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     "cavebot_next": tel.cavebot_next,
                                     "cavebot_waypoint": tel.cavebot_waypoint,
                                     "cavebot_action": tel.cavebot_action,
+                                    "action_request": getattr(tel, "action_request", ""),
+                                    "action_committed": bool(getattr(tel, "action_committed", False)),
                                     "note": tel.note,
                                 },
                                 "forced": bool(force),
@@ -362,8 +369,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_reco = ""
         last_event_wp = ""
         last_event_action = ""
+        last_event_action_req = ""
+        last_event_action_committed: bool | None = None
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
         last_block_log_ts = 0.0
+
+        # Safe action sink (records what we'd do, no real input injection).
+        try:
+            from action.input_driver import ActionRequest, MockInputDriver
+
+            mock_driver = MockInputDriver(max_items=500)
+        except Exception:
+            ActionRequest = None  # type: ignore[assignment]
+            mock_driver = None
         while not stop_event.is_set():
             loop_t0 = time.time()
             gamestate = None
@@ -594,6 +612,43 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 else:
                     recommendation = f"move: {cavebot_next}"
 
+            # Build mock action requests (for logging/replay) without doing real inputs.
+            action_req_str = ""
+            action_committed = False
+            try:
+                reqs = []
+                if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
+                    act = (healing_cfg.action or "").strip() or "heal"
+                    if ActionRequest is not None:
+                        reqs.append(ActionRequest(kind="heal", value=act, note="preview"))
+
+                if cavebot_next in {"north", "south", "east", "west"}:
+                    committed = False
+                    try:
+                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                            # In step mode we only 'consume' actions on advance; in pos mode, this remains preview.
+                            committed = bool(should_advance) if 'should_advance' in locals() else False
+                    except Exception:
+                        committed = False
+                    note = "committed" if committed else "preview"
+                    if ActionRequest is not None:
+                        reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
+
+                if reqs:
+                    action_committed = any(getattr(r, "note", "") == "committed" for r in reqs)
+                    action_req_str = ";".join(
+                        f"{r.kind}:{r.value}{'*' if getattr(r, 'note', '') == 'committed' else ''}" for r in reqs
+                    )
+                    if mock_driver is not None:
+                        for r in reqs:
+                            try:
+                                mock_driver.send(r)
+                            except Exception:
+                                pass
+            except Exception:
+                action_req_str = ""
+                action_committed = False
+
             # Alertas sonoras (solo asistente)
             try:
                 if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
@@ -638,6 +693,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cavebot_next=cavebot_next,
                         cavebot_waypoint=cavebot_waypoint,
                         cavebot_action=cavebot_action,
+                        action_request=action_req_str,
+                        action_committed=action_committed,
                         note="",
                     )
                 except Exception:
@@ -670,6 +727,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         if recommendation != last_event_reco:
                             emit("event.recommendation", {"recommendation": recommendation})
                             last_event_reco = recommendation
+
+                        if action_req_str != last_event_action_req or last_event_action_committed is None or action_committed != last_event_action_committed:
+                            emit(
+                                "event.action_request",
+                                {"action_request": action_req_str, "action_committed": bool(action_committed)},
+                            )
+                            last_event_action_req = action_req_str
+                            last_event_action_committed = bool(action_committed)
 
                         if cavebot_waypoint != last_event_wp or cavebot_action != last_event_action:
                             emit(
@@ -726,6 +791,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                         "cavebot_next": tel.cavebot_next,
                                         "cavebot_waypoint": tel.cavebot_waypoint,
                                         "cavebot_action": tel.cavebot_action,
+                                        "action_request": getattr(tel, "action_request", ""),
+                                        "action_committed": bool(getattr(tel, "action_committed", False)),
                                         "note": tel.note,
                                     },
                                 ),
