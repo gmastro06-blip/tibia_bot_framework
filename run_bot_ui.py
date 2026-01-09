@@ -58,10 +58,28 @@ class BotUI:
         self.sim_utamo_active = tk.BooleanVar(value=False)
         self.sim_hungry = tk.BooleanVar(value=False)
 
+        # Modo asistente (sin inputs) + confirmación humana
+        self.asst_enabled = tk.BooleanVar(value=True)
+        self.asst_confirm = tk.BooleanVar(value=True)
+        self.asst_sound = tk.BooleanVar(value=True)
+
+        # Replay + export JSONL
+        self.replay_enabled = tk.BooleanVar(value=False)
+        self.replay_interval_ms = tk.IntVar(value=2000)
+        self.replay_out_dir = tk.StringVar(value=self._config.replay_snapshot().out_dir)
+        self.log_enabled = tk.BooleanVar(value=False)
+        self.log_interval_ms = tk.IntVar(value=250)
+        self.log_out_file = tk.StringVar(value=self._config.logging_snapshot().out_file)
+
         # Telemetría (solo lectura, viene del loop)
         self.hp_text = tk.StringVar(value="?")
         self.mp_text = tk.StringVar(value="?")
         self.signals_text = tk.StringVar(value="-")
+        self.target_text = tk.StringVar(value="-")
+        self.reco_text = tk.StringVar(value="-")
+        self.cavebot_next_text = tk.StringVar(value="-")
+        self.cavebot_wp_text = tk.StringVar(value="-")
+        self.cavebot_action_text = tk.StringVar(value="-")
 
         container = tk.Frame(self.root, padx=14, pady=14)
         container.pack(fill="both", expand=True)
@@ -98,6 +116,15 @@ class BotUI:
         tk.Label(tab_control, text="Señales:").grid(row=4, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.signals_text, width=40, anchor="w").grid(row=4, column=1, sticky="w", pady=(6, 0))
 
+        tk.Label(tab_control, text="Target:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.target_text, width=40, anchor="w").grid(row=5, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Recomendación:").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.reco_text, width=40, anchor="w").grid(row=6, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Waypoint:").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(row=7, column=1, sticky="w", pady=(6, 0))
+
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
             row=0, column=0, columnspan=2, sticky="w"
@@ -131,6 +158,34 @@ class BotUI:
             text="(Solo UI por ahora: no ejecuta navegación aún)",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        tk.Label(tab_cavebot, text="Próxima acción:").grid(row=3, column=0, sticky="w", pady=(12, 0))
+        tk.Label(tab_cavebot, textvariable=self.cavebot_next_text, width=40, anchor="w").grid(
+            row=3, column=1, sticky="w", pady=(12, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Waypoint:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(
+            row=4, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Action:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, textvariable=self.cavebot_action_text, width=40, anchor="w").grid(
+            row=5, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def request_advance() -> None:
+            try:
+                self._config.request_advance()
+            except Exception:
+                pass
+
+        tk.Button(tab_cavebot, text="Marcar como ejecutado", width=18, command=request_advance).grid(
+            row=6, column=0, sticky="w", pady=(10, 0)
+        )
+        tk.Button(tab_cavebot, text="Siguiente acción", width=14, command=request_advance).grid(
+            row=6, column=1, sticky="w", pady=(10, 0)
+        )
+
         # --- TAB: Configuración ---
         tk.Checkbutton(tab_config, text="Habilitar simulación de señales", variable=self.sim_enabled).grid(
             row=0, column=0, columnspan=2, sticky="w"
@@ -146,6 +201,46 @@ class BotUI:
         )
         tk.Checkbutton(tab_config, text="Hungry", variable=self.sim_hungry).grid(
             row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="").grid(row=5, column=0)  # separador simple
+
+        tk.Checkbutton(tab_config, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        )
+        tk.Checkbutton(tab_config, text="Confirmación humana (cavebot)", variable=self.asst_confirm).grid(
+            row=7, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        tk.Checkbutton(tab_config, text="Alertas sonoras", variable=self.asst_sound).grid(
+            row=8, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="").grid(row=9, column=0)  # separador simple
+
+        tk.Checkbutton(tab_config, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
+            row=10, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        )
+        tk.Label(tab_config, text="Replay interval (ms)").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
+            row=11, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Replay out_dir").grid(row=12, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(tab_config, textvariable=self.replay_out_dir, width=34).grid(
+            row=12, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
+            row=13, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        )
+        tk.Label(tab_config, text="Log interval (ms)").grid(row=14, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
+            row=14, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Log out_file").grid(row=15, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(tab_config, textvariable=self.log_out_file, width=34).grid(
+            row=15, column=1, sticky="w", pady=(6, 0)
         )
 
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
@@ -172,17 +267,49 @@ class BotUI:
                 hungry=bool(self.sim_hungry.get()),
             )
 
+        def sync_assistant(*_args):
+            self._config.update_assistant(
+                enabled=bool(self.asst_enabled.get()),
+                confirm_actions=bool(self.asst_confirm.get()),
+                sound_alerts=bool(self.asst_sound.get()),
+            )
+
+        def sync_replay_and_logging(*_args):
+            self._config.update_replay(
+                enabled=bool(self.replay_enabled.get()),
+                interval_ms=int(self.replay_interval_ms.get()),
+                out_dir=str(self.replay_out_dir.get()),
+            )
+            self._config.update_logging(
+                enabled=bool(self.log_enabled.get()),
+                interval_ms=int(self.log_interval_ms.get()),
+                out_file=str(self.log_out_file.get()),
+            )
+
         for v in [self.healing_enabled, self.heal_hp_below_pct, self.heal_mp_below_pct, self.heal_action]:
             v.trace_add("write", sync_healing)
         for v in [self.cavebot_enabled, self.cavebot_route_path]:
             v.trace_add("write", sync_cavebot)
         for v in [self.sim_enabled, self.sim_paralyzed, self.sim_haste_active, self.sim_utamo_active, self.sim_hungry]:
             v.trace_add("write", sync_simulation)
+        for v in [self.asst_enabled, self.asst_confirm, self.asst_sound]:
+            v.trace_add("write", sync_assistant)
+        for v in [
+            self.replay_enabled,
+            self.replay_interval_ms,
+            self.replay_out_dir,
+            self.log_enabled,
+            self.log_interval_ms,
+            self.log_out_file,
+        ]:
+            v.trace_add("write", sync_replay_and_logging)
 
         # Sync inicial
         sync_healing()
         sync_cavebot()
         sync_simulation()
+        sync_assistant()
+        sync_replay_and_logging()
 
         def poll_telemetry() -> None:
             try:
@@ -218,6 +345,12 @@ class BotUI:
                     parts.append("hungry")
 
                 self.signals_text.set(", ".join(parts) if parts else "-")
+
+                self.target_text.set(tel.target or "-")
+                self.reco_text.set(tel.recommendation or "-")
+                self.cavebot_next_text.set(tel.cavebot_next or "-")
+                self.cavebot_wp_text.set(tel.cavebot_waypoint or "-")
+                self.cavebot_action_text.set(tel.cavebot_action or "-")
             except Exception:
                 pass
             self.root.after(250, poll_telemetry)

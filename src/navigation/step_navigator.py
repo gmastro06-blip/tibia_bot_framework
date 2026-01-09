@@ -79,6 +79,7 @@ class StepNavigator:
         return True
 
     def decide(self) -> StepDecision:
+        """Consume 1 'tick' de navegación (mutando estado interno)."""
         cur = self._current()
         if cur is None:
             return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
@@ -127,4 +128,57 @@ class StepNavigator:
 
         # If we get here, the segment is complete but we haven't emitted the reached event yet.
         # Next call will emit it.
+        return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)
+
+    def preview(self) -> StepDecision:
+        """Devuelve la próxima decisión sin mutar estado interno.
+
+        Útil para modo 'asistente' donde el usuario confirma cada paso.
+        """
+
+        # Snapshot state
+        idx = int(self.idx)
+        seg_dx = int(self._segment_dx)
+        seg_dy = int(self._segment_dy)
+        seg_init = bool(self._segment_initialized)
+
+        # Helpers equivalent to _current/_next but using local idx.
+        if not self.route:
+            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+
+        if idx < 0:
+            idx = 0
+        if idx >= len(self.route):
+            if self.loop:
+                idx = 0
+            else:
+                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+
+        cur = self.route[idx]
+        j = idx + 1
+        if j >= len(self.route):
+            if self.loop:
+                j = 0
+            else:
+                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+        nxt = self.route[j]
+
+        if not seg_init:
+            seg_dx = int(nxt.x) - int(cur.x)
+            seg_dy = int(nxt.y) - int(cur.y)
+            seg_init = True
+
+        if seg_dx == 0 and seg_dy == 0 and seg_init:
+            return StepDecision(direction=None, reached_waypoint=True, waypoint=nxt)
+
+        if seg_dx != 0:
+            if seg_dx > 0:
+                return StepDecision(direction="east", reached_waypoint=False, waypoint=nxt)
+            return StepDecision(direction="west", reached_waypoint=False, waypoint=nxt)
+
+        if seg_dy != 0:
+            if seg_dy > 0:
+                return StepDecision(direction="south", reached_waypoint=False, waypoint=nxt)
+            return StepDecision(direction="north", reached_waypoint=False, waypoint=nxt)
+
         return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)

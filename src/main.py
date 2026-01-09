@@ -22,7 +22,10 @@ from decision.signals import evaluate_signals
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
-from action.movement import MoveExecutor
+
+from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names
+from telemetry.jsonl_logger import JsonlLogger
+
 
 
 def _toggle_transition_lines(
@@ -123,6 +126,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     capture = DXGICapture(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
 
+    replay = ReplayRecorder()
+    jsonl = JsonlLogger()
+
     # Cargar ROIs (se inicializa con el primer frame real para evitar desalineaciones)
     rois = None
     resolution = None
@@ -155,6 +161,52 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     continue
 
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
+
+                # Replay (ROI crops + JSON) - opt-in via UI config.
+                if runtime_config is not None:
+                    try:
+                        rep_cfg = runtime_config.replay_snapshot()
+                        if replay.should_record(enabled=rep_cfg.enabled, interval_ms=rep_cfg.interval_ms):
+                            crops = crop_named_rois(
+                                frame,
+                                roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
+                                rois=rois,
+                                resolution=resolution,
+                                names=default_replay_roi_names(),
+                            )
+                            tel = runtime_config.telemetry_snapshot()
+                            payload = {
+                                "ts": time.time(),
+                                "resolution": list(resolution),
+                                "gamestate": {
+                                    "hp_current": getattr(gamestate, "hp_current", None),
+                                    "hp_max": getattr(gamestate, "hp_max", None),
+                                    "hp_pct": getattr(gamestate, "hp_pct", None),
+                                    "mp_current": getattr(gamestate, "mp_current", None),
+                                    "mp_max": getattr(gamestate, "mp_max", None),
+                                    "mp_pct": getattr(gamestate, "mp_pct", None),
+                                },
+                                "telemetry": {
+                                    "hp_pct": tel.hp_pct,
+                                    "mp_pct": tel.mp_pct,
+                                    "low_hp": tel.low_hp,
+                                    "low_mp": tel.low_mp,
+                                    "paralyzed": tel.paralyzed,
+                                    "haste_active": tel.haste_active,
+                                    "utamo_active": tel.utamo_active,
+                                    "hungry": tel.hungry,
+                                    "target": tel.target,
+                                    "recommendation": tel.recommendation,
+                                    "cavebot_next": tel.cavebot_next,
+                                    "cavebot_waypoint": tel.cavebot_waypoint,
+                                    "cavebot_action": tel.cavebot_action,
+                                    "note": tel.note,
+                                },
+                            }
+                            replay.record_crops(out_dir=rep_cfg.out_dir, crops=crops, payload=payload)
+                    except Exception:
+                        pass
+
                 try:
                     gs_queue.put_nowait(gamestate)
                 except Exception:
@@ -174,8 +226,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         navigator: Navigator | None = None
         step_navigator: StepNavigator | None = None
         navigator_route_path: str | None = None
-        mover = MoveExecutor(step_interval_s=float(os.getenv("CAVEBOT_STEP_INTERVAL_S", "0.35")))
+        last_advance_seen = 0
+        last_beep_ts = 0.0
         last_pos_warn_ts = 0.0
+        last_gs_ts = 0.0
         while not stop_event.is_set():
             gamestate = None
             try:
@@ -202,7 +256,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 print(line)
 
             if gamestate is None:
+                # Update a minimal telemetry note if no gamestate arrives for a while.
+                if runtime_config is not None:
+                    now = time.time()
+                    if now - last_gs_ts >= 2.0:
+                        last_gs_ts = now
+                        try:
+                            runtime_config.update_telemetry(note="Sin GameState (stale)")
+                        except Exception:
+                            pass
                 continue
+
+            last_gs_ts = time.time()
 
             # Señales derivadas + simulación (no ejecuta nada, solo computa flags)
             sig = None
@@ -213,6 +278,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             # Targeting de criaturas (si hay detecciones Roboflow).
             # Por defecto solo loggea cuando cambia el target.
+            target_str = ""
             try:
                 if resolution is not None:
                     new_target = selector.select_target(
@@ -225,6 +291,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         print(f"🎯 Target: {format_target(last_target)}")
                     elif bot_debug and last_target is not None:
                         print(f"🎯 Target (sticky): {format_target(last_target)}")
+                    target_str = format_target(last_target)
             except Exception:
                 pass
 
@@ -247,6 +314,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 )
 
             # Cavebot básico (ruta + teclas) usando posición por env vars.
+            cavebot_next = ""
+            cavebot_waypoint = ""
+            cavebot_action = ""
+            assistant_cfg = runtime_config.assistant_snapshot() if runtime_config is not None else None
+
             if cavebot_cfg is not None and cavebot_cfg.enabled:
                 cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
                 # Reload route if needed
@@ -269,7 +341,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 if step_navigator is not None:
                     try:
-                        decision = step_navigator.decide()
+                        # Modo asistente: preview constante, pero solo consume/avanza con confirmación.
+                        decision = step_navigator.preview()
+
+                        should_advance = True
+                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                            cur_adv = runtime_config.advance_counter_snapshot() if runtime_config is not None else 0
+                            should_advance = cur_adv != last_advance_seen
+                            if should_advance:
+                                last_advance_seen = cur_adv
+
+                        if should_advance:
+                            decision = step_navigator.decide()
+
                         if decision.reached_waypoint and decision.waypoint is not None:
                             wp = decision.waypoint
                             label = wp.name or f"({wp.x},{wp.y})"
@@ -278,9 +362,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             else:
                                 print(f"🧭 Waypoint: {label}")
 
-                        stepped = mover.maybe_step(decision.direction)
-                        if bot_debug and decision.direction and not stepped:
-                            print(f"🧭 Move (cooldown): {decision.direction}")
+                        if decision.waypoint is not None:
+                            wp = decision.waypoint
+                            cavebot_waypoint = wp.name or f"({wp.x},{wp.y})"
+                            cavebot_action = wp.action or ""
+
+                        if decision.direction:
+                            cavebot_next = f"{decision.direction}"
+                        elif decision.reached_waypoint and decision.waypoint is not None:
+                            wp = decision.waypoint
+                            label = wp.name or f"({wp.x},{wp.y})"
+                            cavebot_next = f"reached {label}"
                     except Exception:
                         pass
 
@@ -311,11 +403,53 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 else:
                                     print(f"🧭 Waypoint: {label}")
 
-                            stepped = mover.maybe_step(decision.direction)
-                            if bot_debug and decision.direction and not stepped:
-                                print(f"🧭 Move (cooldown): {decision.direction}")
+                            if decision.waypoint is not None:
+                                wp = decision.waypoint
+                                cavebot_waypoint = wp.name or f"({wp.x},{wp.y})"
+                                cavebot_action = wp.action or ""
+
+                            if decision.direction:
+                                cavebot_next = f"{decision.direction}"
+                            elif decision.reached_waypoint and decision.waypoint is not None:
+                                wp = decision.waypoint
+                                label = wp.name or f"({wp.x},{wp.y})"
+                                cavebot_next = f"reached {label}"
                         except Exception:
                             pass
+
+            # Recomendación humana (sin ejecutar inputs)
+            recommendation = ""
+            if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
+                action = (healing_cfg.action or "").strip()
+                recommendation = f"heal: {action}" if action else "heal"
+            if cavebot_next:
+                if recommendation:
+                    recommendation = f"{recommendation} | move: {cavebot_next}"
+                else:
+                    recommendation = f"move: {cavebot_next}"
+
+            # Alertas sonoras (solo asistente)
+            try:
+                if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
+                    danger = False
+                    if sig is not None and (sig.low_hp or sig.paralyzed):
+                        danger = True
+
+                    if danger:
+                        now = time.time()
+                        if now - last_beep_ts >= 1.0:
+                            last_beep_ts = now
+                            try:
+                                import winsound
+
+                                winsound.Beep(880, 140)
+                            except Exception:
+                                try:
+                                    print("\a", end="")
+                                except Exception:
+                                    pass
+            except Exception:
+                pass
 
             # Publicar telemetría para UI (si existe RuntimeConfig)
             if runtime_config is not None and sig is not None:
@@ -333,8 +467,45 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         haste_active=sig.haste_active,
                         utamo_active=sig.utamo_active,
                         hungry=sig.hungry,
+                        target=target_str,
+                        recommendation=recommendation,
+                        cavebot_next=cavebot_next,
+                        cavebot_waypoint=cavebot_waypoint,
+                        cavebot_action=cavebot_action,
                         note="",
                     )
+                except Exception:
+                    pass
+
+            # Export JSONL de telemetría (opt-in).
+            if runtime_config is not None:
+                try:
+                    log_cfg = runtime_config.logging_snapshot()
+                    if jsonl.should_log(enabled=log_cfg.enabled, interval_ms=log_cfg.interval_ms):
+                        tel = runtime_config.telemetry_snapshot()
+                        jsonl.append(
+                            out_file=log_cfg.out_file,
+                            event={
+                                "hp_current": tel.hp_current,
+                                "hp_max": tel.hp_max,
+                                "hp_pct": tel.hp_pct,
+                                "mp_current": tel.mp_current,
+                                "mp_max": tel.mp_max,
+                                "mp_pct": tel.mp_pct,
+                                "low_hp": tel.low_hp,
+                                "low_mp": tel.low_mp,
+                                "paralyzed": tel.paralyzed,
+                                "haste_active": tel.haste_active,
+                                "utamo_active": tel.utamo_active,
+                                "hungry": tel.hungry,
+                                "target": tel.target,
+                                "recommendation": tel.recommendation,
+                                "cavebot_next": tel.cavebot_next,
+                                "cavebot_waypoint": tel.cavebot_waypoint,
+                                "cavebot_action": tel.cavebot_action,
+                                "note": tel.note,
+                            },
+                        )
                 except Exception:
                     pass
 

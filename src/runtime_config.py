@@ -31,6 +31,33 @@ class SimulationConfig:
 
 
 @dataclass
+class AssistantConfig:
+    """Opciones del modo asistente (sin inputs automáticos)."""
+
+    enabled: bool = True
+    confirm_actions: bool = True
+    sound_alerts: bool = True
+
+
+@dataclass
+class ReplayConfig:
+    """Configuración para guardar replays (ROI crops + JSON) periódicamente."""
+
+    enabled: bool = False
+    interval_ms: int = 2000
+    out_dir: str = "logs/replay"
+
+
+@dataclass
+class LoggingConfig:
+    """Configuración para export de telemetría en JSONL."""
+
+    enabled: bool = False
+    interval_ms: int = 250
+    out_file: str = "logs/telemetry.jsonl"
+
+
+@dataclass
 class TelemetrySnapshot:
     """Telemetría mínima para UI (solo lectura)."""
 
@@ -48,6 +75,11 @@ class TelemetrySnapshot:
     haste_active: bool | None = None
     utamo_active: bool | None = None
     hungry: bool | None = None
+    target: str = ""
+    recommendation: str = ""
+    cavebot_next: str = ""
+    cavebot_waypoint: str = ""
+    cavebot_action: str = ""
     # Texto amigable opcional
     note: str = ""
 
@@ -57,7 +89,11 @@ class RuntimeConfig:
     healing: HealingConfig = field(default_factory=HealingConfig)
     cavebot: CavebotConfig = field(default_factory=CavebotConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
+    assistant: AssistantConfig = field(default_factory=AssistantConfig)
+    replay: ReplayConfig = field(default_factory=ReplayConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
+    _advance_counter: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def snapshot(self) -> tuple[HealingConfig, CavebotConfig]:
@@ -101,7 +137,36 @@ class RuntimeConfig:
                 haste_active=self.telemetry.haste_active,
                 utamo_active=self.telemetry.utamo_active,
                 hungry=self.telemetry.hungry,
+                target=str(self.telemetry.target),
+                recommendation=str(self.telemetry.recommendation),
+                cavebot_next=str(self.telemetry.cavebot_next),
+                cavebot_waypoint=str(self.telemetry.cavebot_waypoint),
+                cavebot_action=str(self.telemetry.cavebot_action),
                 note=str(self.telemetry.note),
+            )
+
+    def assistant_snapshot(self) -> AssistantConfig:
+        with self._lock:
+            return AssistantConfig(
+                enabled=bool(self.assistant.enabled),
+                confirm_actions=bool(self.assistant.confirm_actions),
+                sound_alerts=bool(self.assistant.sound_alerts),
+            )
+
+    def replay_snapshot(self) -> ReplayConfig:
+        with self._lock:
+            return ReplayConfig(
+                enabled=bool(self.replay.enabled),
+                interval_ms=int(self.replay.interval_ms),
+                out_dir=str(self.replay.out_dir),
+            )
+
+    def logging_snapshot(self) -> LoggingConfig:
+        with self._lock:
+            return LoggingConfig(
+                enabled=bool(self.logging.enabled),
+                interval_ms=int(self.logging.interval_ms),
+                out_file=str(self.logging.out_file),
             )
 
     def update_healing(
@@ -150,6 +215,61 @@ class RuntimeConfig:
             if hungry is not None:
                 self.simulation.hungry = bool(hungry)
 
+    def update_assistant(
+        self,
+        *,
+        enabled: bool | None = None,
+        confirm_actions: bool | None = None,
+        sound_alerts: bool | None = None,
+    ) -> None:
+        with self._lock:
+            if enabled is not None:
+                self.assistant.enabled = bool(enabled)
+            if confirm_actions is not None:
+                self.assistant.confirm_actions = bool(confirm_actions)
+            if sound_alerts is not None:
+                self.assistant.sound_alerts = bool(sound_alerts)
+
+    def update_replay(
+        self,
+        *,
+        enabled: bool | None = None,
+        interval_ms: int | None = None,
+        out_dir: str | None = None,
+    ) -> None:
+        with self._lock:
+            if enabled is not None:
+                self.replay.enabled = bool(enabled)
+            if interval_ms is not None:
+                self.replay.interval_ms = max(50, int(interval_ms))
+            if out_dir is not None:
+                self.replay.out_dir = str(out_dir)
+
+    def update_logging(
+        self,
+        *,
+        enabled: bool | None = None,
+        interval_ms: int | None = None,
+        out_file: str | None = None,
+    ) -> None:
+        with self._lock:
+            if enabled is not None:
+                self.logging.enabled = bool(enabled)
+            if interval_ms is not None:
+                self.logging.interval_ms = max(50, int(interval_ms))
+            if out_file is not None:
+                self.logging.out_file = str(out_file)
+
+    def request_advance(self) -> int:
+        """El usuario confirmó que se puede avanzar una acción recomendada."""
+        with self._lock:
+            self._advance_counter += 1
+            return int(self._advance_counter)
+
+    def advance_counter_snapshot(self) -> int:
+        with self._lock:
+            return int(self._advance_counter)
+
     def update_telemetry(
         self,
         *,
@@ -165,6 +285,11 @@ class RuntimeConfig:
         haste_active: bool | None = None,
         utamo_active: bool | None = None,
         hungry: bool | None = None,
+        target: str | None = None,
+        recommendation: str | None = None,
+        cavebot_next: str | None = None,
+        cavebot_waypoint: str | None = None,
+        cavebot_action: str | None = None,
         note: str | None = None,
     ) -> None:
         with self._lock:
@@ -193,5 +318,15 @@ class RuntimeConfig:
                 self.telemetry.utamo_active = bool(utamo_active)
             if hungry is not None:
                 self.telemetry.hungry = bool(hungry)
+            if target is not None:
+                self.telemetry.target = str(target)
+            if recommendation is not None:
+                self.telemetry.recommendation = str(recommendation)
+            if cavebot_next is not None:
+                self.telemetry.cavebot_next = str(cavebot_next)
+            if cavebot_waypoint is not None:
+                self.telemetry.cavebot_waypoint = str(cavebot_waypoint)
+            if cavebot_action is not None:
+                self.telemetry.cavebot_action = str(cavebot_action)
             if note is not None:
                 self.telemetry.note = str(note)

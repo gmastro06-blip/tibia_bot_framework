@@ -61,6 +61,24 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     assert t2.note == "ok"
 
 
+def test_runtime_config_assistant_snapshot_and_advance_counter() -> None:
+    cfg = RuntimeConfig()
+    cfg.update_assistant(enabled=True, confirm_actions=True, sound_alerts=False)
+
+    a1 = cfg.assistant_snapshot()
+    a1.enabled = False
+
+    a2 = cfg.assistant_snapshot()
+    assert a2.enabled is True
+    assert a2.confirm_actions is True
+    assert a2.sound_alerts is False
+
+    c0 = cfg.advance_counter_snapshot()
+    cfg.request_advance()
+    c1 = cfg.advance_counter_snapshot()
+    assert c1 == c0 + 1
+
+
 def test_runtime_config_thread_safety_smoke() -> None:
     cfg = RuntimeConfig()
 
