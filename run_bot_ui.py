@@ -51,6 +51,18 @@ class BotUI:
         self.cavebot_enabled = tk.BooleanVar(value=False)
         self.cavebot_route_path = tk.StringVar(value="configs/route.json")
 
+        # Simulación/overrides de señales (para cuando aún no hay detección real)
+        self.sim_enabled = tk.BooleanVar(value=True)
+        self.sim_paralyzed = tk.BooleanVar(value=False)
+        self.sim_haste_active = tk.BooleanVar(value=False)
+        self.sim_utamo_active = tk.BooleanVar(value=False)
+        self.sim_hungry = tk.BooleanVar(value=False)
+
+        # Telemetría (solo lectura, viene del loop)
+        self.hp_text = tk.StringVar(value="?")
+        self.mp_text = tk.StringVar(value="?")
+        self.signals_text = tk.StringVar(value="-")
+
         container = tk.Frame(self.root, padx=14, pady=14)
         container.pack(fill="both", expand=True)
 
@@ -60,10 +72,12 @@ class BotUI:
         tab_control = tk.Frame(notebook)
         tab_healing = tk.Frame(notebook)
         tab_cavebot = tk.Frame(notebook)
+        tab_config = tk.Frame(notebook)
 
         notebook.add(tab_control, text="Control")
         notebook.add(tab_healing, text="Healing")
         notebook.add(tab_cavebot, text="Cavebot")
+        notebook.add(tab_config, text="Configuración")
 
         # --- TAB: Control ---
         tk.Label(tab_control, text="Estado:").grid(row=0, column=0, sticky="w")
@@ -74,6 +88,15 @@ class BotUI:
 
         self.start_btn.grid(row=1, column=0, pady=(10, 0), sticky="w")
         self.stop_btn.grid(row=1, column=1, pady=(10, 0), sticky="e")
+
+        tk.Label(tab_control, text="HP:").grid(row=2, column=0, sticky="w", pady=(10, 0))
+        tk.Label(tab_control, textvariable=self.hp_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(10, 0))
+
+        tk.Label(tab_control, text="MP:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.mp_text, width=22, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Señales:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.signals_text, width=40, anchor="w").grid(row=4, column=1, sticky="w", pady=(6, 0))
 
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
@@ -108,6 +131,23 @@ class BotUI:
             text="(Solo UI por ahora: no ejecuta navegación aún)",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # --- TAB: Configuración ---
+        tk.Checkbutton(tab_config, text="Habilitar simulación de señales", variable=self.sim_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Checkbutton(tab_config, text="Paralyzed", variable=self.sim_paralyzed).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        )
+        tk.Checkbutton(tab_config, text="Haste activo", variable=self.sim_haste_active).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        tk.Checkbutton(tab_config, text="Utamo activo", variable=self.sim_utamo_active).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        tk.Checkbutton(tab_config, text="Hungry", variable=self.sim_hungry).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
             self._config.update_healing(
@@ -123,14 +163,66 @@ class BotUI:
                 route_path=str(self.cavebot_route_path.get()),
             )
 
+        def sync_simulation(*_args):
+            self._config.update_simulation(
+                enabled=bool(self.sim_enabled.get()),
+                paralyzed=bool(self.sim_paralyzed.get()),
+                haste_active=bool(self.sim_haste_active.get()),
+                utamo_active=bool(self.sim_utamo_active.get()),
+                hungry=bool(self.sim_hungry.get()),
+            )
+
         for v in [self.healing_enabled, self.heal_hp_below_pct, self.heal_mp_below_pct, self.heal_action]:
             v.trace_add("write", sync_healing)
         for v in [self.cavebot_enabled, self.cavebot_route_path]:
             v.trace_add("write", sync_cavebot)
+        for v in [self.sim_enabled, self.sim_paralyzed, self.sim_haste_active, self.sim_utamo_active, self.sim_hungry]:
+            v.trace_add("write", sync_simulation)
 
         # Sync inicial
         sync_healing()
         sync_cavebot()
+        sync_simulation()
+
+        def poll_telemetry() -> None:
+            try:
+                tel = self._config.telemetry_snapshot()
+                hp_str = "?"
+                mp_str = "?"
+                if tel.hp_current is not None and tel.hp_max is not None:
+                    if tel.hp_pct is not None:
+                        hp_str = f"{tel.hp_current}/{tel.hp_max} ({tel.hp_pct:.1f}%)"
+                    else:
+                        hp_str = f"{tel.hp_current}/{tel.hp_max}"
+                if tel.mp_current is not None and tel.mp_max is not None:
+                    if tel.mp_pct is not None:
+                        mp_str = f"{tel.mp_current}/{tel.mp_max} ({tel.mp_pct:.1f}%)"
+                    else:
+                        mp_str = f"{tel.mp_current}/{tel.mp_max}"
+
+                self.hp_text.set(hp_str)
+                self.mp_text.set(mp_str)
+
+                parts = []
+                if tel.low_hp:
+                    parts.append("low_hp")
+                if tel.low_mp:
+                    parts.append("low_mp")
+                if tel.paralyzed:
+                    parts.append("paralyzed")
+                if tel.haste_active:
+                    parts.append("haste")
+                if tel.utamo_active:
+                    parts.append("utamo")
+                if tel.hungry:
+                    parts.append("hungry")
+
+                self.signals_text.set(", ".join(parts) if parts else "-")
+            except Exception:
+                pass
+            self.root.after(250, poll_telemetry)
+
+        poll_telemetry()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 

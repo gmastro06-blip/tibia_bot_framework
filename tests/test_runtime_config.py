@@ -29,6 +29,38 @@ def test_runtime_config_snapshot_is_copy() -> None:
     assert cavebot2.route_path == "configs/route.json"
 
 
+def test_runtime_config_simulation_snapshot_is_copy() -> None:
+    cfg = RuntimeConfig()
+    cfg.update_simulation(enabled=True, paralyzed=True, haste_active=True, utamo_active=False, hungry=True)
+
+    sim1 = cfg.simulation_snapshot()
+    sim1.enabled = False
+    sim1.paralyzed = False
+
+    sim2 = cfg.simulation_snapshot()
+    assert sim2.enabled is True
+    assert sim2.paralyzed is True
+    assert sim2.haste_active is True
+    assert sim2.utamo_active is False
+    assert sim2.hungry is True
+
+
+def test_runtime_config_telemetry_snapshot_is_copy() -> None:
+    cfg = RuntimeConfig()
+    cfg.update_telemetry(hp_current=50, hp_max=100, hp_pct=50.0, low_hp=True, note="ok")
+
+    t1 = cfg.telemetry_snapshot()
+    t1.hp_current = 1
+    t1.note = "mutated"
+
+    t2 = cfg.telemetry_snapshot()
+    assert t2.hp_current == 50
+    assert t2.hp_max == 100
+    assert t2.hp_pct == 50.0
+    assert t2.low_hp is True
+    assert t2.note == "ok"
+
+
 def test_runtime_config_thread_safety_smoke() -> None:
     cfg = RuntimeConfig()
 

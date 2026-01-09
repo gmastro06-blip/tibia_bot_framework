@@ -1,0 +1,2024 @@
+{
+  "script": "wasp_ab",
+  "total_waypoints": 54,
+  "total_time": 27.0,
+  "step_delay": 0.5,
+  "quick_loot_profile": {
+    "path": "configs\\quick_loot_profile.json",
+    "summary": {
+      "mode": "skipped",
+      "accepted_count": 0,
+      "skipped_count": 0,
+      "container_categories_count": 4
+    }
+  },
+  "refill_profile": {
+    "path": "configs\\refill_profile.json",
+    "summary": {
+      "items_count": 3,
+      "preview": [
+        "mana potion:200",
+        "health potion:50",
+        "ultimate healing rune:100"
+      ]
+    }
+  },
+  "deposit_profile": {
+    "path": "configs\\deposit_profile.json",
+    "summary": {
+      "mode": "deposit_all_except_keep",
+      "keep_count": 3,
+      "deposit_count": 2
+    }
+  },
+  "timeline": [
+    {
+      "time": 0.0,
+      "waypoint_index": 1,
+      "type": "label",
+      "description": "label start",
+      "position": null,
+      "action": null,
+      "label": "start",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 0.5,
+      "waypoint_index": 2,
+      "type": "label",
+      "description": "label refill",
+      "position": null,
+      "action": null,
+      "label": "refill",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 1.0,
+      "waypoint_index": 3,
+      "type": "node",
+      "description": "node (32681, 31686, 6)",
+      "position": [
+        32681,
+        31686,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 1.5,
+      "waypoint_index": 4,
+      "type": "action",
+      "description": "action deposit",
+      "position": null,
+      "action": "deposit",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": true
+      }
+    },
+    {
+      "time": 2.0,
+      "waypoint_index": 5,
+      "type": "node",
+      "description": "node (32681, 31669, 6)",
+      "position": [
+        32681,
+        31669,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 2.5,
+      "waypoint_index": 6,
+      "type": "node",
+      "description": "node (32670, 31660, 6)",
+      "position": [
+        32670,
+        31660,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 3.0,
+      "waypoint_index": 7,
+      "type": "stand",
+      "description": "stand (32670, 31659, 6)",
+      "position": [
+        32670,
+        31659,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 3.5,
+      "waypoint_index": 8,
+      "type": "action",
+      "description": "action sell",
+      "position": null,
+      "action": "sell",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 4.0,
+      "waypoint_index": 9,
+      "type": "action",
+      "description": "action buy_potions",
+      "position": null,
+      "action": "buy_potions",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 4.5,
+      "waypoint_index": 10,
+      "type": "stand",
+      "description": "stand (32669, 31663, 6)",
+      "position": [
+        32669,
+        31663,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 5.0,
+      "waypoint_index": 11,
+      "type": "action",
+      "description": "action check_supplies",
+      "position": null,
+      "action": "check_supplies",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "refill",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 5.5,
+      "waypoint_index": 12,
+      "type": "label",
+      "description": "label go_hunt",
+      "position": null,
+      "action": null,
+      "label": "go_hunt",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 6.0,
+      "waypoint_index": 13,
+      "type": "node",
+      "description": "node (32659, 31664, 6)",
+      "position": [
+        32659,
+        31664,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 6.5,
+      "waypoint_index": 14,
+      "type": "node",
+      "description": "node (32656, 31673, 6)",
+      "position": [
+        32656,
+        31673,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 7.0,
+      "waypoint_index": 15,
+      "type": "stand",
+      "description": "stand (32656, 31674, 6)",
+      "position": [
+        32656,
+        31674,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 7.5,
+      "waypoint_index": 16,
+      "type": "node",
+      "description": "node (32645, 31693, 7)",
+      "position": [
+        32645,
+        31693,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 8.0,
+      "waypoint_index": 17,
+      "type": "node",
+      "description": "node (32638, 31713, 7)",
+      "position": [
+        32638,
+        31713,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 8.5,
+      "waypoint_index": 18,
+      "type": "node",
+      "description": "node (32616, 31716, 7)",
+      "position": [
+        32616,
+        31716,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 9.0,
+      "waypoint_index": 19,
+      "type": "label",
+      "description": "label hunt",
+      "position": null,
+      "action": null,
+      "label": "hunt",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 9.5,
+      "waypoint_index": 20,
+      "type": "node",
+      "description": "node (32607, 31702, 7)",
+      "position": [
+        32607,
+        31702,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 10.0,
+      "waypoint_index": 21,
+      "type": "stand",
+      "description": "stand (32603,31704,7)",
+      "position": [
+        32603,
+        31704,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 10.5,
+      "waypoint_index": 22,
+      "type": "node",
+      "description": "node (32612, 31703, 8)",
+      "position": [
+        32612,
+        31703,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 11.0,
+      "waypoint_index": 23,
+      "type": "stand",
+      "description": "stand (32616, 31700, 8)",
+      "position": [
+        32616,
+        31700,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 11.5,
+      "waypoint_index": 24,
+      "type": "stand",
+      "description": "stand (32612, 31683, 9)",
+      "position": [
+        32612,
+        31683,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 12.0,
+      "waypoint_index": 25,
+      "type": "node",
+      "description": "node (32618, 31706, 10)",
+      "position": [
+        32618,
+        31706,
+        10
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 12.5,
+      "waypoint_index": 26,
+      "type": "node",
+      "description": "node (32634, 31700, 10)",
+      "position": [
+        32634,
+        31700,
+        10
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 13.0,
+      "waypoint_index": 27,
+      "type": "node",
+      "description": "node (32623, 31688, 10)",
+      "position": [
+        32623,
+        31688,
+        10
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 13.5,
+      "waypoint_index": 28,
+      "type": "rope",
+      "description": "rope (32612, 31683, 10)",
+      "position": [
+        32612,
+        31683,
+        10
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 14.0,
+      "waypoint_index": 29,
+      "type": "node",
+      "description": "node (32604, 31707, 9)",
+      "position": [
+        32604,
+        31707,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 14.5,
+      "waypoint_index": 30,
+      "type": "node",
+      "description": "node (32627, 31709, 9)",
+      "position": [
+        32627,
+        31709,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 15.0,
+      "waypoint_index": 31,
+      "type": "node",
+      "description": "node (32642, 31709, 9)",
+      "position": [
+        32642,
+        31709,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 15.5,
+      "waypoint_index": 32,
+      "type": "node",
+      "description": "node (32639, 31692, 9)",
+      "position": [
+        32639,
+        31692,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 16.0,
+      "waypoint_index": 33,
+      "type": "node",
+      "description": "node (32631, 31677, 9)",
+      "position": [
+        32631,
+        31677,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 16.5,
+      "waypoint_index": 34,
+      "type": "rope",
+      "description": "rope (32622, 31691, 9)",
+      "position": [
+        32622,
+        31691,
+        9
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 17.0,
+      "waypoint_index": 35,
+      "type": "node",
+      "description": "node (32607, 31697, 8)",
+      "position": [
+        32607,
+        31697,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 17.5,
+      "waypoint_index": 36,
+      "type": "stand",
+      "description": "stand (32605, 31701, 8)",
+      "position": [
+        32605,
+        31701,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 18.0,
+      "waypoint_index": 37,
+      "type": "stand",
+      "description": "stand (32603, 31703, 8)",
+      "position": [
+        32603,
+        31703,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 18.5,
+      "waypoint_index": 38,
+      "type": "rope",
+      "description": "rope (32603, 31704, 8)",
+      "position": [
+        32603,
+        31704,
+        8
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 19.0,
+      "waypoint_index": 39,
+      "type": "label",
+      "description": "label count",
+      "position": null,
+      "action": null,
+      "label": "count",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 19.5,
+      "waypoint_index": 40,
+      "type": "label",
+      "description": "label continue",
+      "position": null,
+      "action": null,
+      "label": "continue",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 20.0,
+      "waypoint_index": 41,
+      "type": "action",
+      "description": "action check",
+      "position": null,
+      "action": "check",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 20.5,
+      "waypoint_index": 42,
+      "type": "label",
+      "description": "label leave",
+      "position": null,
+      "action": null,
+      "label": "leave",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 21.0,
+      "waypoint_index": 43,
+      "type": "node",
+      "description": "node (32610, 31712, 7)",
+      "position": [
+        32610,
+        31712,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 21.5,
+      "waypoint_index": 44,
+      "type": "node",
+      "description": "node (32630, 31713, 7)",
+      "position": [
+        32630,
+        31713,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 22.0,
+      "waypoint_index": 45,
+      "type": "node",
+      "description": "node (32640, 31709, 7)",
+      "position": [
+        32640,
+        31709,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 22.5,
+      "waypoint_index": 46,
+      "type": "node",
+      "description": "node (32649, 31684, 7)",
+      "position": [
+        32649,
+        31684,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 23.0,
+      "waypoint_index": 47,
+      "type": "ladder",
+      "description": "ladder (32656, 31674, 7)",
+      "position": [
+        32656,
+        31674,
+        7
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 23.5,
+      "waypoint_index": 48,
+      "type": "node",
+      "description": "node (32666, 31686, 6)",
+      "position": [
+        32666,
+        31686,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 24.0,
+      "waypoint_index": 49,
+      "type": "node",
+      "description": "node (32681, 31687, 6)",
+      "position": [
+        32681,
+        31687,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 24.5,
+      "waypoint_index": 50,
+      "type": "action",
+      "description": "action check_time",
+      "position": null,
+      "action": "check_time",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 25.0,
+      "waypoint_index": 51,
+      "type": "label",
+      "description": "label train",
+      "position": null,
+      "action": null,
+      "label": "train",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 25.5,
+      "waypoint_index": 52,
+      "type": "node",
+      "description": "node (32681, 31687, 6)",
+      "position": [
+        32681,
+        31687,
+        6
+      ],
+      "action": null,
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 26.0,
+      "waypoint_index": 53,
+      "type": "action",
+      "description": "action end",
+      "position": null,
+      "action": "end",
+      "label": null,
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    },
+    {
+      "time": 26.5,
+      "waypoint_index": 54,
+      "type": "label",
+      "description": "label start_trainer",
+      "position": null,
+      "action": null,
+      "label": "start_trainer",
+      "state": {
+        "targeting": false,
+        "loot": false,
+        "quick_loot": {
+          "mode": "skipped",
+          "accepted_count": 0,
+          "skipped_count": 0,
+          "container_categories_count": 4
+        },
+        "refill": {
+          "items_count": 3,
+          "preview": [
+            "mana potion:200",
+            "health potion:50",
+            "ultimate healing rune:100"
+          ]
+        },
+        "deposit_profile": {
+          "mode": "deposit_all_except_keep",
+          "keep_count": 3,
+          "deposit_count": 2
+        },
+        "phase": "hunt",
+        "deposit_step": false
+      }
+    }
+  ]
+}

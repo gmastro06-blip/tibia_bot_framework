@@ -25,14 +25,14 @@ def main() -> None:
             try:
                 shot = sct.grab(mon)
                 frame = np.frombuffer(shot.bgra, dtype=np.uint8).reshape((shot.height, shot.width, 4))
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
-                mean = float(frame.mean())
-                std = [float(np.std(frame[:, :, c])) for c in range(3)]
+                mean = float(frame_bgr.mean())
+                std = [float(frame_bgr[:, :, c].std()) for c in range(3)]
 
                 name = f"mon_{i}_{mon['width']}x{mon['height']}_{ts}.png"
                 path = out_dir / name
-                cv2.imwrite(str(path), frame)
+                cv2.imwrite(str(path), frame_bgr)
                 print(f"Guardado {path} | mean={mean:.2f} std={std}")
             except Exception as e:
                 print(f"Error capturando monitor {i}: {e}")

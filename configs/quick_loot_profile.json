@@ -1,0 +1,12 @@
+{
+  "mode": "skipped",
+  "accepted": [],
+  "skipped": [],
+  "container_categories": {
+    "Gold": "Backpack of Gold",
+    "Creature Products": "Backpack of Creature Products",
+    "Valuables": "Backpack of Valuables",
+    "Default": "Main Backpack"
+  },
+  "notes": "Perfil offline para ayudarte a configurar Quick Looting en el cliente. No automatiza clicks/teclas; solo documenta filtros y asignación de contenedores."
+}

@@ -1,0 +1,10 @@
+{
+  "mode": "deposit_all_except_keep",
+  "keep": [
+    "mana potion",
+    "health potion",
+    "ultimate healing rune"
+  ],
+  "deposit": [],
+  "notes": "Perfil offline de deposit: mode=deposit_all_except_keep deposita TODO excepto 'keep' (la lista 'deposit' se ignora en este modo). No automatiza depot/containers; sirve para timeline/UI y para aplicar manualmente en el cliente."
+}

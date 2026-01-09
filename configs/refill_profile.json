@@ -1,0 +1,8 @@
+{
+  "items": [
+    {"name": "mana potion", "qty": 200},
+    {"name": "health potion", "qty": 50},
+    {"name": "ultimate healing rune", "qty": 100}
+  ],
+  "notes": "Perfil offline de refill: lista concreta de items + cantidades objetivo. No automatiza compras/withdraw; sirve para checklist y timeline."
+}

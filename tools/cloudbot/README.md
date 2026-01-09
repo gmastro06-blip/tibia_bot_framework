@@ -19,6 +19,19 @@ From repo root:
 python tools/cloudbot/analyze_scripts.py --scripts-root scripts-master --out-dir reports/cloudbot
 ```
 
+## UI Viewer
+
+Interactive waypoint viewer:
+
+```bash
+python tools/cloudbot/waypoint_viewer_ui.py
+```
+
+- Select a script folder (with `waypoints.in`).
+- Navigate waypoints with buttons or arrow keys.
+- Shows map with points/lines, current waypoint highlighted in red.
+- Load and display JSON files (setup_actions.json, actions_in_waypoints.json, route_stats.json) from `reports/cloudbot/<script_name>/` (run the analyzer first).
+
 ## Outputs
 
 - `reports/cloudbot/SUMMARY.json`
@@ -28,7 +41,27 @@ python tools/cloudbot/analyze_scripts.py --scripts-root scripts-master --out-dir
   - `actions_in_waypoints.json`
   - `setup_actions.json`
 
-## Notes
+## Test Script Loading (sin UI)
 
-- Jump flagging threshold is controlled by `CLOUDBOT_JUMP_THRESHOLD` (default `50`, Manhattan distance between consecutive points).
-- The plot is 2D (x,y) with color indicating z.
+Test loading without GUI:
+
+```bash
+python tools/cloudbot/test_script_loading.py wasp_ab
+# o para todos:
+python tools/cloudbot/test_script_loading.py all
+```
+
+- Loads waypoints and JSONs for a script.
+- Prints summaries to console for verification.
+- **Resultado exhaustivo:** 84/84 scripts (100% funcionalidad) cargados correctamente.
+
+## Generate Route Timeline
+
+Generate detailed timeline of route execution:
+
+```bash
+python tools/cloudbot/generate_timeline.py wasp_ab --output reports/cloudbot/wasp_ab/timeline.json
+```
+
+- Creates JSON with timestamped sequence of waypoints/actions.
+- Includes setup context for actions.

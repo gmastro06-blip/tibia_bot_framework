@@ -18,6 +18,7 @@ from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
 from decision.targeting import TargetSelector, format_target, Target
+from decision.signals import evaluate_signals
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
@@ -188,6 +189,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 runtime_config.snapshot() if runtime_config is not None else (None, None)
             )
 
+            sim_cfg = runtime_config.simulation_snapshot() if runtime_config is not None else None
+
             # Log de cambios de toggles (para ver que aplica en tiempo real)
             lines, last_healing_enabled, last_cavebot_enabled = _toggle_transition_lines(
                 healing_cfg,
@@ -200,6 +203,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             if gamestate is None:
                 continue
+
+            # Señales derivadas + simulación (no ejecuta nada, solo computa flags)
+            sig = None
+            try:
+                sig = evaluate_signals(gamestate, healing_cfg, sim_cfg)
+            except Exception:
+                sig = None
 
             # Targeting de criaturas (si hay detecciones Roboflow).
             # Por defecto solo loggea cuando cambia el target.
@@ -218,7 +228,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 pass
 
-            print(f"🎮 Estado: HP {gamestate.hp_current}/{gamestate.hp_max}, MP {gamestate.mp_current}/{gamestate.mp_max}")
+            try:
+                hp_pct_str = "?"
+                mp_pct_str = "?"
+                if sig is not None and sig.hp_pct is not None:
+                    hp_pct_str = f"{sig.hp_pct:.1f}%"
+                if sig is not None and sig.mp_pct is not None:
+                    mp_pct_str = f"{sig.mp_pct:.1f}%"
+
+                print(
+                    f"🎮 Estado: HP {getattr(gamestate, 'hp_current', None)}/{getattr(gamestate, 'hp_max', None)} ({hp_pct_str}), "
+                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)} ({mp_pct_str})"
+                )
+            except Exception:
+                print(
+                    f"🎮 Estado: HP {getattr(gamestate, 'hp_current', None)}/{getattr(gamestate, 'hp_max', None)}, "
+                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)}"
+                )
 
             # Cavebot básico (ruta + teclas) usando posición por env vars.
             if cavebot_cfg is not None and cavebot_cfg.enabled:
@@ -291,27 +317,32 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pass
 
-            # Healing en tiempo real (lógica mínima: solo decide + log)
-            if healing_cfg is not None and healing_cfg.enabled:
+            # Publicar telemetría para UI (si existe RuntimeConfig)
+            if runtime_config is not None and sig is not None:
                 try:
-                    if gamestate.hp_current is not None and gamestate.hp_max:
-                        hp_pct = (gamestate.hp_current / gamestate.hp_max) * 100.0
-                    else:
-                        hp_pct = None
+                    runtime_config.update_telemetry(
+                        hp_current=sig.hp_current,
+                        hp_max=sig.hp_max,
+                        hp_pct=sig.hp_pct,
+                        mp_current=sig.mp_current,
+                        mp_max=sig.mp_max,
+                        mp_pct=sig.mp_pct,
+                        low_hp=sig.low_hp,
+                        low_mp=sig.low_mp,
+                        paralyzed=sig.paralyzed,
+                        haste_active=sig.haste_active,
+                        utamo_active=sig.utamo_active,
+                        hungry=sig.hungry,
+                        note="",
+                    )
+                except Exception:
+                    pass
 
-                    if gamestate.mp_current is not None and gamestate.mp_max:
-                        mp_pct = (gamestate.mp_current / gamestate.mp_max) * 100.0
-                    else:
-                        mp_pct = None
-
-                    trigger = False
-                    if hp_pct is not None and hp_pct < float(healing_cfg.hp_below_pct):
-                        trigger = True
-                    if mp_pct is not None and mp_pct < float(healing_cfg.mp_below_pct):
-                        trigger = True
-
-                    if trigger:
-                        action = healing_cfg.action.strip()
+            # Healing en tiempo real (lógica mínima: solo decide + log)
+            if sig is not None and healing_cfg is not None and healing_cfg.enabled:
+                try:
+                    if sig.healing_trigger:
+                        action = (healing_cfg.action or "").strip()
                         if action:
                             print(f"🩹 Healing TRIGGER ({action})")
                         else:

@@ -1,0 +1,9 @@
+{
+  "script": null,
+  "notes": "Plantilla offline: describe cómo quieres relacionar este script con tu configuración.",
+  "mapping": {
+    "route_file": "configs/route.json",
+    "mode": "steps",
+    "comment": "Ejemplo: puedes guardar aquí ajustes/metadata sin automatizar nada."
+  }
+}

@@ -14,6 +14,9 @@ class GameState:
     hp_max: Optional[int] = None
     mp_current: Optional[int] = None
     mp_max: Optional[int] = None
+    # Señales derivadas (útiles para thresholds/decisiones, aunque no haya OCR perfecto)
+    hp_pct: Optional[float] = None
+    mp_pct: Optional[float] = None
     roboflow_boxes: Optional[List[Dict[str, Any]]] = None
 
     def __str__(self) -> str:
@@ -105,11 +108,24 @@ class GameStateBuilder:
             mp_current = int(round(mp_ratio * mp_max))
 
         # Crear nuevo estado
+        hp_pct: Optional[float] = None
+        mp_pct: Optional[float] = None
+        try:
+            if hp_current is not None and hp_max:
+                hp_pct = (float(hp_current) / float(hp_max)) * 100.0
+            if mp_current is not None and mp_max:
+                mp_pct = (float(mp_current) / float(mp_max)) * 100.0
+        except Exception:
+            hp_pct = None
+            mp_pct = None
+
         gamestate = GameState(
             hp_current=hp_current,
             hp_max=hp_max,
             mp_current=mp_current,
             mp_max=mp_max,
+            hp_pct=hp_pct,
+            mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
         )
 
