@@ -17,6 +17,9 @@ class GameState:
     mp_current: Optional[int] = None
     mp_max: Optional[int] = None
     cap_current: Optional[int] = None
+    pos_x: Optional[int] = None
+    pos_y: Optional[int] = None
+    pos_z: Optional[int] = None
     ring_equipped: Optional[bool] = None
     amulet_equipped: Optional[bool] = None
     hungry: Optional[bool] = None
@@ -28,9 +31,18 @@ class GameState:
 
     def __str__(self) -> str:
         rf_n = len(self.roboflow_boxes) if self.roboflow_boxes else 0
+        pos = ""
+        try:
+            if self.pos_x is not None and self.pos_y is not None:
+                if self.pos_z is not None:
+                    pos = f", pos: ({self.pos_x},{self.pos_y},{self.pos_z})"
+                else:
+                    pos = f", pos: ({self.pos_x},{self.pos_y})"
+        except Exception:
+            pos = ""
         return (
             f"HP: {self.hp_current}/{self.hp_max}, MP: {self.mp_current}/{self.mp_max}, "
-            f"Cap: {self.cap_current}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, hungry: {self.hungry}, RF: {rf_n}"
+            f"Cap: {self.cap_current}{pos}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, hungry: {self.hungry}, RF: {rf_n}"
         )
 
 class GameStateBuilder:
@@ -54,6 +66,9 @@ class GameStateBuilder:
         self._last_mp_current: Optional[int] = None
         self._last_mp_max: Optional[int] = None
         self._last_cap_current: Optional[int] = None
+        self._last_pos_x: Optional[int] = None
+        self._last_pos_y: Optional[int] = None
+        self._last_pos_z: Optional[int] = None
 
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
@@ -86,6 +101,9 @@ class GameStateBuilder:
         mp_current: Optional[int] = None
         mp_max: Optional[int] = None
         cap_current: Optional[int] = None
+        pos_x: Optional[int] = None
+        pos_y: Optional[int] = None
+        pos_z: Optional[int] = None
 
         do_ocr = (now - self._ocr_last_ts) >= self._ocr_min_interval_s
         if do_ocr:
@@ -104,12 +122,24 @@ class GameStateBuilder:
             except Exception:
                 cap_current = None
 
+            try:
+                coords = self.ocr_processor.extract_coords(frame, rois, resolution)
+                if coords is not None:
+                    pos_x, pos_y, pos_z = coords
+                else:
+                    pos_x, pos_y, pos_z = None, None, None
+            except Exception:
+                pos_x, pos_y, pos_z = None, None, None
+
             self._ocr_last_ts = now
             self._last_hp_current = hp_current
             self._last_hp_max = hp_max
             self._last_mp_current = mp_current
             self._last_mp_max = mp_max
             self._last_cap_current = cap_current
+            self._last_pos_x = pos_x
+            self._last_pos_y = pos_y
+            self._last_pos_z = pos_z
         else:
             # Reusar lo último conocido
             hp_current = self._last_hp_current
@@ -117,6 +147,9 @@ class GameStateBuilder:
             mp_current = self._last_mp_current
             mp_max = self._last_mp_max
             cap_current = self._last_cap_current
+            pos_x = self._last_pos_x
+            pos_y = self._last_pos_y
+            pos_z = self._last_pos_z
 
         # Defaults de max (útiles si solo usamos barras)
         if hp_max is None:
@@ -181,6 +214,9 @@ class GameStateBuilder:
             mp_current=mp_current,
             mp_max=mp_max,
             cap_current=cap_current,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            pos_z=pos_z,
             hp_pct=hp_pct,
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,

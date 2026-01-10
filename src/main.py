@@ -25,11 +25,12 @@ from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
 
-from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names
+from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names, env_replay_enabled
 from telemetry.overlay_export import OverlayExporter, overlay_config_from_env
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 from vision.anchor_tracker import AnchorTracker
+from vision.viewport_tracker import ViewportTracker
 
 try:
     from console_sanitize import maybe_install_no_emoji_output
@@ -193,6 +194,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     gamestate_builder = GameStateBuilder()
 
     anchor_tracker = AnchorTracker()
+    viewport_tracker = ViewportTracker()
 
     replay = ReplayRecorder()
     overlay = OverlayExporter(overlay_config_from_env())
@@ -299,6 +301,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         n_vis = 0
         vis_ms_sum = 0.0
         last_force_seen = 0
+
+        # Env-based replay config (used when no RuntimeConfig/UI is attached).
+        rep_enabled_env = env_replay_enabled()
+        try:
+            rep_interval_ms_env = int(float(os.getenv("REPLAY_INTERVAL_MS", "2000").strip() or "2000"))
+        except Exception:
+            rep_interval_ms_env = 2000
+        rep_out_dir_env = os.getenv("REPLAY_OUT_DIR", "logs/replay").strip() or "logs/replay"
         while not stop_event.is_set():
             try:
                 frame = frame_queue.get(timeout=1)
@@ -322,6 +332,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 except Exception:
                     pass
 
+                # Auto-adjust game_viewport if side panels/bars change.
+                try:
+                    viewport_tracker.maybe_update(
+                        frame=frame,
+                        rois=rois,
+                        resolution=resolution,
+                        roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
+                    )
+                except Exception:
+                    pass
+
                 t0 = time.time()
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
                 if profile:
@@ -329,9 +350,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     n_vis += 1
 
                 # Replay (ROI crops + JSON) - opt-in via UI config.
-                if runtime_config is not None:
-                    try:
+                try:
+                    # Determine replay config source.
+                    if runtime_config is not None:
                         rep_cfg = runtime_config.replay_snapshot()
+                        enabled = bool(rep_cfg.enabled)
+                        interval_ms = int(rep_cfg.interval_ms)
+                        out_dir = str(rep_cfg.out_dir)
                         force = False
                         try:
                             cur_force = runtime_config.replay_force_counter_snapshot()
@@ -340,52 +365,73 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 last_force_seen = cur_force
                         except Exception:
                             force = False
+                    else:
+                        enabled = bool(rep_enabled_env)
+                        interval_ms = int(rep_interval_ms_env)
+                        out_dir = str(rep_out_dir_env)
+                        force = False
 
-                        should = replay.should_record(enabled=rep_cfg.enabled, interval_ms=rep_cfg.interval_ms)
-                        if rep_cfg.enabled and (force or should):
-                            crops = crop_named_rois(
-                                frame,
-                                roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
-                                rois=rois,
-                                resolution=resolution,
-                                names=default_replay_roi_names(),
-                            )
+                    should = replay.should_record(enabled=enabled, interval_ms=interval_ms)
+                    if enabled and (force or should):
+                        crops = crop_named_rois(
+                            frame,
+                            roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
+                            rois=rois,
+                            resolution=resolution,
+                            names=default_replay_roi_names(),
+                        )
+
+                        # Use UI telemetry when available; otherwise record a minimal payload.
+                        if runtime_config is not None:
                             tel = runtime_config.telemetry_snapshot()
-                            payload = {
-                                "ts": time.time(),
-                                "resolution": list(resolution),
-                                "gamestate": {
-                                    "hp_current": getattr(gamestate, "hp_current", None),
-                                    "hp_max": getattr(gamestate, "hp_max", None),
-                                    "hp_pct": getattr(gamestate, "hp_pct", None),
-                                    "mp_current": getattr(gamestate, "mp_current", None),
-                                    "mp_max": getattr(gamestate, "mp_max", None),
-                                    "mp_pct": getattr(gamestate, "mp_pct", None),
-                                    "cap_current": getattr(gamestate, "cap_current", None),
-                                },
-                                "telemetry": {
-                                    "hp_pct": tel.hp_pct,
-                                    "mp_pct": tel.mp_pct,
-                                    "low_hp": tel.low_hp,
-                                    "low_mp": tel.low_mp,
-                                    "paralyzed": tel.paralyzed,
-                                    "haste_active": tel.haste_active,
-                                    "utamo_active": tel.utamo_active,
-                                    "hungry": tel.hungry,
-                                    "target": tel.target,
-                                    "recommendation": tel.recommendation,
-                                    "cavebot_next": tel.cavebot_next,
-                                    "cavebot_waypoint": tel.cavebot_waypoint,
-                                    "cavebot_action": tel.cavebot_action,
-                                    "action_request": getattr(tel, "action_request", ""),
-                                    "action_committed": bool(getattr(tel, "action_committed", False)),
-                                    "note": tel.note,
-                                },
-                                "forced": bool(force),
+                            tel_payload = {
+                                "hp_pct": tel.hp_pct,
+                                "mp_pct": tel.mp_pct,
+                                "low_hp": tel.low_hp,
+                                "low_mp": tel.low_mp,
+                                "paralyzed": tel.paralyzed,
+                                "haste_active": tel.haste_active,
+                                "utamo_active": tel.utamo_active,
+                                "hungry": tel.hungry,
+                                "target": tel.target,
+                                "recommendation": tel.recommendation,
+                                "cavebot_next": tel.cavebot_next,
+                                "cavebot_waypoint": tel.cavebot_waypoint,
+                                "cavebot_action": tel.cavebot_action,
+                                "action_request": getattr(tel, "action_request", ""),
+                                "action_committed": bool(getattr(tel, "action_committed", False)),
+                                "note": tel.note,
                             }
-                            _put_drop_oldest(replay_write_q, ("replay", (rep_cfg.out_dir, crops, payload)))
-                    except Exception:
-                        pass
+                        else:
+                            tel_payload = {}
+
+                        payload = {
+                            "ts": time.time(),
+                            "resolution": list(resolution),
+                            "gamestate": {
+                                "hp_current": getattr(gamestate, "hp_current", None),
+                                "hp_max": getattr(gamestate, "hp_max", None),
+                                "hp_pct": getattr(gamestate, "hp_pct", None),
+                                "mp_current": getattr(gamestate, "mp_current", None),
+                                "mp_max": getattr(gamestate, "mp_max", None),
+                                "mp_pct": getattr(gamestate, "mp_pct", None),
+                                "cap_current": getattr(gamestate, "cap_current", None),
+                                "pos_x": getattr(gamestate, "pos_x", None),
+                                "pos_y": getattr(gamestate, "pos_y", None),
+                                "pos_z": getattr(gamestate, "pos_z", None),
+                            },
+                            "rois_state": {
+                                "roi_offset_px": rois.get("_roi_offset_px") if isinstance(rois, dict) else None,
+                                "roi_offset_score": rois.get("_roi_offset_score") if isinstance(rois, dict) else None,
+                                "viewport_auto": rois.get("_viewport_auto") if isinstance(rois, dict) else None,
+                                "game_viewport": rois.get("game_viewport") if isinstance(rois, dict) else None,
+                            },
+                            "telemetry": tel_payload,
+                            "forced": bool(force),
+                        }
+                        _put_drop_oldest(replay_write_q, ("replay", (out_dir, crops, payload)))
+                except Exception:
+                    pass
 
                 # Debug overlay exporter (writes annotated frames) - opt-in via env.
                 try:
@@ -449,6 +495,34 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_target: Target | None = None
         bot_debug = os.getenv("BOT_DEBUG", "").strip().lower() in {"1", "true", "yes"}
 
+        # Optional coordinate recording (for building cavebot routes).
+        record_route_path = os.getenv("RECORD_ROUTE_PATH", "").strip()
+        record_route_enabled = os.getenv("RECORD_ROUTE_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+        record_samples_path = os.getenv("RECORD_ROUTE_SAMPLES_PATH", "").strip()
+        route_recorder = None
+        if record_route_enabled and record_route_path:
+            try:
+                from navigation.coords_recorder import CoordsRecorder
+
+                try:
+                    rec_min_manhattan = int(os.getenv("RECORD_ROUTE_MIN_MANHATTAN", "1").strip() or "1")
+                except Exception:
+                    rec_min_manhattan = 1
+                try:
+                    rec_min_interval = float(os.getenv("RECORD_ROUTE_MIN_INTERVAL_S", "0").strip() or "0")
+                except Exception:
+                    rec_min_interval = 0.0
+
+                route_recorder = CoordsRecorder(
+                    min_manhattan=rec_min_manhattan,
+                    min_interval_s=rec_min_interval,
+                )
+                print(f"🧾 Recording route to: {record_route_path}")
+                if record_samples_path:
+                    print(f"🧾 Recording samples JSONL to: {record_samples_path}")
+            except Exception:
+                route_recorder = None
+
         # Cap leave check (assistant recommendation).
         cap_leave_enabled = os.getenv("CAP_LEAVE_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
         try:
@@ -472,6 +546,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
         last_block_log_ts = 0.0
 
+        # Env-based JSONL logging (used when no RuntimeConfig/UI is attached).
+        log_enabled_env_raw = os.getenv("LOG_JSONL_ENABLED", "").strip().lower()
+        if not log_enabled_env_raw:
+            log_enabled_env_raw = os.getenv("LOG_ENABLED", "").strip().lower()
+        log_enabled_env = log_enabled_env_raw in {"1", "true", "yes"}
+        try:
+            log_interval_ms_env = int(float(os.getenv("LOG_JSONL_INTERVAL_MS", "250").strip() or "250"))
+        except Exception:
+            log_interval_ms_env = 250
+        log_out_file_env = os.getenv("LOG_JSONL_OUT_FILE", "logs/telemetry.jsonl").strip() or "logs/telemetry.jsonl"
+
         # Safe action sink (records what we'd do, no real input injection).
         try:
             from action.input_driver import ActionRequest, MockInputDriver
@@ -487,6 +572,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             food_interval_s = 0.0
         food_trigger = PeriodicTrigger(interval_s=max(0.0, food_interval_s))
+
         while not stop_event.is_set():
             loop_t0 = time.time()
             # Always-initialized per-tick flags (avoid possibly-unbound locals).
@@ -693,13 +779,29 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         pass
 
                 elif navigator is not None:
-                    # Current position (temporary): PLAYER_X/PLAYER_Y
+                    # Current position: prefer OCR coords from gamestate; fall back to env vars.
+                    gx = getattr(gamestate, "pos_x", None)
+                    gy = getattr(gamestate, "pos_y", None)
+                    gz = getattr(gamestate, "pos_z", None)
+
                     px_raw = os.getenv("PLAYER_X", "").strip()
                     py_raw = os.getenv("PLAYER_Y", "").strip()
+                    pz_raw = os.getenv("PLAYER_Z", "").strip()
                     pos = None
-                    if px_raw and py_raw:
+                    if gx is not None and gy is not None:
                         try:
-                            pos = (int(px_raw), int(py_raw))
+                            if gz is not None:
+                                pos = (int(gx), int(gy), int(gz))
+                            else:
+                                pos = (int(gx), int(gy))
+                        except Exception:
+                            pos = None
+                    elif px_raw and py_raw:
+                        try:
+                            if pz_raw:
+                                pos = (int(px_raw), int(py_raw), int(pz_raw))
+                            else:
+                                pos = (int(px_raw), int(py_raw))
                         except Exception:
                             pos = None
 
@@ -709,6 +811,27 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             last_pos_warn_ts = now
                             print("🧭 Cavebot: setea PLAYER_X y PLAYER_Y o usa CAVEBOT_MODE=steps")
                     else:
+                        # Record coordinates for route building (pos mode).
+                        try:
+                            if route_recorder is not None:
+                                if len(pos) >= 3:
+                                    route_recorder.maybe_add(
+                                        x=int(pos[0]),
+                                        y=int(pos[1]),
+                                        z=int(pos[2]),
+                                        hp_current=getattr(gamestate, "hp_current", None),
+                                        mp_current=getattr(gamestate, "mp_current", None),
+                                    )
+                                else:
+                                    route_recorder.maybe_add(
+                                        x=int(pos[0]),
+                                        y=int(pos[1]),
+                                        z=None,
+                                        hp_current=getattr(gamestate, "hp_current", None),
+                                        mp_current=getattr(gamestate, "mp_current", None),
+                                    )
+                        except Exception:
+                            pass
                         try:
                             blocked_abs = None
                             try:
@@ -854,6 +977,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         mp_max=sig.mp_max,
                         mp_pct=sig.mp_pct,
                         cap_current=cap_current,
+                        pos_x=getattr(gamestate, "pos_x", None),
+                        pos_y=getattr(gamestate, "pos_y", None),
+                        pos_z=getattr(gamestate, "pos_z", None),
                         ring_equipped=ring_equipped,
                         amulet_equipped=amulet_equipped,
                         low_hp=sig.low_hp,
@@ -876,10 +1002,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     pass
 
             # Export JSONL de eventos (opt-in): cambios relevantes.
-            if runtime_config is not None and sig is not None:
+            if sig is not None:
                 try:
-                    log_cfg = runtime_config.logging_snapshot()
-                    if log_cfg.enabled:
+                    if runtime_config is not None:
+                        log_cfg = runtime_config.logging_snapshot()
+                        log_enabled = bool(log_cfg.enabled)
+                        log_interval_ms = int(log_cfg.interval_ms)
+                        log_out_file = str(log_cfg.out_file)
+                    else:
+                        log_enabled = bool(log_enabled_env)
+                        log_interval_ms = int(log_interval_ms_env)
+                        log_out_file = str(log_out_file_env)
+
+                    if log_enabled:
                         flags = (
                             bool(sig.low_hp),
                             bool(sig.low_mp),
@@ -891,7 +1026,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         def emit(kind: str, data: dict) -> None:
                             try:
-                                _put_drop_oldest(jsonl_write_q, ("jsonl", (log_cfg.out_file, {"kind": kind, **data})))
+                                _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, {"kind": kind, **data})))
                             except Exception:
                                 pass
 
@@ -903,7 +1038,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             emit("event.recommendation", {"recommendation": recommendation})
                             last_event_reco = recommendation
 
-                        if action_req_str != last_event_action_req or last_event_action_committed is None or action_committed != last_event_action_committed:
+                        if (
+                            action_req_str != last_event_action_req
+                            or last_event_action_committed is None
+                            or action_committed != last_event_action_committed
+                        ):
                             emit(
                                 "event.action_request",
                                 {"action_request": action_req_str, "action_committed": bool(action_committed)},
@@ -914,7 +1053,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         if cavebot_waypoint != last_event_wp or cavebot_action != last_event_action:
                             emit(
                                 "event.cavebot",
-                                {"cavebot_waypoint": cavebot_waypoint, "cavebot_action": cavebot_action, "cavebot_next": cavebot_next},
+                                {
+                                    "cavebot_waypoint": cavebot_waypoint,
+                                    "cavebot_action": cavebot_action,
+                                    "cavebot_next": cavebot_next,
+                                },
                             )
                             last_event_wp = cavebot_waypoint
                             last_event_action = cavebot_action
@@ -936,49 +1079,82 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     pass
 
             # Export JSONL de telemetría (opt-in).
-            if runtime_config is not None:
-                try:
+            try:
+                if runtime_config is not None:
                     log_cfg = runtime_config.logging_snapshot()
-                    if jsonl.should_log(enabled=log_cfg.enabled, interval_ms=log_cfg.interval_ms):
-                        tel = runtime_config.telemetry_snapshot()
-                        _put_drop_oldest(
-                            jsonl_write_q,
-                            (
-                                "jsonl",
-                                (
-                                    log_cfg.out_file,
-                                    {
-                                        "kind": "telemetry",
-                                        "hp_current": tel.hp_current,
-                                        "hp_max": tel.hp_max,
-                                        "hp_pct": tel.hp_pct,
-                                        "mp_current": tel.mp_current,
-                                        "mp_max": tel.mp_max,
-                                        "mp_pct": tel.mp_pct,
-                                        "cap_current": getattr(tel, "cap_current", None),
-                                        "ring_equipped": getattr(tel, "ring_equipped", None),
-                                        "amulet_equipped": getattr(tel, "amulet_equipped", None),
-                                        "low_hp": tel.low_hp,
-                                        "low_mp": tel.low_mp,
-                                        "low_cap": getattr(tel, "low_cap", None),
-                                        "paralyzed": tel.paralyzed,
-                                        "haste_active": tel.haste_active,
-                                        "utamo_active": tel.utamo_active,
-                                        "hungry": tel.hungry,
-                                        "target": tel.target,
-                                        "recommendation": tel.recommendation,
-                                        "cavebot_next": tel.cavebot_next,
-                                        "cavebot_waypoint": tel.cavebot_waypoint,
-                                        "cavebot_action": tel.cavebot_action,
-                                        "action_request": getattr(tel, "action_request", ""),
-                                        "action_committed": bool(getattr(tel, "action_committed", False)),
-                                        "note": tel.note,
-                                    },
-                                ),
-                            ),
-                        )
-                except Exception:
-                    pass
+                    log_enabled = bool(log_cfg.enabled)
+                    log_interval_ms = int(log_cfg.interval_ms)
+                    log_out_file = str(log_cfg.out_file)
+                    tel = runtime_config.telemetry_snapshot()
+                    tel_event = {
+                        "kind": "telemetry",
+                        "hp_current": tel.hp_current,
+                        "hp_max": tel.hp_max,
+                        "hp_pct": tel.hp_pct,
+                        "mp_current": tel.mp_current,
+                        "mp_max": tel.mp_max,
+                        "mp_pct": tel.mp_pct,
+                        "cap_current": getattr(tel, "cap_current", None),
+                        "pos_x": getattr(tel, "pos_x", None),
+                        "pos_y": getattr(tel, "pos_y", None),
+                        "pos_z": getattr(tel, "pos_z", None),
+                        "ring_equipped": getattr(tel, "ring_equipped", None),
+                        "amulet_equipped": getattr(tel, "amulet_equipped", None),
+                        "low_hp": tel.low_hp,
+                        "low_mp": tel.low_mp,
+                        "low_cap": getattr(tel, "low_cap", None),
+                        "paralyzed": tel.paralyzed,
+                        "haste_active": tel.haste_active,
+                        "utamo_active": tel.utamo_active,
+                        "hungry": tel.hungry,
+                        "target": tel.target,
+                        "recommendation": tel.recommendation,
+                        "cavebot_next": tel.cavebot_next,
+                        "cavebot_waypoint": tel.cavebot_waypoint,
+                        "cavebot_action": tel.cavebot_action,
+                        "action_request": getattr(tel, "action_request", ""),
+                        "action_committed": bool(getattr(tel, "action_committed", False)),
+                        "note": tel.note,
+                    }
+                else:
+                    log_enabled = bool(log_enabled_env)
+                    log_interval_ms = int(log_interval_ms_env)
+                    log_out_file = str(log_out_file_env)
+                    tel_event = {
+                        "kind": "telemetry",
+                        "hp_current": getattr(gamestate, "hp_current", None),
+                        "hp_max": getattr(gamestate, "hp_max", None),
+                        "hp_pct": getattr(gamestate, "hp_pct", None),
+                        "mp_current": getattr(gamestate, "mp_current", None),
+                        "mp_max": getattr(gamestate, "mp_max", None),
+                        "mp_pct": getattr(gamestate, "mp_pct", None),
+                        "cap_current": getattr(gamestate, "cap_current", None),
+                        "pos_x": getattr(gamestate, "pos_x", None),
+                        "pos_y": getattr(gamestate, "pos_y", None),
+                        "pos_z": getattr(gamestate, "pos_z", None),
+                        "ring_equipped": ring_equipped,
+                        "amulet_equipped": amulet_equipped,
+                        "low_hp": bool(getattr(sig, "low_hp", False)) if sig is not None else None,
+                        "low_mp": bool(getattr(sig, "low_mp", False)) if sig is not None else None,
+                        "low_cap": low_cap,
+                        "paralyzed": bool(getattr(sig, "paralyzed", False)) if sig is not None else None,
+                        "haste_active": bool(getattr(sig, "haste_active", False)) if sig is not None else None,
+                        "utamo_active": bool(getattr(sig, "utamo_active", False)) if sig is not None else None,
+                        "hungry": bool(getattr(sig, "hungry", False)) if sig is not None else None,
+                        "target": target_str,
+                        "recommendation": recommendation,
+                        "cavebot_next": cavebot_next,
+                        "cavebot_waypoint": cavebot_waypoint,
+                        "cavebot_action": cavebot_action,
+                        "action_request": action_req_str,
+                        "action_committed": bool(action_committed),
+                        "note": "",
+                    }
+
+                if log_enabled and jsonl.should_log(enabled=log_enabled, interval_ms=log_interval_ms):
+                    _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, tel_event)))
+            except Exception:
+                pass
 
             # Healing en tiempo real (lógica mínima: solo decide + log)
             if sig is not None and healing_cfg is not None and healing_cfg.enabled:
@@ -1006,6 +1182,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     n_dec = 0
                     dec_ms_sum = 0.0
 
+        # Persist recorded route on shutdown.
+        try:
+            if route_recorder is not None and record_route_path:
+                route_recorder.save_route(record_route_path, name_prefix="wp")
+                print(f"🧾 Route saved: {record_route_path} ({len(route_recorder.samples)} points)")
+                if record_samples_path:
+                    try:
+                        route_recorder.save_samples_jsonl(record_samples_path)
+                        print(f"🧾 Samples saved: {record_samples_path} ({len(route_recorder.samples)} points)")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     # Iniciar threads
     threads = [
         threading.Thread(target=writer_thread, daemon=True),
@@ -1018,9 +1208,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         t.start()
 
     print("✅ Bot ejecutándose. Presiona Ctrl+C para detener.")
+    # Optional auto-exit (useful for soak/debug runs without Ctrl+C).
+    try:
+        exit_after_s = float(os.getenv("BOT_EXIT_AFTER_S", "0").strip() or "0")
+    except Exception:
+        exit_after_s = 0.0
+    start_ts = time.time()
     try:
         while not stop_event.is_set():
             time.sleep(1)
+            if exit_after_s > 0.0 and (time.time() - start_ts) >= exit_after_s:
+                print(f"⏱️  Auto-stop after {exit_after_s:.1f}s")
+                stop_event.set()
     except KeyboardInterrupt:
         print("🛑 Deteniendo bot...")
         stop_event.set()

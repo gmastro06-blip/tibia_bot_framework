@@ -1,0 +1,15 @@
+[
+  {"x": 0, "y": 0, "name": "start_spawn"},
+
+  {"x": 6, "y": 0, "name": "main_street_east"},
+  {"x": 10, "y": 3, "name": "bank_flavius" , "action": "note:bank"},
+
+  {"x": 10, "y": 9, "name": "equipment_shop_avriel", "action": "note:shop"},
+  {"x": 6, "y": 12, "name": "magic_shop_viola", "action": "note:spells"},
+
+  {"x": 0, "y": 12, "name": "south_west_corner"},
+  {"x": -4, "y": 9, "name": "docks_anna", "action": "note:boat"},
+
+  {"x": -4, "y": 3, "name": "main_gate_gustavo", "action": "note:gate"},
+  {"x": 0, "y": 0, "name": "back_to_spawn"}
+]

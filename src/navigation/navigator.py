@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from navigation.route import Waypoint
 from navigation.pathfinding import astar, clamp_int, make_bounded_walkable
@@ -59,11 +59,25 @@ class Navigator:
                 return None
         return self.route[self.idx]
 
-    def _at_waypoint(self, pos: Tuple[int, int], wp: Waypoint) -> bool:
-        x, y = pos
-        return abs(x - wp.x) <= self.tol and abs(y - wp.y) <= self.tol
+    def _at_waypoint(self, pos: Union[Tuple[int, int], Tuple[int, int, int]], wp: Waypoint) -> bool:
+        x, y = int(pos[0]), int(pos[1])
+        if abs(x - wp.x) > self.tol or abs(y - wp.y) > self.tol:
+            return False
 
-    def decide(self, pos: Tuple[int, int], blocked: set[Tuple[int, int]] | None = None) -> NavDecision:
+        # If the waypoint specifies floor (z), require it to match.
+        if wp.z is not None:
+            if len(pos) < 3:
+                return False
+            try:
+                return int(pos[2]) == int(wp.z)
+            except Exception:
+                return False
+
+        return True
+
+    def decide(
+        self, pos: Union[Tuple[int, int], Tuple[int, int, int]], blocked: set[Tuple[int, int]] | None = None
+    ) -> NavDecision:
         wp = self.current_waypoint()
         if wp is None:
             return NavDecision(direction=None, reached_waypoint=False, waypoint=None)
@@ -73,7 +87,7 @@ class Navigator:
             self.idx += 1
             return NavDecision(direction=None, reached_waypoint=True, waypoint=wp)
 
-        x, y = pos
+        x, y = int(pos[0]), int(pos[1])
         dx = wp.x - x
         dy = wp.y - y
 

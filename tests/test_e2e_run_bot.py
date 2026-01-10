@@ -88,26 +88,41 @@ def test_run_bot_end_to_end_smoke(monkeypatch, capsys) -> None:
         "📸 Thread de captura iniciado" in out
         or "[CAPTURE]  Thread de captura iniciado" in out
         or "[CAPTURE] Thread de captura iniciado" in out
+        or "Thread de captura iniciado" in out
     )
     assert (
         "👁️  Thread de visión iniciado" in out
         or "[VISION]  Thread de visión iniciado" in out
         or "[VISION] Thread de visión iniciado" in out
+        or "Thread de visión iniciado" in out
+        or "Thread de vision iniciado" in out
     )
     assert (
         "🧠 Thread de decisión iniciado" in out
         or "[DECISION]  Thread de decisión iniciado" in out
         or "[DECISION] Thread de decisión iniciado" in out
+        or "Thread de decisión iniciado" in out
+        or "Thread de decision iniciado" in out
     )
 
     # Should print game state at least once.
-    assert "🎮 Estado: HP" in out or "[STATE]  Estado: HP" in out or "[STATE] Estado: HP" in out
+    assert (
+        "🎮 Estado: HP" in out
+        or "[STATE]  Estado: HP" in out
+        or "[STATE] Estado: HP" in out
+        or "Estado: HP" in out
+    )
 
     # Should observe runtime config changes live.
-    assert "🩹 Healing ON" in out or "[HEAL]  Healing ON" in out or "[HEAL] Healing ON" in out
+    assert "🩹 Healing ON" in out or "[HEAL]  Healing ON" in out or "[HEAL] Healing ON" in out or "Healing ON" in out
 
     # Trigger should fire at least once given high threshold and dropping HP.
-    assert "🩹 Healing TRIGGER" in out or "[HEAL]  Healing TRIGGER" in out or "[HEAL] Healing TRIGGER" in out
+    assert (
+        "🩹 Healing TRIGGER" in out
+        or "[HEAL]  Healing TRIGGER" in out
+        or "[HEAL] Healing TRIGGER" in out
+        or "Healing TRIGGER" in out
+    )
 
 
 def test_run_bot_publishes_simulated_states_to_telemetry(monkeypatch) -> None:

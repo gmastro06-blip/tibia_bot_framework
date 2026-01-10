@@ -1,0 +1,10 @@
+[
+  {"x": 0, "y": 0, "name": "start_gate"},
+
+  {"x": 0, "y": -8, "name": "north_path"},
+  {"x": 6, "y": -10, "name": "north_east_edge"},
+  {"x": 10, "y": -6, "name": "east_turn"},
+  {"x": 10, "y": 0, "name": "south_east_edge"},
+  {"x": 6, "y": 4, "name": "south_west_return"},
+  {"x": 0, "y": 0, "name": "back_gate"}
+]

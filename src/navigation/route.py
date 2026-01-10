@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 class Waypoint:
     x: int
     y: int
+    z: Optional[int] = None
     name: Optional[str] = None
     action: Optional[str] = None
 
@@ -17,7 +18,7 @@ class Waypoint:
 def load_route(path: str) -> List[Waypoint]:
     """Carga una ruta desde JSON.
 
-    Formato esperado: lista de objetos con {x, y, name?, action?}.
+    Formato esperado: lista de objetos con {x, y, z?, name?, action?}.
     """
     p = Path(path)
     data = json.loads(p.read_text(encoding="utf-8"))
@@ -30,6 +31,7 @@ def load_route(path: str) -> List[Waypoint]:
             continue
         x = item.get("x")
         y = item.get("y")
+        z = item.get("z")
         if x is None or y is None:
             continue
         try:
@@ -37,12 +39,19 @@ def load_route(path: str) -> List[Waypoint]:
             yi = int(y)
         except Exception:
             continue
+        zi: Optional[int] = None
+        if z is not None and str(z).strip() != "":
+            try:
+                zi = int(z)
+            except Exception:
+                zi = None
         name = item.get("name")
         action = item.get("action")
         out.append(
             Waypoint(
                 x=xi,
                 y=yi,
+                z=zi,
                 name=str(name) if name is not None else None,
                 action=str(action) if action is not None else None,
             )

@@ -132,6 +132,160 @@ class OCRProcessor:
             pass
         return None
 
+    @staticmethod
+    def _parse_coords_from_text(text: str) -> tuple[int, int, int | None] | None:
+        """Parse (x,y,z) from OCR text.
+
+        Accepts formats like:
+        - X: 32561 Y: 32496 Z: 7
+        - 32561 32496 7
+        - 32561,32496,7
+        - 32561 32496
+        """
+
+        s = (text or "").strip()
+        if not s:
+            return None
+
+        try:
+            m = re.search(
+                r"(?i)(?:x\s*[:=\s,]+(?P<x>-?\d+))\D+"
+                r"(?:y\s*[:=\s,]+(?P<y>-?\d+))"
+                r"(?:\D+(?:z\s*[:=\s,]+(?P<z>-?\d+)))?",
+                s,
+            )
+            if m:
+                x = int(m.group("x"))
+                y = int(m.group("y"))
+                z_raw = m.group("z")
+                z = int(z_raw) if z_raw is not None else None
+                return x, y, z
+        except Exception:
+            pass
+
+        nums = re.findall(r"-?\d+", s)
+        if len(nums) >= 2:
+            try:
+                x = int(nums[0])
+                y = int(nums[1])
+                z = int(nums[2]) if len(nums) >= 3 else None
+                return x, y, z
+            except Exception:
+                return None
+        return None
+
+    def extract_coords(
+        self,
+        frame: np.ndarray,
+        rois: Mapping[str, Any],
+        resolution: Tuple[int, int],
+    ) -> tuple[int, int, int | None] | None:
+        """Extract player coordinates (x,y,z) via OCR.
+
+        Requires an ROI named `coords_ocr` in the ROI config.
+        Returns None if ROI is missing or OCR/parsing fails.
+        """
+
+        try:
+            if not (hasattr(rois, "get") and rois.get("coords_ocr") is not None):
+                return None
+
+            x, y, w, h = self._roi_to_px(frame, rois, resolution, cast(Dict[str, Any], rois["coords_ocr"]))
+
+            # Expand a bit: coords text is often tight and OCR benefits from margin.
+            x0 = max(0, int(x - (w * 0.25)))
+            y0 = max(0, int(y - (h * 0.50)))
+            x1 = min(int(frame.shape[1]), int(x + w + (w * 0.25)))
+            y1 = min(int(frame.shape[0]), int(y + h + (h * 0.50)))
+            crop = frame[y0:y1, x0:x1]
+            if crop is None or getattr(crop, "size", 0) == 0:
+                return None
+
+            # Upscale for small fonts.
+            try:
+                crop = cv2.resize(crop, (0, 0), fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            except Exception:
+                pass
+
+            # Try raw OCR first (some fonts break with heavy thresholding).
+            candidates: List[str] = []
+            try:
+                res = self.reader.readtext(
+                    crop,
+                    detail=0,
+                    allowlist="0123456789XYZxyz:,- ",
+                )
+                for r in res or []:
+                    s = str(r).strip()
+                    if s:
+                        candidates.append(s)
+            except Exception:
+                pass
+
+            # Then try preprocessed OCR.
+            try:
+                processed = self.preprocess_image(crop)
+                res2 = self.reader.readtext(
+                    processed,
+                    detail=0,
+                    allowlist="0123456789XYZxyz:,- ",
+                )
+                for r in res2 or []:
+                    s = str(r).strip()
+                    if s:
+                        candidates.append(s)
+            except Exception:
+                pass
+
+            # Also join any raw strings to increase parse success.
+            try:
+                candidates.extend(self._readtext_strings(crop, allowlist=None))
+            except Exception:
+                pass
+
+            # Sanity-check parsed coords: prevents false positives when ROI drifts
+            # into HP/MP/CAP areas (common early in calibration).
+            try:
+                min_xy = int(float(os.getenv("COORDS_MIN_XY", "1000").strip() or "1000"))
+            except Exception:
+                min_xy = 1000
+            try:
+                max_xy = int(float(os.getenv("COORDS_MAX_XY", "100000").strip() or "100000"))
+            except Exception:
+                max_xy = 100000
+            try:
+                max_z = int(float(os.getenv("COORDS_MAX_Z", "15").strip() or "15"))
+            except Exception:
+                max_z = 15
+
+            def _valid_coords(p: tuple[int, int, int | None]) -> bool:
+                try:
+                    cx, cy, cz = p
+                    if cx < min_xy or cy < min_xy:
+                        return False
+                    if cx > max_xy or cy > max_xy:
+                        return False
+                    if cz is not None and not (0 <= int(cz) <= int(max_z)):
+                        return False
+                    return True
+                except Exception:
+                    return False
+
+            joined = " ".join(candidates)
+            parsed = self._parse_coords_from_text(joined)
+            if parsed is not None and _valid_coords(parsed):
+                return parsed
+
+            # Last resort: parse each candidate line independently.
+            for c in candidates:
+                parsed = self._parse_coords_from_text(c)
+                if parsed is not None and _valid_coords(parsed):
+                    return parsed
+
+            return None
+        except Exception:
+            return None
+
     def extract_capacity(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Optional[int]:
         """Extrae capacidad (cap) vía OCR.
 

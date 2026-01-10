@@ -200,6 +200,7 @@ def default_replay_roi_names() -> list[str]:
         "minimap_content",
         "battlelist_rows",
         "chat_panel",
+        "coords_ocr",
     ]
 
 

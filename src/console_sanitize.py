@@ -68,7 +68,21 @@ def _sanitize_text(s: str) -> str:
 
         out_chars.append(ch)
 
-    return "".join(out_chars)
+    s2 = "".join(out_chars)
+
+    # PowerShell + Tee-Object often ends up interpreting UTF-8 bytes as the
+    # current OEM code page (e.g. CP437), which corrupts accented letters.
+    # Since NO_EMOJI is already an opt-in “sanitize logs” mode, we also
+    # normalize to ASCII here for maximum robustness.
+    try:
+        # Decompose accents (NFKD), then drop combining marks.
+        norm = unicodedata.normalize("NFKD", s2)
+        norm = "".join(ch for ch in norm if unicodedata.category(ch) != "Mn")
+        # Finally drop any remaining non-ASCII characters.
+        norm = norm.encode("ascii", errors="ignore").decode("ascii")
+        return norm
+    except Exception:
+        return s2
 
 
 class _SanitizedWriter:

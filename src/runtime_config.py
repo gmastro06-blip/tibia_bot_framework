@@ -69,6 +69,9 @@ class TelemetrySnapshot:
     mp_max: int | None = None
     mp_pct: float | None = None
     cap_current: int | None = None
+    pos_x: int | None = None
+    pos_y: int | None = None
+    pos_z: int | None = None
     ring_equipped: bool | None = None
     amulet_equipped: bool | None = None
     # Señales/estados
@@ -140,6 +143,9 @@ class RuntimeConfig:
                 mp_max=self.telemetry.mp_max,
                 mp_pct=self.telemetry.mp_pct,
                 cap_current=self.telemetry.cap_current,
+                pos_x=self.telemetry.pos_x,
+                pos_y=self.telemetry.pos_y,
+                pos_z=self.telemetry.pos_z,
                 ring_equipped=self.telemetry.ring_equipped,
                 amulet_equipped=self.telemetry.amulet_equipped,
                 low_hp=self.telemetry.low_hp,
@@ -259,21 +265,6 @@ class RuntimeConfig:
             if out_dir is not None:
                 self.replay.out_dir = str(out_dir)
 
-    def update_logging(
-        self,
-        *,
-        enabled: bool | None = None,
-        interval_ms: int | None = None,
-        out_file: str | None = None,
-    ) -> None:
-        with self._lock:
-            if enabled is not None:
-                self.logging.enabled = bool(enabled)
-            if interval_ms is not None:
-                self.logging.interval_ms = max(50, int(interval_ms))
-            if out_file is not None:
-                self.logging.out_file = str(out_file)
-
     def request_advance(self) -> int:
         """El usuario confirmó que se puede avanzar una acción recomendada."""
         with self._lock:
@@ -294,6 +285,21 @@ class RuntimeConfig:
         with self._lock:
             return int(self._replay_force_counter)
 
+    def update_logging(
+        self,
+        *,
+        enabled: bool | None = None,
+        interval_ms: int | None = None,
+        out_file: str | None = None,
+    ) -> None:
+        with self._lock:
+            if enabled is not None:
+                self.logging.enabled = bool(enabled)
+            if interval_ms is not None:
+                self.logging.interval_ms = max(50, int(interval_ms))
+            if out_file is not None:
+                self.logging.out_file = str(out_file)
+
     def update_telemetry(
         self,
         *,
@@ -304,6 +310,9 @@ class RuntimeConfig:
         mp_max: int | None = None,
         mp_pct: float | None = None,
         cap_current: int | None = None,
+        pos_x: int | None = None,
+        pos_y: int | None = None,
+        pos_z: int | None = None,
         ring_equipped: bool | None = None,
         amulet_equipped: bool | None = None,
         low_hp: bool | None = None,
@@ -338,6 +347,12 @@ class RuntimeConfig:
                 self.telemetry.mp_pct = float(mp_pct)
             if cap_current is not None:
                 self.telemetry.cap_current = int(cap_current)
+            if pos_x is not None:
+                self.telemetry.pos_x = int(pos_x)
+            if pos_y is not None:
+                self.telemetry.pos_y = int(pos_y)
+            if pos_z is not None:
+                self.telemetry.pos_z = int(pos_z)
             if ring_equipped is not None:
                 self.telemetry.ring_equipped = bool(ring_equipped)
             if amulet_equipped is not None:
