@@ -40,7 +40,7 @@ class RoboflowInference:
 
         if config.local_model_path:
             # Use local YOLO model
-            from ultralytics import YOLO
+            from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage]
             self._model = YOLO(config.local_model_path)
             self._is_local = True
         else:

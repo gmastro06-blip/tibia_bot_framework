@@ -435,6 +435,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         food_trigger = PeriodicTrigger(interval_s=max(0.0, food_interval_s))
         while not stop_event.is_set():
             loop_t0 = time.time()
+            # Always-initialized per-tick flags (avoid possibly-unbound locals).
+            should_advance = False
+            commit_flag = False
             gamestate = None
             try:
                 gamestate = gs_queue.get(timeout=1)
@@ -596,15 +599,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         # Modo asistente: preview constante, pero solo consume/avanza con confirmación.
                         decision = step_navigator.preview()
 
-                        should_advance = True
                         if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
                             cur_adv = runtime_config.advance_counter_snapshot() if runtime_config is not None else 0
                             should_advance = cur_adv != last_advance_seen
                             if should_advance:
                                 last_advance_seen = cur_adv
+                        else:
+                            should_advance = True
 
                         if should_advance:
                             decision = step_navigator.decide()
+
+                        # Only mark as "committed" when assistant confirm mode is on and the user advanced.
+                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                            commit_flag = bool(should_advance)
+                        else:
+                            commit_flag = False
 
                         if decision.reached_waypoint and decision.waypoint is not None:
                             wp = decision.waypoint
@@ -722,21 +732,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         reqs.append(ActionRequest(kind="heal", value=act, note="preview"))
 
                 if cavebot_next in {"north", "south", "east", "west"}:
-                    committed = False
-                    try:
-                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
-                            # In step mode we only 'consume' actions on advance; in pos mode, this remains preview.
-                            committed = bool(should_advance) if 'should_advance' in locals() else False
-                    except Exception:
-                        committed = False
-                    note = "committed" if committed else "preview"
+                    note = "committed" if commit_flag else "preview"
                     if ActionRequest is not None:
                         reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
 
                 # Waypoint 'action' string can request loot/tools/trade/etc.
                 try:
                     if cavebot_action:
-                        reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(committed)))
+                        reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
                 except Exception:
                     pass
 
