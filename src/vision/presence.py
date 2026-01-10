@@ -41,6 +41,15 @@ def is_nonempty_icon(
         return False
 
     gray = _to_gray(crop)
+    # Many HUD slots have a high-contrast border. To avoid false positives on
+    # empty slots, measure texture on the inner area (border-stripped).
+    try:
+        h, w = int(gray.shape[0]), int(gray.shape[1])
+        pad = max(1, min(h, w) // 8)
+        if h > (pad * 2 + 1) and w > (pad * 2 + 1):
+            gray = gray[pad:-pad, pad:-pad]
+    except Exception:
+        pass
     try:
         mean = float(gray.mean())
         std = float(gray.std())

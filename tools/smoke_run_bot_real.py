@@ -30,6 +30,13 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     _add_src_to_syspath()
 
+    try:
+        from console_sanitize import maybe_install_no_emoji_output
+
+        maybe_install_no_emoji_output()
+    except Exception:
+        pass
+
     args = _parse_args()
 
     # Make run deterministic-ish.
@@ -86,13 +93,20 @@ def main() -> int:
     timer.start()
 
     try:
-        run_bot(stop_event=stop_event, runtime_config=cfg)
+        try:
+            run_bot(stop_event=stop_event, runtime_config=cfg)
+        except KeyboardInterrupt:
+            # If the user manually interrupts during HUD-move tests, exit cleanly.
+            stop_event.set()
+        except Exception as e:
+            stop_event.set()
+            print(f"❌ Bot crashed: {e}")
+            raise
     except KeyboardInterrupt:
         stop_event.set()
-    except Exception as e:
+        # Ignore secondary Ctrl+C while shutting down.
+    finally:
         stop_event.set()
-        print(f"❌ Bot crashed: {e}")
-        raise
 
     print("✅ Smoke finished")
     return 0

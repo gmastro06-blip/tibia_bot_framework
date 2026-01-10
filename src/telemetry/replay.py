@@ -194,6 +194,7 @@ def default_replay_roi_names() -> list[str]:
         # Optional fine-grain ROIs (only recorded if present in the config):
         "amulet_slot",
         "ring_slot",
+        "cap_ocr",
         "soul_ocr",
         "items_status_bar",
         "minimap_content",

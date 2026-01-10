@@ -95,6 +95,70 @@ poetry run python tools/smoke_live_hpmp.py --seconds 20 --fps 10 --paralyzed --u
 
 Esto imprime HP/MP reales y flags simulados (paralyzed/haste/utamo/hungry) sin ejecutar inputs.
 
+## Soak test (estabilidad runtime, sin inputs)
+
+Para validar estabilidad “real” del pipeline (captura + visión + decisión + writers) durante varios minutos, usa el runner:
+
+```bash
+poetry run python -m tools.smoke_run_bot_real --help
+```
+
+### Run rápido (foreground)
+
+Útil para ver errores inmediatos en consola:
+
+```powershell
+$env:BOT_PROFILE='1'
+$env:FORCE_MONITOR='2'
+$env:CAPTURE_FPS='10'
+poetry run python -u -m tools.smoke_run_bot_real --seconds 60 --enable-overlay --enable-replay --enable-jsonl --disable-roboflow
+```
+
+### Run recomendado (detached + logs, 10 min)
+
+En PowerShell es más robusto lanzarlo como proceso separado (evita Ctrl+C accidental y problemas de encoding al pipear a archivo):
+
+```powershell
+New-Item -ItemType Directory -Force -Path logs | Out-Null
+
+$outLog = 'logs\soak_run.log'
+$errLog = 'logs\soak_run.err.log'
+Remove-Item -ErrorAction SilentlyContinue $outLog, $errLog
+
+$env:BOT_PROFILE = '1'
+$env:FORCE_MONITOR = '2'
+$env:CAPTURE_FPS = '10'
+$env:PYTHONIOENCODING = 'utf-8'
+
+$p = Start-Process -FilePath 'poetry' -ArgumentList @(
+  'run','python','-u','-m','tools.smoke_run_bot_real',
+  '--seconds','600',
+  '--enable-overlay','--enable-replay','--enable-jsonl',
+  '--disable-roboflow'
+) -NoNewWindow -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru
+
+"Started PID=$($p.Id)"
+```
+
+Monitorear el log en vivo:
+
+```powershell
+Get-Content -Encoding utf8 logs\soak_run.log -Tail 30 -Wait
+```
+
+Parar el proceso:
+
+```powershell
+Stop-Process -Id <PID> -Force
+```
+
+Outputs esperados durante el soak:
+- `logs/soak_run.log` (stdout del runner)
+- `logs/soak_run.err.log` (stderr)
+- `logs/debug_overlay/` (frames anotados si `--enable-overlay`)
+- `logs/replay/` (snapshots ROI+JSON si `--enable-replay`)
+- `logs/telemetry.jsonl` (telemetría + eventos si `--enable-jsonl`)
+
 ## Captura de pantalla (multi-monitor)
 
 La captura usa `MSS` como fallback robusto y soporta múltiples monitores.
@@ -179,14 +243,51 @@ poetry run python test_capture.py
 ```
 
 Archivos generados (ejemplos):
-- `debug_images_real/dxgi_full_...png`
-- `debug_images_real/dxgi_overlay_...png`
-- `debug_images_real/dxgi_crop_hpmp_top_strip_...png`
 
 ### Nota sobre ROIs de HP/MP
 
 Para fullscreen real, las ROIs superiores se calibran desde `y=0.0` y el OCR usa como fallback robusto el ROI `hpmp_top_strip` (separa izquierda=HP, derecha=MP).
 
+
+## ROIs / Calibración
+
+### Si movés el HUD (barras / paneles)
+
+Las ROIs están definidas para un layout específico. Si movés las barras/paneles dentro del juego, esa calibración deja de coincidir.
+
+- Recomendado: mantené el HUD fijo (un layout por perfil).
+- Si usás varios layouts, guardá varios JSON y elegí cuál cargar con `ROIS_CONFIG`.
+
+Ejemplos (PowerShell):
+
+- Usar un perfil de ROIs específico:
+  - ` $env:ROIS_CONFIG = 'configs/rois_guess_1920x1080_mi_layout.json' `
+  - `poetry run python -m src.main`
+
+- Usar la calibración resuelta guardada en `data/ROIs_resueltos.json`:
+  - ` $env:ROIS_CONFIG = 'data/ROIs_resueltos.json' `
+
+Tip: podés duplicar el archivo base (`configs/rois_guess_1920x1080.json`) con otro nombre y recalibrar sobre ese.
+
+### Auto-ajuste (ancla) cuando movés el HUD (experimental)
+
+Si querés que el bot se recupere automáticamente cuando movés el HUD, podés configurar un **anchor**:
+se guarda una plantilla (imagen chica) y en runtime se hace template-matching para calcular un offset global
+que se aplica a todas las ROIs.
+
+1) Crear el anchor (seleccioná algo bien estable: esquina de un panel, un ícono fijo, etc.)
+
+```powershell
+$env:FORCE_MONITOR='2'
+poetry run python -m tools.create_anchor_template --base right_hud_panel --write
+```
+
+Esto guarda la plantilla en `data/anchors/hud_anchor.png` y escribe `_anchor` dentro de tu config de ROIs.
+
+2) Correr normalmente: el bot auto-alinea ROIs si `_anchor` existe.
+
+Opcional:
+- Desactivar ancla: ` $env:ANCHOR_ENABLED='0' `
 ## Configuración
 
 - ROIs por resolución:

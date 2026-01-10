@@ -29,6 +29,15 @@ from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi
 from telemetry.overlay_export import OverlayExporter, overlay_config_from_env
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
+from vision.anchor_tracker import AnchorTracker
+
+try:
+    from console_sanitize import maybe_install_no_emoji_output
+
+    maybe_install_no_emoji_output()
+except Exception:
+    # Never break the bot due to console/output customization.
+    pass
 
 # Assistant-first design: no real input injection.
 # If you want to test “actions we would take”, use a mock driver:
@@ -62,6 +71,31 @@ def _toggle_transition_lines(
 def load_roi_config(resolution: tuple) -> tuple:
     """Carga configuración de ROIs según la resolución detectada"""
     width, height = resolution
+
+    # Optional override: allow selecting a specific ROI config file.
+    # Useful when the HUD/bars were moved and you keep multiple profiles.
+    # Examples:
+    #   $env:ROIS_CONFIG = 'configs/rois_guess_1920x1080_mi_layout.json'
+    #   $env:ROIS_CONFIG = 'data/ROIs_resueltos.json'
+    rois_override = os.getenv("ROIS_CONFIG", "").strip()
+    if rois_override:
+        # Support relative paths from repo root.
+        cand = rois_override
+        try:
+            if not os.path.isabs(cand):
+                cand = os.path.join(project_root, cand)
+        except Exception:
+            cand = rois_override
+        try:
+            with open(cand, "r") as f:
+                config = json.load(f)
+                print(f"Configuración ROIs cargada desde override {rois_override}")
+                return config.get("rois_guess_norm", config.get("rois", config)), config.get(
+                    "source_resolution", [width, height]
+                )
+        except Exception as e:
+            print(f"ROIS_CONFIG inválido ({rois_override}): {e}. Usando configuración por resolución.")
+
     config_files = {
         (2048, 1076): "configs/rois_guess.json",
         (1920, 1080): "configs/rois_guess_1920x1080.json",
@@ -109,6 +143,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     Si `stop_event` se provee, el bot se detiene cuando el evento está seteado.
     Esto permite controlarlo desde una UI.
     """
+    try:
+        from console_sanitize import maybe_install_no_emoji_output
+
+        maybe_install_no_emoji_output()
+    except Exception:
+        pass
+
     print("🚀 Iniciando Tibia Bot Framework...")
 
     if stop_event is None:
@@ -150,6 +191,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     capture = DXGICapture(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
+
+    anchor_tracker = AnchorTracker()
 
     replay = ReplayRecorder()
     overlay = OverlayExporter(overlay_config_from_env())
@@ -267,6 +310,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     pass
                 if rois is None or resolution is None:
                     continue
+
+                # Auto-align ROIs if an anchor is configured (handles HUD moves).
+                try:
+                    anchor_tracker.maybe_update(
+                        frame=frame,
+                        rois=rois,
+                        resolution=resolution,
+                        roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
+                    )
+                except Exception:
+                    pass
 
                 t0 = time.time()
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
