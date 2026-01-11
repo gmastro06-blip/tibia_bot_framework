@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import time
+import subprocess
 from pathlib import Path
 
 
@@ -17,6 +18,11 @@ def _add_src_to_syspath() -> None:
 class BotUI:
     def __init__(self) -> None:
         _add_src_to_syspath()
+
+        self._repo_root = Path(__file__).resolve().parent
+        self._last_roi_sanity_dir: str | None = None
+        self._last_ocr_sanity_dir: str | None = None
+        self._last_anchor_sanity_dir: str | None = None
 
         try:
             import tkinter as tk
@@ -44,6 +50,24 @@ class BotUI:
         # Estado general
         self.status_var = tk.StringVar(value="Detenido")
         self.stale_var = tk.StringVar(value="-")
+        self.health_var = tk.StringVar(value="-")
+        self.health_status_var = tk.StringVar(value="-")
+        self.anchor_var = tk.StringVar(value="-")
+        self.anchor_status_var = tk.StringVar(value="OFF")
+        self.idle_var = tk.StringVar(value="-")
+        self.idle_status_var = tk.StringVar(value="OFF")
+
+        # UI-side idle tracking (derived from telemetry coords)
+        self._idle_last_pos_key: tuple[int, int, int | None] | None = None
+        self._idle_last_pos_change_ts: float = 0.0
+
+        # Últimos resultados de sanity-check (persisten en UI)
+        self.last_roi_summary_var = tk.StringVar(value="-")
+        self.last_roi_dir_var = tk.StringVar(value="-")
+        self.last_ocr_summary_var = tk.StringVar(value="-")
+        self.last_ocr_dir_var = tk.StringVar(value="-")
+        self.last_anchor_summary_var = tk.StringVar(value="-")
+        self.last_anchor_dir_var = tk.StringVar(value="-")
 
         # Configuración (en memoria por ahora)
         self.healing_enabled = tk.BooleanVar(value=False)
@@ -66,6 +90,25 @@ class BotUI:
         self.asst_confirm = tk.BooleanVar(value=True)
         self.asst_sound = tk.BooleanVar(value=True)
 
+        # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot vía env vars.
+        try:
+            _idle_alert_default = float(os.getenv("ASSIST_IDLE_ALERT_S", "0").strip() or "0")
+        except Exception:
+            _idle_alert_default = 0.0
+        try:
+            _idle_repeat_default = float(os.getenv("ASSIST_IDLE_REPEAT_S", "10").strip() or "10")
+        except Exception:
+            _idle_repeat_default = 10.0
+        try:
+            _ui_idle_fail_default = float(os.getenv("UI_IDLE_FAIL_S", "0").strip() or "0")
+        except Exception:
+            _ui_idle_fail_default = 0.0
+
+        self.idle_alert_s = tk.DoubleVar(value=max(0.0, float(_idle_alert_default)))
+        self.idle_repeat_s = tk.DoubleVar(value=max(1.0, float(_idle_repeat_default)))
+        # 0 => auto (UI calcula fail como 2x warn o warn+30)
+        self.ui_idle_fail_s = tk.DoubleVar(value=max(0.0, float(_ui_idle_fail_default)))
+
         # Replay + export JSONL
         self.replay_enabled = tk.BooleanVar(value=False)
         self.replay_interval_ms = tk.IntVar(value=2000)
@@ -73,6 +116,9 @@ class BotUI:
         self.log_enabled = tk.BooleanVar(value=False)
         self.log_interval_ms = tk.IntVar(value=250)
         self.log_out_file = tk.StringVar(value=self._config.logging_snapshot().out_file)
+
+        # ROI config override (applied at bot start via env var)
+        self.rois_config_override = tk.StringVar(value=os.getenv("ROIS_CONFIG", "").strip())
 
         # Telemetría (solo lectura, viene del loop)
         self.hp_text = tk.StringVar(value="?")
@@ -134,6 +180,416 @@ class BotUI:
 
         tk.Label(tab_control, text="Estado stream:").grid(row=9, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.stale_var, width=40, anchor="w").grid(row=9, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Health:").grid(row=10, column=0, sticky="w", pady=(6, 0))
+        self._health_status_label = tk.Label(tab_control, textvariable=self.health_status_var, width=8, anchor="w")
+        self._health_status_label.grid(row=10, column=1, sticky="w", pady=(6, 0))
+        self._health_detail_label = tk.Label(tab_control, textvariable=self.health_var, width=52, anchor="w")
+        self._health_detail_label.grid(row=10, column=2, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Anchor:").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        self._anchor_status_label = tk.Label(tab_control, textvariable=self.anchor_status_var, width=8, anchor="w")
+        self._anchor_status_label.grid(row=11, column=1, sticky="w", pady=(6, 0))
+        self._anchor_detail_label = tk.Label(tab_control, textvariable=self.anchor_var, width=52, anchor="w")
+        self._anchor_detail_label.grid(row=11, column=2, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_control, text="Idle:").grid(row=12, column=0, sticky="w", pady=(6, 0))
+        self._idle_status_label = tk.Label(tab_control, textvariable=self.idle_status_var, width=8, anchor="w")
+        self._idle_status_label.grid(row=12, column=1, sticky="w", pady=(6, 0))
+        self._idle_detail_label = tk.Label(tab_control, textvariable=self.idle_var, width=52, anchor="w")
+        self._idle_detail_label.grid(row=12, column=2, sticky="w", pady=(6, 0))
+
+        # Herramientas de precisión (no bloquean; generan artefactos en logs/)
+        tk.Label(tab_control, text="").grid(row=13, column=0)  # separador simple
+        tk.Label(tab_control, text="Herramientas:").grid(row=13, column=0, sticky="w", pady=(6, 0))
+
+        def _monitor_default() -> int:
+            raw = os.getenv("FORCE_MONITOR", "2").strip() or "2"
+            try:
+                return int(raw)
+            except Exception:
+                return 2
+
+        def _run_tool_async(
+            cmd: list[str],
+            *,
+            title: str,
+            open_dir: str | None = None,
+            on_complete=None,
+        ) -> None:
+            if not cmd:
+                return
+
+            def _extract_out_dir(output: str) -> str | None:
+                try:
+                    for line in (output or "").splitlines():
+                        if line.strip().startswith("OUT_DIR:"):
+                            return line.split(":", 1)[1].strip()
+                except Exception:
+                    return None
+                return None
+
+            def _format_report_summary(out_dir_path: str) -> str | None:
+                try:
+                    p = Path(out_dir_path) / "report.json"
+                    if not p.exists():
+                        return None
+                    import json
+
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    if isinstance(data, dict) and "summary" in data and "checks" in data:
+                        # ROI sanity report
+                        s = data.get("summary") or {}
+                        ok = s.get("ok")
+                        warn = s.get("warn")
+                        fail = s.get("fail")
+                        lines = [f"Summary: OK={ok} WARN={warn} FAIL={fail}"]
+                        # show a few warnings/fails
+                        shown = 0
+                        for c in (data.get("checks") or []):
+                            try:
+                                status = str(c.get("status") or "")
+                                if status not in {"WARN", "FAIL"}:
+                                    continue
+                                name = str(c.get("name") or "")
+                                reason = str(c.get("reason") or "")
+                                lines.append(f"{status}: {name}: {reason}")
+                                shown += 1
+                                if shown >= 6:
+                                    break
+                            except Exception:
+                                continue
+                        return "\n".join(lines)
+
+                    if isinstance(data, dict) and "ocr" in data:
+                        # OCR sanity report
+                        ocr = data.get("ocr") or {}
+                        pres = data.get("presence") or {}
+                        hp = f"{ocr.get('hp_current')}/{ocr.get('hp_max')}"
+                        mp = f"{ocr.get('mp_current')}/{ocr.get('mp_max')}"
+                        capv = ocr.get("cap_current")
+                        coords = ocr.get("coords")
+                        lines = [f"HP: {hp}", f"MP: {mp}", f"Cap: {capv}"]
+                        if coords is not None:
+                            lines.append(f"Coords: {coords}")
+                        lines.append(
+                            f"Ring: {pres.get('ring_equipped')} | Amulet: {pres.get('amulet_equipped')} | Hungry: {pres.get('hungry')}"
+                        )
+                        return "\n".join(lines)
+
+                    if isinstance(data, dict) and "anchor" in data:
+                        # Anchor sanity report
+                        a = data.get("anchor") or {}
+                        name = str(a.get("roi_name") or "")
+                        dx = a.get("dx_src_px")
+                        dy = a.get("dy_src_px")
+                        sc = a.get("score")
+                        lines = [f"Anchor ROI: {name}", f"dx: {dx} | dy: {dy} | score: {sc}"]
+                        return "\n".join(lines)
+                except Exception:
+                    return None
+                return None
+
+            def _format_report_short(out_dir_path: str) -> str | None:
+                try:
+                    s = _format_report_summary(out_dir_path)
+                    if not s:
+                        return None
+                    first = s.splitlines()[0].strip()
+                    return first or None
+                except Exception:
+                    return None
+
+            def worker() -> None:
+                try:
+                    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(self._repo_root))
+                    out = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
+                    ok = proc.returncode == 0
+                except Exception as e:
+                    out = str(e)
+                    ok = False
+
+                tool_out_dir = _extract_out_dir(out)
+                summary = _format_report_summary(tool_out_dir) if tool_out_dir else None
+                summary_short = _format_report_short(tool_out_dir) if tool_out_dir else None
+
+                def done() -> None:
+                    try:
+                        # Let callers persist the exact OUT_DIR for later buttons.
+                        try:
+                            if on_complete is not None:
+                                on_complete(tool_out_dir, ok, out, summary_short)
+                        except Exception:
+                            pass
+
+                        # Prefer opening the exact run folder.
+                        chosen_open = tool_out_dir or open_dir
+                        if chosen_open:
+                            try:
+                                os.makedirs(chosen_open, exist_ok=True)
+                                os.startfile(os.path.abspath(chosen_open))
+                            except Exception:
+                                pass
+                        msg = (summary or out).strip() or ("OK" if ok else "FAIL")
+                        if ok:
+                            self._messagebox.showinfo(title, msg)
+                        else:
+                            self._messagebox.showerror(title, msg)
+                    except Exception:
+                        pass
+
+                try:
+                    self.root.after(0, done)
+                except Exception:
+                    pass
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        def run_roi_sanity_ui() -> None:
+            rois_path = str(self.rois_config_override.get()).strip()
+            out_dir = str(self._repo_root / "logs" / "roi_sanity_ui")
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "roi_sanity_check.py"),
+                "--monitor",
+                str(_monitor_default()),
+                "--out-dir",
+                out_dir,
+                "--save-overlay",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
+                if tool_out_dir:
+                    self._last_roi_sanity_dir = tool_out_dir
+                    try:
+                        self.last_roi_dir_var.set(str(tool_out_dir))
+                        self.last_roi_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                    return
+                # Fallback: best-effort newest folder.
+                try:
+                    base = Path(out_dir)
+                    if not base.exists():
+                        return
+                    dirs = [p for p in base.iterdir() if p.is_dir()]
+                    if not dirs:
+                        return
+                    newest = max(dirs, key=lambda p: p.stat().st_mtime)
+                    self._last_roi_sanity_dir = str(newest)
+                    try:
+                        self.last_roi_dir_var.set(str(newest))
+                        self.last_roi_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            _run_tool_async(cmd, title="ROI Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+
+        def run_ocr_sanity_ui() -> None:
+            rois_path = str(self.rois_config_override.get()).strip()
+            out_dir = str(self._repo_root / "logs" / "ocr_sanity_ui")
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "ocr_sanity_check.py"),
+                "--monitor",
+                str(_monitor_default()),
+                "--out-dir",
+                out_dir,
+                "--save-overlay",
+                "--save-crops",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
+                if tool_out_dir:
+                    self._last_ocr_sanity_dir = tool_out_dir
+                    try:
+                        self.last_ocr_dir_var.set(str(tool_out_dir))
+                        self.last_ocr_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                    return
+                try:
+                    base = Path(out_dir)
+                    if not base.exists():
+                        return
+                    dirs = [p for p in base.iterdir() if p.is_dir()]
+                    if not dirs:
+                        return
+                    newest = max(dirs, key=lambda p: p.stat().st_mtime)
+                    self._last_ocr_sanity_dir = str(newest)
+                    try:
+                        self.last_ocr_dir_var.set(str(newest))
+                        self.last_ocr_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            _run_tool_async(cmd, title="OCR Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+
+        def run_anchor_sanity_ui() -> None:
+            rois_path = str(self.rois_config_override.get()).strip()
+            out_dir = str(self._repo_root / "logs" / "anchor_sanity_ui")
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "anchor_sanity_check.py"),
+                "--monitor",
+                str(_monitor_default()),
+                "--out-dir",
+                out_dir,
+                "--save-overlay",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
+                if tool_out_dir:
+                    self._last_anchor_sanity_dir = tool_out_dir
+                    try:
+                        self.last_anchor_dir_var.set(str(tool_out_dir))
+                        self.last_anchor_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                    return
+                # Fallback: newest folder.
+                try:
+                    base = Path(out_dir)
+                    if not base.exists():
+                        return
+                    dirs = [p for p in base.iterdir() if p.is_dir()]
+                    if not dirs:
+                        return
+                    newest = max(dirs, key=lambda p: p.stat().st_mtime)
+                    self._last_anchor_sanity_dir = str(newest)
+                    try:
+                        self.last_anchor_dir_var.set(str(newest))
+                        self.last_anchor_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            _run_tool_async(cmd, title="Anchor Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+
+        def run_anchor_setup_ui() -> None:
+            # Interactive: lets you select a stable on-screen anchor and writes it into the ROIs config.
+            rois_path = str(self.rois_config_override.get()).strip()
+            if not rois_path:
+                # If no override is selected, create_anchor_template will pick by resolution.
+                rois_path = ""
+
+            # Default template location (repo-relative)
+            out_template = str(Path("data") / "anchors" / "hud_anchor.png")
+
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "create_anchor_template.py"),
+                "--monitor",
+                str(_monitor_default()),
+                "--base",
+                "frame",
+                "--out",
+                out_template,
+                "--write",
+            ]
+
+            # If user selected a specific ROIs file, we want to write into that exact file.
+            # The tool currently chooses by resolution, so we pass via env ROIS_CONFIG.
+            try:
+                if rois_path:
+                    os.environ["ROIS_CONFIG"] = rois_path
+            except Exception:
+                pass
+
+            _run_tool_async(cmd, title="Anchor Setup", open_dir=str(self._repo_root / "data" / "anchors"))
+
+        def _open_last_artifact(which: str, kind: str) -> None:
+            try:
+                if kind == "roi":
+                    last_dir = self._last_roi_sanity_dir
+                elif kind == "ocr":
+                    last_dir = self._last_ocr_sanity_dir
+                else:
+                    last_dir = self._last_anchor_sanity_dir
+                if not last_dir:
+                    self._messagebox.showinfo("Info", "Aún no hay un run reciente.")
+                    return
+                p = Path(last_dir) / ("overlay.png" if which == "overlay" else "report.json")
+                if not p.exists():
+                    self._messagebox.showinfo("Info", f"No existe: {p}")
+                    return
+                os.startfile(os.path.abspath(str(p)))
+            except Exception:
+                pass
+
+        tk.Button(tab_control, text="ROI sanity", width=12, command=run_roi_sanity_ui).grid(
+            row=14, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_control, text="OCR test", width=12, command=run_ocr_sanity_ui).grid(
+            row=14, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Anchor test", width=12, command=run_anchor_sanity_ui).grid(
+            row=14, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Anchor setup", width=12, command=run_anchor_setup_ui).grid(
+            row=14, column=4, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="ROI overlay", width=12, command=lambda: _open_last_artifact("overlay", "roi")).grid(
+            row=15, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_control, text="ROI report", width=12, command=lambda: _open_last_artifact("report", "roi")).grid(
+            row=15, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Anchor overlay", width=12, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
+            row=15, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="OCR overlay", width=12, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
+            row=16, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_control, text="OCR report", width=12, command=lambda: _open_last_artifact("report", "ocr")).grid(
+            row=16, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Anchor report", width=12, command=lambda: _open_last_artifact("report", "anchor")).grid(
+            row=16, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        # Últimos resultados
+        tk.Label(tab_control, text="").grid(row=17, column=0)
+        tk.Label(tab_control, text="Último ROI:").grid(row=18, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(
+            row=18, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(tab_control, textvariable=self.last_roi_dir_var, width=52, anchor="w").grid(
+            row=19, column=1, columnspan=3, sticky="w"
+        )
+
+        tk.Label(tab_control, text="Último OCR:").grid(row=20, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(
+            row=20, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(tab_control, textvariable=self.last_ocr_dir_var, width=52, anchor="w").grid(
+            row=21, column=1, columnspan=3, sticky="w"
+        )
+
+        tk.Label(tab_control, text="Último Anchor:").grid(row=22, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(
+            row=22, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(tab_control, textvariable=self.last_anchor_dir_var, width=52, anchor="w").grid(
+            row=23, column=1, columnspan=3, sticky="w"
+        )
 
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
@@ -215,29 +671,59 @@ class BotUI:
 
         tk.Label(tab_config, text="").grid(row=5, column=0)  # separador simple
 
+        tk.Label(tab_config, text="ROIs config (override)").grid(row=6, column=0, sticky="w", pady=(10, 0))
+        tk.Entry(tab_config, textvariable=self.rois_config_override, width=34).grid(
+            row=6, column=1, sticky="w", pady=(10, 0)
+        )
+
+        def browse_rois() -> None:
+            try:
+                from tkinter import filedialog
+
+                path = filedialog.askopenfilename(
+                    title="Selecciona ROIs profile JSON",
+                    initialdir=str((Path(__file__).resolve().parent / "configs")),
+                    filetypes=[("JSON", "*.json"), ("All files", "*")],
+                )
+                if path:
+                    self.rois_config_override.set(path)
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Browse", width=8, command=browse_rois).grid(
+            row=6, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
+        )
+
+        tk.Label(
+            tab_config,
+            text="(Se aplica al iniciar el bot; requiere reinicio)",
+        ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+        tk.Label(tab_config, text="").grid(row=8, column=0)  # separador simple
+
         tk.Checkbutton(tab_config, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=9, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
         tk.Checkbutton(tab_config, text="Confirmación humana (cavebot)", variable=self.asst_confirm).grid(
-            row=7, column=0, columnspan=2, sticky="w", pady=(6, 0)
+            row=10, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
         tk.Checkbutton(tab_config, text="Alertas sonoras", variable=self.asst_sound).grid(
-            row=8, column=0, columnspan=2, sticky="w", pady=(6, 0)
+            row=11, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="").grid(row=9, column=0)  # separador simple
+        tk.Label(tab_config, text="").grid(row=12, column=0)  # separador simple
 
         tk.Checkbutton(tab_config, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=10, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=13, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
-        tk.Label(tab_config, text="Replay interval (ms)").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Replay interval (ms)").grid(row=14, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_config, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
-            row=11, column=1, sticky="w", pady=(6, 0)
+            row=14, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Replay out_dir").grid(row=12, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Replay out_dir").grid(row=15, column=0, sticky="w", pady=(6, 0))
         tk.Entry(tab_config, textvariable=self.replay_out_dir, width=34).grid(
-            row=12, column=1, sticky="w", pady=(6, 0)
+            row=15, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_replay_dir() -> None:
@@ -255,23 +741,25 @@ class BotUI:
                 pass
 
         tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
-            row=12, column=2, sticky="w", padx=(8, 0)
+            row=15, column=2, sticky="w", padx=(8, 0)
         )
         tk.Button(tab_config, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
-            row=11, column=2, sticky="w", padx=(8, 0)
+            row=13, column=2, sticky="w", padx=(8, 0)
         )
+
+        tk.Label(tab_config, text="").grid(row=16, column=0)  # separador simple
 
         tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
-            row=13, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=17, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
-        tk.Label(tab_config, text="Log interval (ms)").grid(row=14, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Log interval (ms)").grid(row=18, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_config, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
-            row=14, column=1, sticky="w", pady=(6, 0)
+            row=18, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Log out_file").grid(row=15, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Log out_file").grid(row=19, column=0, sticky="w", pady=(6, 0))
         tk.Entry(tab_config, textvariable=self.log_out_file, width=34).grid(
-            row=15, column=1, sticky="w", pady=(6, 0)
+            row=19, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_log_parent() -> None:
@@ -297,11 +785,35 @@ class BotUI:
                 pass
 
         tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_log_parent).grid(
-            row=15, column=2, sticky="w", padx=(8, 0)
+            row=19, column=2, sticky="w", padx=(8, 0)
         )
         tk.Button(tab_config, text="Abrir archivo", width=12, command=open_log_file).grid(
-            row=14, column=2, sticky="w", padx=(8, 0)
+            row=18, column=2, sticky="w", padx=(8, 0)
         )
+
+        # --- Idle alert (UI + core) ---
+        tk.Label(tab_config, text="").grid(row=20, column=0)  # separador simple
+        tk.Label(tab_config, text="Idle (alerta / anti-stuck, sin inputs)").grid(
+            row=21, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        )
+        tk.Label(tab_config, text="WARN si idle ≥ (s)").grid(row=22, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
+            row=22, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="FAIL si idle ≥ (s)").grid(row=23, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
+            row=23, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Repetir alerta cada (s)").grid(row=24, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+            row=24, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(
+            tab_config,
+            text="(0 desactiva. Se aplica al iniciar el bot; requiere reinicio)",
+        ).grid(row=25, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
@@ -374,6 +886,7 @@ class BotUI:
         def poll_telemetry() -> None:
             try:
                 tel = self._config.telemetry_snapshot()
+                health = self._config.health_snapshot()
                 hp_str = "?"
                 mp_str = "?"
                 cap_str = "?"
@@ -432,6 +945,258 @@ class BotUI:
                         self.stale_var.set("OK")
                 else:
                     self.stale_var.set("-")
+
+                # Health line (watchdog snapshot)
+                try:
+                    # Thresholds (env-tunable)
+                    try:
+                        warn_gs_age_s = float(os.getenv("UI_HEALTH_WARN_GS_AGE_S", "3").strip() or "3")
+                    except Exception:
+                        warn_gs_age_s = 3.0
+                    try:
+                        fail_gs_age_s = float(os.getenv("UI_HEALTH_FAIL_GS_AGE_S", "8").strip() or "8")
+                    except Exception:
+                        fail_gs_age_s = 8.0
+                    try:
+                        warn_frame_age_s = float(os.getenv("UI_HEALTH_WARN_FRAME_AGE_S", "3").strip() or "3")
+                    except Exception:
+                        warn_frame_age_s = 3.0
+                    try:
+                        fail_frame_age_s = float(os.getenv("UI_HEALTH_FAIL_FRAME_AGE_S", "8").strip() or "8")
+                    except Exception:
+                        fail_frame_age_s = 8.0
+                    warn_on_drops = os.getenv("UI_HEALTH_WARN_ON_DROPS", "1").strip().lower() not in {"0", "false", "no"}
+
+                    parts_h = []
+                    if health.frame_age_s is not None:
+                        parts_h.append(f"frame_age {float(health.frame_age_s):.1f}s")
+                    if health.gs_age_s is not None:
+                        parts_h.append(f"gs_age {float(health.gs_age_s):.1f}s")
+                    if health.q_frame is not None or health.q_gs is not None:
+                        parts_h.append(f"q f={health.q_frame} gs={health.q_gs}")
+                    if health.drop_frame_queue is not None or health.drop_gs_queue is not None:
+                        parts_h.append(f"drops f={health.drop_frame_queue} gs={health.drop_gs_queue}")
+                    if health.capture_ms_last is not None or health.vision_ms_last is not None or health.decision_ms_last is not None:
+                        parts_h.append(
+                            f"ms cap={0 if health.capture_ms_last is None else float(health.capture_ms_last):.0f}"
+                            f" vis={0 if health.vision_ms_last is None else float(health.vision_ms_last):.0f}"
+                            f" dec={0 if health.decision_ms_last is None else float(health.decision_ms_last):.0f}"
+                        )
+                    try:
+                        if (
+                            getattr(health, "roi_offset_dx_px", None) is not None
+                            or getattr(health, "roi_offset_dy_px", None) is not None
+                            or getattr(health, "roi_offset_score", None) is not None
+                        ):
+                            dx = getattr(health, "roi_offset_dx_px", None)
+                            dy = getattr(health, "roi_offset_dy_px", None)
+                            sc = getattr(health, "roi_offset_score", None)
+                            parts_h.append(
+                                "roi_off "
+                                f"dx={0 if dx is None else float(dx):.0f} "
+                                f"dy={0 if dy is None else float(dy):.0f} "
+                                f"score={0 if sc is None else float(sc):.2f}"
+                            )
+                    except Exception:
+                        pass
+                    if health.dead_threads:
+                        parts_h.append(f"dead {health.dead_threads}")
+                    if health.warn:
+                        parts_h.append(str(health.warn))
+                    self.health_var.set(" | ".join(parts_h) if parts_h else "-")
+
+                    # Semaphore status
+                    status = "OK"
+                    if health.dead_threads:
+                        status = "FAIL"
+                    else:
+                        try:
+                            fa = float(health.frame_age_s) if health.frame_age_s is not None else None
+                            ga = float(health.gs_age_s) if health.gs_age_s is not None else None
+                        except Exception:
+                            fa, ga = None, None
+
+                        if (ga is not None and ga >= fail_gs_age_s) or (fa is not None and fa >= fail_frame_age_s):
+                            status = "FAIL"
+                        elif (ga is not None and ga >= warn_gs_age_s) or (fa is not None and fa >= warn_frame_age_s):
+                            status = "WARN"
+                        elif warn_on_drops:
+                            try:
+                                if int(health.drop_frame_queue or 0) > 0 or int(health.drop_gs_queue or 0) > 0:
+                                    status = "WARN"
+                            except Exception:
+                                pass
+                        elif health.warn:
+                            status = "WARN"
+
+                    self.health_status_var.set(status)
+                    try:
+                        if status == "OK":
+                            self._health_status_label.config(fg="#1b7f3a")
+                        elif status == "WARN":
+                            self._health_status_label.config(fg="#b26a00")
+                        else:
+                            self._health_status_label.config(fg="#b00020")
+                    except Exception:
+                        pass
+
+                    # Anchor status (ROI auto-alignment)
+                    try:
+                        try:
+                            warn_score = float(os.getenv("UI_ANCHOR_WARN_SCORE", "0.60").strip() or "0.60")
+                        except Exception:
+                            warn_score = 0.60
+                        try:
+                            fail_score = float(os.getenv("UI_ANCHOR_FAIL_SCORE", "0.48").strip() or "0.48")
+                        except Exception:
+                            fail_score = 0.48
+
+                        dx = getattr(health, "roi_offset_dx_px", None)
+                        dy = getattr(health, "roi_offset_dy_px", None)
+                        sc = getattr(health, "roi_offset_score", None)
+
+                        if dx is None and dy is None and sc is None:
+                            self.anchor_status_var.set("OFF")
+                            self.anchor_var.set("-")
+                            try:
+                                self._anchor_status_label.config(fg="#666666")
+                            except Exception:
+                                pass
+                        else:
+                            # Show numeric values when available.
+                            try:
+                                dx_s = "?" if dx is None else f"{float(dx):.0f}"
+                            except Exception:
+                                dx_s = "?"
+                            try:
+                                dy_s = "?" if dy is None else f"{float(dy):.0f}"
+                            except Exception:
+                                dy_s = "?"
+                            try:
+                                sc_s = "?" if sc is None else f"{float(sc):.2f}"
+                            except Exception:
+                                sc_s = "?"
+                            self.anchor_var.set(f"dx={dx_s} dy={dy_s} score={sc_s}")
+
+                            a_status = "OK"
+                            try:
+                                sc_f = float(sc) if sc is not None else None
+                            except Exception:
+                                sc_f = None
+                            if sc_f is None:
+                                a_status = "ON"
+                            elif sc_f < fail_score:
+                                a_status = "FAIL"
+                            elif sc_f < warn_score:
+                                a_status = "WARN"
+
+                            self.anchor_status_var.set(a_status)
+                            try:
+                                if a_status == "OK":
+                                    self._anchor_status_label.config(fg="#1b7f3a")
+                                elif a_status == "WARN":
+                                    self._anchor_status_label.config(fg="#b26a00")
+                                elif a_status == "FAIL":
+                                    self._anchor_status_label.config(fg="#b00020")
+                                else:
+                                    self._anchor_status_label.config(fg="#1f6feb")
+                            except Exception:
+                                pass
+                    except Exception:
+                        self.anchor_status_var.set("-")
+                        self.anchor_var.set("-")
+
+                    # Idle status (UI-side, derived from telemetry coords)
+                    try:
+                        try:
+                            idle_warn_s = float(
+                                (os.getenv("UI_IDLE_WARN_S", "").strip() or os.getenv("ASSIST_IDLE_ALERT_S", "0")).strip()
+                                or "0"
+                            )
+                        except Exception:
+                            idle_warn_s = 0.0
+                        idle_warn_s = max(0.0, float(idle_warn_s))
+
+                        try:
+                            idle_fail_raw = os.getenv("UI_IDLE_FAIL_S", "").strip()
+                            idle_fail_s = float(idle_fail_raw) if idle_fail_raw else (max(idle_warn_s * 2.0, idle_warn_s + 30.0) if idle_warn_s > 0 else 0.0)
+                        except Exception:
+                            idle_fail_s = max(idle_warn_s * 2.0, idle_warn_s + 30.0) if idle_warn_s > 0 else 0.0
+                        idle_fail_s = max(0.0, float(idle_fail_s))
+
+                        if idle_warn_s <= 0.0:
+                            self.idle_status_var.set("OFF")
+                            self.idle_var.set("-")
+                            try:
+                                self._idle_status_label.config(fg="#666666")
+                            except Exception:
+                                pass
+                        else:
+                            gx = getattr(tel, "pos_x", None)
+                            gy = getattr(tel, "pos_y", None)
+                            gz = getattr(tel, "pos_z", None)
+
+                            if gx is None or gy is None:
+                                self.idle_status_var.set("-")
+                                self.idle_var.set("no coords")
+                                try:
+                                    self._idle_status_label.config(fg="#666666")
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    key = (int(gx), int(gy), int(gz) if gz is not None else None)
+                                except Exception:
+                                    key = None
+
+                                if key is None:
+                                    self.idle_status_var.set("-")
+                                    self.idle_var.set("no coords")
+                                    try:
+                                        self._idle_status_label.config(fg="#666666")
+                                    except Exception:
+                                        pass
+                                else:
+                                    if self._idle_last_pos_key is None:
+                                        self._idle_last_pos_key = key
+                                        self._idle_last_pos_change_ts = now
+                                    elif key != self._idle_last_pos_key:
+                                        self._idle_last_pos_key = key
+                                        self._idle_last_pos_change_ts = now
+                                    idle_for = max(0.0, now - float(self._idle_last_pos_change_ts or now))
+
+                                    z_s = "" if key[2] is None else f",{key[2]}"
+                                    self.idle_var.set(f"pos={key[0]},{key[1]}{z_s} | idle {idle_for:.0f}s")
+
+                                    i_status = "OK" if idle_for < idle_warn_s else "WARN"
+                                    if idle_fail_s > 0.0 and idle_for >= idle_fail_s:
+                                        i_status = "FAIL"
+                                    self.idle_status_var.set(i_status)
+                                    try:
+                                        if i_status == "OK":
+                                            self._idle_status_label.config(fg="#1b7f3a")
+                                        elif i_status == "WARN":
+                                            self._idle_status_label.config(fg="#b26a00")
+                                        else:
+                                            self._idle_status_label.config(fg="#b00020")
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        try:
+                            self.idle_status_var.set("-")
+                            self.idle_var.set("-")
+                            try:
+                                self._idle_status_label.config(fg="#666666")
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                except Exception:
+                    self.health_var.set("-")
+                    try:
+                        self.health_status_var.set("-")
+                    except Exception:
+                        pass
             except Exception:
                 pass
             self.root.after(250, poll_telemetry)
@@ -440,12 +1205,73 @@ class BotUI:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _reset_idle_ui(self) -> None:
+        try:
+            self._idle_last_pos_key = None
+            self._idle_last_pos_change_ts = 0.0
+            self.idle_status_var.set("OFF")
+            self.idle_var.set("-")
+            try:
+                self._idle_status_label.config(fg="#666666")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
         if self._is_running():
             return
+
+        # Reset UI idle tracking for this run.
+        self._reset_idle_ui()
+
+        # Apply ROIs override for this bot run (used by src/main.py:load_roi_config).
+        try:
+            rois_path = str(self.rois_config_override.get()).strip()
+            if rois_path:
+                os.environ["ROIS_CONFIG"] = rois_path
+            else:
+                os.environ.pop("ROIS_CONFIG", None)
+        except Exception:
+            pass
+
+        # Apply idle-alert settings for this bot run (used by src/main.py decision loop, and UI idle line).
+        try:
+            idle_warn = float(self.idle_alert_s.get())
+        except Exception:
+            idle_warn = 0.0
+        try:
+            idle_rep = float(self.idle_repeat_s.get())
+        except Exception:
+            idle_rep = 10.0
+        try:
+            idle_fail = float(self.ui_idle_fail_s.get())
+        except Exception:
+            idle_fail = 0.0
+
+        try:
+            idle_warn = max(0.0, float(idle_warn))
+            idle_rep = max(1.0, float(idle_rep))
+            idle_fail = max(0.0, float(idle_fail))
+
+            os.environ["ASSIST_IDLE_ALERT_S"] = str(idle_warn)
+            os.environ["ASSIST_IDLE_REPEAT_S"] = str(idle_rep)
+
+            # UI-specific thresholds (optional overrides)
+            if idle_warn > 0.0:
+                os.environ["UI_IDLE_WARN_S"] = str(idle_warn)
+            else:
+                os.environ.pop("UI_IDLE_WARN_S", None)
+
+            if idle_fail > 0.0:
+                os.environ["UI_IDLE_FAIL_S"] = str(idle_fail)
+            else:
+                os.environ.pop("UI_IDLE_FAIL_S", None)
+        except Exception:
+            pass
 
         self._stop_event = threading.Event()
 
@@ -468,6 +1294,7 @@ class BotUI:
             self.status_var.set("Detenido")
             self.start_btn.config(state="normal")
             self.stop_btn.config(state="disabled")
+            self._reset_idle_ui()
             return
 
         if self._stop_event is not None:
@@ -484,6 +1311,7 @@ class BotUI:
         self.status_var.set("Detenido")
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
+        self._reset_idle_ui()
 
     def on_close(self) -> None:
         if self._is_running():

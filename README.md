@@ -40,6 +40,45 @@ La UI incluye pestañas:
 - **Healing**: configuración básica (se aplica en tiempo real)
 - **Cavebot**: configuración básica (se aplica en tiempo real)
 
+## Cavebot routes (record + validate)
+
+El cavebot consume rutas en formato JSON compatible con `navigation.route.load_route()`:
+
+```json
+[{"x": 32561, "y": 32496, "z": 7, "name": "wp0000", "action": "rope"}]
+```
+
+### Grabar una ruta (hotkeys + clipboard)
+
+Recorder interactivo (seguro): lee coordenadas del portapapeles y escribe `route.json`.
+
+```powershell
+poetry run python tools/route_recorder.py --out configs/route.json
+```
+
+- Hotkeys por defecto: `F12` agrega waypoint, `F11` agrega waypoint con `action=stand`.
+- Comandos en consola: `label X`, `action Y`, `once rope|shovel|loot`, `add`, `undo`, `list`, `stop`.
+
+Si no puedes usar hotkeys (permisos/antivirus), usa modo consola:
+
+```powershell
+poetry run python tools/route_recorder.py --no-hotkeys --out configs/route.json
+```
+
+### Validar una ruta
+
+Resumen rápido de calidad (duplicados, saltos grandes, cambios de piso):
+
+```powershell
+poetry run python tools/validate_route.py configs/route.json --print
+```
+
+Opcional: limpiar duplicados consecutivos y escribir otra ruta:
+
+```powershell
+poetry run python tools/validate_route.py configs/route.json --drop-duplicates --out configs/route.cleaned.json
+```
+
 ## Replay (ROI + JSON) y export JSONL
 
 ### Replay (snapshots)

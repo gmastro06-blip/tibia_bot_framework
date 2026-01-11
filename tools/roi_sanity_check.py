@@ -29,6 +29,22 @@ def _pick_config_file(resolution: tuple[int, int]) -> str:
     return config_files.get((width, height), "configs/rois_guess_1920x1080.json")
 
 
+def _resolve_rois_path(raw: str) -> str | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    try:
+        p = Path(s)
+        if not p.is_absolute():
+            repo_root = Path(__file__).resolve().parent.parent
+            p = (repo_root / p).resolve()
+        if p.exists() and p.is_file():
+            return str(p)
+    except Exception:
+        return None
+    return None
+
+
 def _load_config(path: str) -> tuple[dict, list[int]]:
     with open(path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
@@ -226,6 +242,13 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--names", type=str, default="", help="Comma-separated ROI names to check (default: all in config)")
     p.add_argument("--strict", action="store_true", help="Exit non-zero if any ROI FAILs")
 
+    p.add_argument(
+        "--rois",
+        type=str,
+        default="",
+        help="Path to ROI config JSON. If omitted, uses ROIS_CONFIG env var, else auto-picks by resolution.",
+    )
+
     # Tunables
     p.add_argument("--std-fail", type=float, default=1.0)
     p.add_argument("--std-warn", type=float, default=3.0)
@@ -263,7 +286,11 @@ def main() -> int:
         return 2
 
     resolution = (int(frame.shape[1]), int(frame.shape[0]))
-    cfg_path = _pick_config_file(resolution)
+    cfg_path = (
+        _resolve_rois_path(args.rois)
+        or _resolve_rois_path(os.getenv("ROIS_CONFIG", ""))
+        or _pick_config_file(resolution)
+    )
     rois, source_resolution = _load_config(cfg_path)
     rois = dict(rois)
     rois["_source_resolution"] = source_resolution
@@ -280,6 +307,9 @@ def main() -> int:
     ts = time.time()
     base_dir = out_dir / f"{ts:.6f}"
     base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Console output for UI parsing
+    print(f"OUT_DIR: {base_dir}")
 
     print(f"Config: {cfg_path} | frame={resolution[0]}x{resolution[1]} source={source_resolution}")
 

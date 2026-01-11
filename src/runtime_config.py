@@ -95,6 +95,42 @@ class TelemetrySnapshot:
 
 
 @dataclass
+class HealthSnapshot:
+    """Salud del pipeline para UI/observabilidad (solo lectura)."""
+
+    ts: float = 0.0
+    uptime_s: float | None = None
+    frame_age_s: float | None = None
+    gs_age_s: float | None = None
+    dead_threads: str = ""
+    # Counters
+    capture_ok: int | None = None
+    capture_none: int | None = None
+    vision_ok: int | None = None
+    vision_ex: int | None = None
+    decision_ok: int | None = None
+    decision_ex: int | None = None
+    drop_frame_queue: int | None = None
+    drop_gs_queue: int | None = None
+    drop_replay_queue: int | None = None
+    drop_jsonl_queue: int | None = None
+    # Queues
+    q_frame: int | None = None
+    q_gs: int | None = None
+    # Timings
+    capture_ms_last: float | None = None
+    vision_ms_last: float | None = None
+    decision_ms_last: float | None = None
+    capture_latency_ms: float | None = None
+    # ROI auto-alignment (AnchorTracker)
+    roi_offset_dx_px: float | None = None
+    roi_offset_dy_px: float | None = None
+    roi_offset_score: float | None = None
+    # Optional warning text
+    warn: str = ""
+
+
+@dataclass
 class RuntimeConfig:
     healing: HealingConfig = field(default_factory=HealingConfig)
     cavebot: CavebotConfig = field(default_factory=CavebotConfig)
@@ -103,6 +139,7 @@ class RuntimeConfig:
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
+    health: HealthSnapshot = field(default_factory=HealthSnapshot)
     _advance_counter: int = field(default=0, init=False, repr=False)
     _replay_force_counter: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
@@ -163,6 +200,33 @@ class RuntimeConfig:
                 action_request=str(self.telemetry.action_request),
                 action_committed=bool(self.telemetry.action_committed),
                 note=str(self.telemetry.note),
+            )
+
+    def health_snapshot(self) -> HealthSnapshot:
+        with self._lock:
+            return HealthSnapshot(
+                ts=float(self.health.ts),
+                uptime_s=self.health.uptime_s,
+                frame_age_s=self.health.frame_age_s,
+                gs_age_s=self.health.gs_age_s,
+                dead_threads=str(self.health.dead_threads),
+                capture_ok=self.health.capture_ok,
+                capture_none=self.health.capture_none,
+                vision_ok=self.health.vision_ok,
+                vision_ex=self.health.vision_ex,
+                decision_ok=self.health.decision_ok,
+                decision_ex=self.health.decision_ex,
+                drop_frame_queue=self.health.drop_frame_queue,
+                drop_gs_queue=self.health.drop_gs_queue,
+                drop_replay_queue=self.health.drop_replay_queue,
+                drop_jsonl_queue=self.health.drop_jsonl_queue,
+                q_frame=self.health.q_frame,
+                q_gs=self.health.q_gs,
+                capture_ms_last=self.health.capture_ms_last,
+                vision_ms_last=self.health.vision_ms_last,
+                decision_ms_last=self.health.decision_ms_last,
+                capture_latency_ms=self.health.capture_latency_ms,
+                warn=str(self.health.warn),
             )
 
     def assistant_snapshot(self) -> AssistantConfig:
@@ -387,3 +451,83 @@ class RuntimeConfig:
                 self.telemetry.action_committed = bool(action_committed)
             if note is not None:
                 self.telemetry.note = str(note)
+
+    def update_health(
+        self,
+        *,
+        ts: float | None = None,
+        uptime_s: float | None = None,
+        frame_age_s: float | None = None,
+        gs_age_s: float | None = None,
+        dead_threads: str | None = None,
+        capture_ok: int | None = None,
+        capture_none: int | None = None,
+        vision_ok: int | None = None,
+        vision_ex: int | None = None,
+        decision_ok: int | None = None,
+        decision_ex: int | None = None,
+        drop_frame_queue: int | None = None,
+        drop_gs_queue: int | None = None,
+        drop_replay_queue: int | None = None,
+        drop_jsonl_queue: int | None = None,
+        q_frame: int | None = None,
+        q_gs: int | None = None,
+        capture_ms_last: float | None = None,
+        vision_ms_last: float | None = None,
+        decision_ms_last: float | None = None,
+        capture_latency_ms: float | None = None,
+        roi_offset_dx_px: float | None = None,
+        roi_offset_dy_px: float | None = None,
+        roi_offset_score: float | None = None,
+        warn: str | None = None,
+    ) -> None:
+        with self._lock:
+            self.health.ts = float(time.time() if ts is None else ts)
+            if uptime_s is not None:
+                self.health.uptime_s = float(uptime_s)
+            if frame_age_s is not None:
+                self.health.frame_age_s = float(frame_age_s)
+            if gs_age_s is not None:
+                self.health.gs_age_s = float(gs_age_s)
+            if dead_threads is not None:
+                self.health.dead_threads = str(dead_threads)
+            if capture_ok is not None:
+                self.health.capture_ok = int(capture_ok)
+            if capture_none is not None:
+                self.health.capture_none = int(capture_none)
+            if vision_ok is not None:
+                self.health.vision_ok = int(vision_ok)
+            if vision_ex is not None:
+                self.health.vision_ex = int(vision_ex)
+            if decision_ok is not None:
+                self.health.decision_ok = int(decision_ok)
+            if decision_ex is not None:
+                self.health.decision_ex = int(decision_ex)
+            if drop_frame_queue is not None:
+                self.health.drop_frame_queue = int(drop_frame_queue)
+            if drop_gs_queue is not None:
+                self.health.drop_gs_queue = int(drop_gs_queue)
+            if drop_replay_queue is not None:
+                self.health.drop_replay_queue = int(drop_replay_queue)
+            if drop_jsonl_queue is not None:
+                self.health.drop_jsonl_queue = int(drop_jsonl_queue)
+            if q_frame is not None:
+                self.health.q_frame = int(q_frame)
+            if q_gs is not None:
+                self.health.q_gs = int(q_gs)
+            if capture_ms_last is not None:
+                self.health.capture_ms_last = float(capture_ms_last)
+            if vision_ms_last is not None:
+                self.health.vision_ms_last = float(vision_ms_last)
+            if decision_ms_last is not None:
+                self.health.decision_ms_last = float(decision_ms_last)
+            if capture_latency_ms is not None:
+                self.health.capture_latency_ms = float(capture_latency_ms)
+            if roi_offset_dx_px is not None:
+                self.health.roi_offset_dx_px = float(roi_offset_dx_px)
+            if roi_offset_dy_px is not None:
+                self.health.roi_offset_dy_px = float(roi_offset_dy_px)
+            if roi_offset_score is not None:
+                self.health.roi_offset_score = float(roi_offset_score)
+            if warn is not None:
+                self.health.warn = str(warn)

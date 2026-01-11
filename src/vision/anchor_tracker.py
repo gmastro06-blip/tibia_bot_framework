@@ -13,9 +13,10 @@ import numpy as np
 @dataclass
 class AnchorConfig:
     roi_norm: Mapping[str, Any]
-    template_path: str
-    search_radius_px: int = 220
-    min_score: float = 0.55
+    template_path: str = ""
+    template_mode: str = "file"  # file|self
+    search_radius_px: int = 560
+    min_score: float = 0.45
     update_interval_s: float = 0.5
     smoothing: float = 0.35
     canny_low: int = 60
@@ -51,35 +52,95 @@ class AnchorTracker:
         if not hasattr(rois, "get"):
             return None
         raw = rois.get("_anchor")
-        if not isinstance(raw, Mapping):
-            return None
-        roi_norm = raw.get("roi_norm")
-        template_path = str(raw.get("template_path") or "").strip()
-        if not isinstance(roi_norm, Mapping) or not template_path:
+        if isinstance(raw, Mapping):
+            roi_norm = raw.get("roi_norm")
+            template_path = str(raw.get("template_path") or "").strip()
+            template_mode = str(raw.get("template_mode") or "file").strip().lower() or "file"
+            if not isinstance(roi_norm, Mapping):
+                return None
+
+            def _i(key: str, default: int) -> int:
+                try:
+                    return int(raw.get(key, default))
+                except Exception:
+                    return default
+
+            def _f(key: str, default: float) -> float:
+                try:
+                    return float(raw.get(key, default))
+                except Exception:
+                    return default
+
+            return AnchorConfig(
+                roi_norm=roi_norm,
+                template_path=template_path,
+                template_mode=template_mode,
+                search_radius_px=max(40, _i("search_radius_px", 560)),
+                min_score=max(0.0, min(1.0, _f("min_score", 0.45))),
+                update_interval_s=max(0.05, _f("update_interval_s", 0.5)),
+                smoothing=max(0.0, min(0.95, _f("smoothing", 0.35))),
+                canny_low=max(0, _i("canny_low", 60)),
+                canny_high=max(0, _i("canny_high", 140)),
+                max_shift_src_px=max(50.0, _f("max_shift_src_px", 800.0)),
+            )
+
+        # No explicit _anchor config: try an automatic anchor based on a *real* template file.
+        # We intentionally do NOT use template_mode=self here: learning a template from the
+        # (possibly wrong) expected ROI can lock onto the wrong place and report dx=0.
+        auto_roi = None
+        for key in ("equipment_slots", "hpmp_low_panel", "skills_panel", "right_hud_panel"):
+            try:
+                v = rois.get(key)
+                if isinstance(v, Mapping):
+                    auto_roi = v
+                    break
+            except Exception:
+                continue
+        if auto_roi is None:
             return None
 
-        def _i(key: str, default: int) -> int:
-            try:
-                return int(raw.get(key, default))
-            except Exception:
-                return default
+        # Template path: env override or default.
+        tmpl = os.getenv("ANCHOR_TEMPLATE_PATH", "").strip()
+        if not tmpl:
+            tmpl = str(Path("data") / "anchors" / "hud_anchor.png")
+        try:
+            p = Path(tmpl)
+            if not p.is_absolute():
+                # repo_root/src/vision/... -> repo root is 3 parents up
+                repo_root = Path(__file__).resolve().parents[2]
+                p = (repo_root / p).resolve()
+            if not p.exists() or not p.is_file():
+                return None
+            tmpl = str(p)
+        except Exception:
+            return None
 
-        def _f(key: str, default: float) -> float:
-            try:
-                return float(raw.get(key, default))
-            except Exception:
-                return default
+        # Tunables via env for aggressive recovery.
+        try:
+            sr = int(float(os.getenv("ANCHOR_SEARCH_RADIUS_PX", "560").strip() or "560"))
+        except Exception:
+            sr = 560
+        try:
+            ms = float(os.getenv("ANCHOR_MIN_SCORE", "0.45").strip() or "0.45")
+        except Exception:
+            ms = 0.45
+        try:
+            interval = float(os.getenv("ANCHOR_UPDATE_INTERVAL_S", "0.5").strip() or "0.5")
+        except Exception:
+            interval = 0.5
+        try:
+            smoothing = float(os.getenv("ANCHOR_SMOOTHING", "0.35").strip() or "0.35")
+        except Exception:
+            smoothing = 0.35
 
         return AnchorConfig(
-            roi_norm=roi_norm,
-            template_path=template_path,
-            search_radius_px=max(40, _i("search_radius_px", 220)),
-            min_score=max(0.0, min(1.0, _f("min_score", 0.55))),
-            update_interval_s=max(0.05, _f("update_interval_s", 0.5)),
-            smoothing=max(0.0, min(0.95, _f("smoothing", 0.35))),
-            canny_low=max(0, _i("canny_low", 60)),
-            canny_high=max(0, _i("canny_high", 140)),
-            max_shift_src_px=max(50.0, _f("max_shift_src_px", 800.0)),
+            roi_norm=auto_roi,
+            template_path=tmpl,
+            template_mode="file",
+            search_radius_px=max(80, sr),
+            min_score=max(0.0, min(1.0, ms)),
+            update_interval_s=max(0.05, interval),
+            smoothing=max(0.0, min(0.95, smoothing)),
         )
 
     @staticmethod
@@ -96,6 +157,21 @@ class AnchorTracker:
         return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     def _ensure_template(self, cfg: AnchorConfig) -> bool:
+        if self._tmpl_edges is not None:
+            if cfg.template_mode == "self":
+                return True
+            if self._tmpl_path == cfg.template_path:
+                return True
+            # Template changed
+            self._tmpl_edges = None
+
+        if cfg.template_mode == "self":
+            # Will be learned from the first good expected crop.
+            return False
+
+        if not cfg.template_path:
+            return False
+
         if self._tmpl_edges is not None and self._tmpl_path == cfg.template_path:
             return True
 
@@ -128,6 +204,53 @@ class AnchorTracker:
         self._tmpl_path = cfg.template_path
         return True
 
+    def _maybe_learn_template_from_expected(
+        self,
+        *,
+        frame: np.ndarray,
+        rect: tuple[int, int, int, int],
+        cfg: AnchorConfig,
+    ) -> bool:
+        if cfg.template_mode != "self":
+            return False
+        if self._tmpl_edges is not None:
+            return True
+
+        x, y, w, h = rect
+        if w <= 8 or h <= 8:
+            return False
+        try:
+            crop = frame[int(y) : int(y + h), int(x) : int(x + w)]
+        except Exception:
+            return False
+        if crop is None or getattr(crop, "size", 0) == 0:
+            return False
+
+        g = self._to_gray(crop)
+        try:
+            edges = cv2.Canny(g, cfg.canny_low, cfg.canny_high)
+        except Exception:
+            edges = g
+
+        if edges is None or getattr(edges, "size", 0) == 0:
+            return False
+
+        # Keep template reasonably small for performance.
+        try:
+            th, tw = int(edges.shape[0]), int(edges.shape[1])
+            max_dim = int(float(os.getenv("ANCHOR_TEMPLATE_MAX_PX", "140").strip() or "140"))
+            if max(th, tw) > max_dim and max_dim >= 20:
+                scale = float(max_dim) / float(max(th, tw))
+                new_w = max(20, int(round(tw * scale)))
+                new_h = max(20, int(round(th * scale)))
+                edges = cv2.resize(edges, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        except Exception:
+            pass
+
+        self._tmpl_edges = np.asarray(edges, dtype=np.uint8)
+        self._tmpl_path = "<self>"
+        return True
+
     @staticmethod
     def _compute_scale(frame_w: int, frame_h: int, source_w: int, source_h: int) -> float:
         try:
@@ -147,8 +270,8 @@ class AnchorTracker:
         if (now - self._last_update_ts) < cfg.update_interval_s:
             return
 
-        if not self._ensure_template(cfg):
-            return
+        # We'll attempt to learn a self-template later if needed.
+        _ = self._ensure_template(cfg)
 
         # Compute expected anchor location WITHOUT applying current offset.
         rois_base: dict[str, Any] = dict(rois) if isinstance(rois, Mapping) else {}
@@ -158,6 +281,16 @@ class AnchorTracker:
         try:
             x_exp, y_exp, w_exp, h_exp = roi_to_px(frame, rois_base, resolution, cfg.roi_norm)
         except Exception:
+            return
+        # If we run in self-template mode, learn it from the expected crop.
+        try:
+            self._maybe_learn_template_from_expected(frame=frame, rect=(int(x_exp), int(y_exp), int(w_exp), int(h_exp)), cfg=cfg)
+        except Exception:
+            pass
+
+        if self._tmpl_edges is None:
+            # Still no template, can't track.
+            self._last_update_ts = now
             return
 
         if w_exp <= 2 or h_exp <= 2:

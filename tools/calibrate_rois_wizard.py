@@ -308,6 +308,29 @@ class Step:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Wizard: calibrar ROIs base + sub-ROIs con selector Tkinter (blindado).")
     p.add_argument("--monitor", type=int, default=int(os.getenv("FORCE_MONITOR", "2") or 2))
+    p.add_argument(
+        "--out",
+        type=str,
+        default="",
+        help=(
+            "Optional output profile JSON path (recommended). If set, writes a standalone ROI profile compatible with "
+            "src/main.load_roi_config() via ROIS_CONFIG."
+        ),
+    )
+    p.add_argument(
+        "--template",
+        type=str,
+        default="",
+        help=(
+            "Optional template ROI config to start from (defaults to the resolution-based rois_guess file). "
+            "Useful if you want to refine an existing profile."
+        ),
+    )
+    p.add_argument(
+        "--fresh-frame",
+        action="store_true",
+        help="Capture a fresh frame before each ROI selection step (slower but more robust).",
+    )
     p.add_argument("--write", action="store_true", help="Escribe las ROIs en el config correspondiente.")
     p.add_argument("--preview-dir", type=str, default=str(Path("logs") / "roi_preview"))
     p.add_argument(
@@ -324,6 +347,19 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _capture_one(cap) -> Any:
+    frame = None
+    for _ in range(60):
+        frame = cap.capture()
+        if frame is not None:
+            break
+        try:
+            time.sleep(0.02)
+        except Exception:
+            pass
+    return frame
+
+
 def main() -> int:
     _add_src_to_syspath()
 
@@ -334,16 +370,14 @@ def main() -> int:
 
     cap = DXGICapture(force_monitor=args.monitor)
 
-    frame = None
-    for _ in range(60):
-        frame = cap.capture()
-        if frame is not None:
-            break
+    frame = _capture_one(cap)
     if frame is None:
         raise SystemExit("No se pudo capturar ningún frame")
 
     resolution = (int(frame.shape[1]), int(frame.shape[0]))
     cfg_path = _pick_config_file(resolution)
+    if (args.template or "").strip():
+        cfg_path = str(Path(str(args.template)).as_posix())
     rois, source_resolution = _load_config(cfg_path)
     rois = dict(rois)
     rois["_source_resolution"] = source_resolution
@@ -351,7 +385,16 @@ def main() -> int:
     source_w, source_h = int(source_resolution[0]), int(source_resolution[1])
     frame_w, frame_h = int(frame.shape[1]), int(frame.shape[0])
 
-    print(f"🧭 Config: {cfg_path} | frame={frame_w}x{frame_h} source={source_resolution}")
+    out_path = (args.out or "").strip()
+    if out_path:
+        try:
+            Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+    print(f"🧭 Template: {cfg_path} | frame={frame_w}x{frame_h} source={source_resolution}")
+    if out_path:
+        print(f"🧭 Profile out: {out_path}")
     print("▶ Wizard: selecciona ROIs base y sub-ROIs. Enter=OK, Esc=Cancelar en cada paso.")
 
     only_raw = (args.only or "").strip()
@@ -372,6 +415,11 @@ def main() -> int:
         for st in base_steps:
             if only is not None and st.name not in only:
                 continue
+            if bool(args.fresh_frame):
+                nf = _capture_one(cap)
+                if nf is not None:
+                    frame = nf
+                    frame_w, frame_h = int(frame.shape[1]), int(frame.shape[0])
             msg = f"\n🧩 Selecciona base ROI: {st.name} (sobre frame)"
             if st.help:
                 msg += f"\n    ℹ️  {st.help}"
@@ -394,6 +442,12 @@ def main() -> int:
             _draw_preview(frame, rois, resolution, Path(args.preview_dir) / f"{ts:.6f}_preview_after_{st.name}.png")
 
     def _select_in_base(roi_name: str, base_name: str) -> None:
+        nonlocal frame, frame_w, frame_h
+        if bool(args.fresh_frame):
+            nf = _capture_one(cap)
+            if nf is not None:
+                frame = nf
+                frame_w, frame_h = int(frame.shape[1]), int(frame.shape[0])
         base_def = rois.get(base_name)
         if not isinstance(base_def, dict):
             print(f"⚠️  No existe base '{base_name}', salteo {roi_name}")
@@ -541,21 +595,36 @@ def main() -> int:
             continue
         _select_in_base(roi_name, base_name)
 
+    rois_out = {k: v for k, v in rois.items() if not str(k).startswith("_")}
+
     if args.write:
-        rois_out = {k: v for k, v in rois.items() if not str(k).startswith("_")}
         _save_config(cfg_path, rois_guess_norm=rois_out, source_resolution=source_resolution)
-        print(f"\n✍️  Escrito config actualizado: {cfg_path}")
+        print(f"\n✍️  Escrito template actualizado: {cfg_path}")
+
+    if out_path:
+        _save_config(out_path, rois_guess_norm=rois_out, source_resolution=source_resolution)
+        print(f"\n✍️  Escrito profile: {out_path}")
+        print("\n➡️  Para usarlo en el bot:")
+        print(f"   $env:ROIS_CONFIG='{out_path}'")
+        print("   poetry run python -m src.main")
 
     print("\n✅ Validación rápida")
-    # CAP OCR (deferred init: no bloquea el wizard)
+    # OCR validation (deferred init: no bloquea el wizard)
     try:
         from vision.ocr import OCRProcessor
 
         ocr = OCRProcessor()
+
+        try:
+            hp_cur, hp_max, mp_cur, mp_max = ocr.extract_hp_mp_full(frame, rois, resolution, rf_boxes=None)  # type: ignore[arg-type]
+            print(f"- HP/MP OCR: HP {hp_cur}/{hp_max} | MP {mp_cur}/{mp_max}")
+        except Exception:
+            print("- HP/MP OCR: (error)")
+
         cap_val = ocr.extract_capacity(frame, rois, resolution)  # type: ignore[arg-type]
         print(f"- CAP OCR: {cap_val}")
     except Exception:
-        print("- CAP OCR: (error)")
+        print("- OCR: (error)")
 
     try:
         ring = None

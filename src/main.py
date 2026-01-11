@@ -122,6 +122,7 @@ def load_roi_config(resolution: tuple) -> tuple:
             "battlelist_rows": {"x": 0.822754, "y": 0.397769, "w": 0.084961, "h": 0.229554},
             "right_hud_panel": {"x": 0.909668, "y": 0.002788, "w": 0.088867, "h": 0.408921},
             "minimap_content": {"x": 0.915039, "y": 0.004647, "w": 0.052734, "h": 0.104089},
+            "coords_ocr": {"x": 0.909668, "y": 0.108000, "w": 0.070000, "h": 0.025000},
             "equipment_slots": {"x": 0.909668, "y": 0.105020, "w": 0.053711, "h": 0.130111},
             "states_icons": {"x": 0.909668, "y": 0.249072, "w": 0.053711, "h": 0.032527},
             "hpmp_low_panel": {"x": 0.909668, "y": 0.264872, "w": 0.088867, "h": 0.055762},
@@ -160,13 +161,58 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     frame_queue: Queue = Queue(maxsize=5)  # Capture → Vision
     gs_queue: Queue = Queue(maxsize=5)     # Vision → Decision
 
-    def _put_drop_oldest(q: Queue, item) -> None:
+    # Salud del pipeline (stability/observability). Mantenerlo simple y barato.
+    health_lock = threading.Lock()
+    health: dict[str, float] = {
+        "start_ts": time.time(),
+        "last_frame_ts": 0.0,
+        "last_gs_ts": 0.0,
+        "last_dec_ts": 0.0,
+        "capture_ok": 0.0,
+        "capture_none": 0.0,
+        "vision_ok": 0.0,
+        "vision_ex": 0.0,
+        "decision_ok": 0.0,
+        "decision_ex": 0.0,
+        "drop_frame_queue": 0.0,
+        "drop_gs_queue": 0.0,
+        "drop_replay_queue": 0.0,
+        "drop_jsonl_queue": 0.0,
+        "capture_ms_last": 0.0,
+        "vision_ms_last": 0.0,
+        "decision_ms_last": 0.0,
+    }
+
+    def _h_set(key: str, value: float) -> None:
+        try:
+            with health_lock:
+                health[key] = float(value)
+        except Exception:
+            pass
+
+    def _h_inc(key: str, delta: float = 1.0) -> None:
+        try:
+            with health_lock:
+                health[key] = float(health.get(key, 0.0)) + float(delta)
+        except Exception:
+            pass
+
+    def _h_snapshot() -> dict[str, float]:
+        try:
+            with health_lock:
+                return dict(health)
+        except Exception:
+            return dict(health)
+
+    def _put_drop_oldest(q: Queue, item, *, drop_key: str | None = None) -> None:
         """Put non-blocking; if full, drop one oldest and try again."""
         try:
             q.put_nowait(item)
             return
         except Exception:
             pass
+        if drop_key:
+            _h_inc(drop_key)
         try:
             q.get_nowait()
         except Exception:
@@ -265,17 +311,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         while not stop_event.is_set():
             t0 = time.time()
             frame = capture.capture()
+            _h_set("capture_ms_last", (time.time() - t0) * 1000.0)
             if profile:
                 cap_ms_sum += (time.time() - t0) * 1000.0
                 n_cap += 1
             if frame is not None:
+                _h_inc("capture_ok")
+                _h_set("last_frame_ts", time.time())
                 nonlocal rois, resolution
                 if rois is None or resolution is None:
                     resolution = (int(frame.shape[1]), int(frame.shape[0]))
                     rois_loaded, source_resolution = load_roi_config(resolution)
                     rois_loaded["_source_resolution"] = source_resolution
                     rois = rois_loaded
-                _put_drop_oldest(frame_queue, frame)
+                _put_drop_oldest(frame_queue, frame, drop_key="drop_frame_queue")
+            else:
+                _h_inc("capture_none")
 
             # Sleep adaptativo (mantiene FPS objetivo sin spin)
             elapsed = time.time() - t0
@@ -345,6 +396,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 t0 = time.time()
                 gamestate = gamestate_builder.update_from_frame(frame, rois, resolution)
+                _h_set("vision_ms_last", (time.time() - t0) * 1000.0)
+                _h_inc("vision_ok")
+                _h_set("last_gs_ts", time.time())
                 if profile:
                     vis_ms_sum += (time.time() - t0) * 1000.0
                     n_vis += 1
@@ -429,7 +483,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             "telemetry": tel_payload,
                             "forced": bool(force),
                         }
-                        _put_drop_oldest(replay_write_q, ("replay", (out_dir, crops, payload)))
+                        _put_drop_oldest(replay_write_q, ("replay", (out_dir, crops, payload)), drop_key="drop_replay_queue")
                 except Exception:
                     pass
 
@@ -466,7 +520,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     pass
 
                 try:
-                    _put_drop_oldest(gs_queue, gamestate)
+                    _put_drop_oldest(gs_queue, gamestate, drop_key="drop_gs_queue")
                 except Exception:
                     pass
 
@@ -479,6 +533,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         n_vis = 0
                         vis_ms_sum = 0.0
             except Exception:
+                _h_inc("vision_ex")
                 continue
 
     # Thread de decisión (simplificado)
@@ -536,6 +591,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_advance_seen = 0
         last_beep_ts = 0.0
         last_pos_warn_ts = 0.0
+        # Idle detection (safe): warn/beep when position doesn't change for a while.
+        try:
+            idle_alert_s = float(os.getenv("ASSIST_IDLE_ALERT_S", "0").strip() or "0")
+        except Exception:
+            idle_alert_s = 0.0
+        idle_alert_s = max(0.0, float(idle_alert_s))
+        try:
+            idle_repeat_s = float(os.getenv("ASSIST_IDLE_REPEAT_S", "10").strip() or "10")
+        except Exception:
+            idle_repeat_s = 10.0
+        idle_repeat_s = max(1.0, float(idle_repeat_s))
+        last_pos_key: tuple[int, int, int | None] | None = None
+        last_pos_change_ts = 0.0
+        last_idle_warn_ts = 0.0
+        last_idle_beep_ts = 0.0
         last_gs_ts = 0.0
         last_event_target = ""
         last_event_reco = ""
@@ -575,6 +645,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         while not stop_event.is_set():
             loop_t0 = time.time()
+            _h_set("last_dec_ts", loop_t0)
             # Always-initialized per-tick flags (avoid possibly-unbound locals).
             should_advance = False
             commit_flag = False
@@ -597,6 +668,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             )
 
             sim_cfg = runtime_config.simulation_snapshot() if runtime_config is not None else None
+            assistant_cfg = runtime_config.assistant_snapshot() if runtime_config is not None else None
 
             # Log de cambios de toggles (para ver que aplica en tiempo real)
             lines, last_healing_enabled, last_cavebot_enabled = _toggle_transition_lines(
@@ -628,6 +700,55 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 sig = evaluate_signals(gamestate, healing_cfg, sim_cfg)
             except Exception:
                 sig = None
+
+            # Idle detection: requires valid coords.
+            if idle_alert_s > 0.0:
+                try:
+                    gx = getattr(gamestate, "pos_x", None)
+                    gy = getattr(gamestate, "pos_y", None)
+                    gz = getattr(gamestate, "pos_z", None)
+                    if gx is not None and gy is not None:
+                        key = (int(gx), int(gy), int(gz) if gz is not None else None)
+                        now = time.time()
+                        if last_pos_key is None:
+                            last_pos_key = key
+                            last_pos_change_ts = now
+                        elif key != last_pos_key:
+                            last_pos_key = key
+                            last_pos_change_ts = now
+                        else:
+                            idle_for = max(0.0, now - float(last_pos_change_ts or now))
+                            if idle_for >= idle_alert_s and (now - last_idle_warn_ts) >= idle_repeat_s:
+                                last_idle_warn_ts = now
+                                msg = f"⏳ Idle: pos sin cambio {idle_for:.0f}s"
+                                try:
+                                    print(msg)
+                                except Exception:
+                                    pass
+                                if runtime_config is not None:
+                                    try:
+                                        runtime_config.update_telemetry(note=msg)
+                                    except Exception:
+                                        pass
+
+                                # Optional beep, only if assistant sound alerts are enabled.
+                                try:
+                                    if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
+                                        if now - last_idle_beep_ts >= max(1.0, idle_repeat_s):
+                                            last_idle_beep_ts = now
+                                            try:
+                                                import winsound
+
+                                                winsound.Beep(660, 120)
+                                            except Exception:
+                                                try:
+                                                    print("\a", end="")
+                                                except Exception:
+                                                    pass
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
 
             cap_current = getattr(gamestate, "cap_current", None)
             ring_equipped = getattr(gamestate, "ring_equipped", None)
@@ -712,7 +833,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             cavebot_next = ""
             cavebot_waypoint = ""
             cavebot_action = ""
-            assistant_cfg = runtime_config.assistant_snapshot() if runtime_config is not None else None
 
             if cavebot_cfg is not None and cavebot_cfg.enabled:
                 cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
@@ -1174,6 +1294,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             if profile:
                 dec_ms_sum += (time.time() - loop_t0) * 1000.0
                 n_dec += 1
+                _h_set("decision_ms_last", (time.time() - loop_t0) * 1000.0)
+                _h_inc("decision_ok")
                 now = time.time()
                 if now - last_prof >= prof_every_s and n_dec:
                     avg = dec_ms_sum / max(1, n_dec)
@@ -1196,13 +1318,192 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             pass
 
+        # If we exit the loop (stop_event set or crash), record it.
+        _h_inc("decision_ex")
+
+    # Watchdog (stability): detect dead threads / stale pipeline; optionally emit health JSONL.
+    thread_map: dict[str, threading.Thread] = {}
+
+    def watchdog_thread() -> None:
+        check_s = 1.0
+        try:
+            check_s = max(0.2, float(os.getenv("WATCHDOG_INTERVAL_S", "1").strip() or "1"))
+        except Exception:
+            check_s = 1.0
+        try:
+            stale_gs_s = float(os.getenv("WATCHDOG_STALE_GS_S", "5").strip() or "5")
+        except Exception:
+            stale_gs_s = 5.0
+        stop_on_dead = os.getenv("WATCHDOG_STOP_ON_THREAD_DEAD", "1").strip().lower() not in {"0", "false", "no"}
+        stop_on_stale = os.getenv("WATCHDOG_STOP_ON_STALE", "0").strip().lower() in {"1", "true", "yes"}
+
+        last_warn_ts = 0.0
+        last_health_emit_ts = 0.0
+        health_emit_s = 2.0
+        try:
+            health_emit_s = max(0.5, float(os.getenv("WATCHDOG_HEALTH_EMIT_S", "2").strip() or "2"))
+        except Exception:
+            health_emit_s = 2.0
+
+        while not stop_event.is_set():
+            now = time.time()
+
+            # Thread liveness
+            dead: list[str] = []
+            try:
+                for name, t in list(thread_map.items()):
+                    if name == "watchdog":
+                        continue
+                    if not t.is_alive():
+                        dead.append(name)
+            except Exception:
+                dead = []
+
+            # Staleness
+            snap = _h_snapshot()
+            last_gs = float(snap.get("last_gs_ts", 0.0) or 0.0)
+            gs_age = (now - last_gs) if last_gs > 0 else 1e9
+
+            # Publish health snapshot to UI (separate from TelemetrySnapshot.ts).
+            try:
+                if runtime_config is not None:
+                    last_frame = float(snap.get("last_frame_ts", 0.0) or 0.0)
+                    frame_age = (now - last_frame) if last_frame > 0 else 1e9
+
+                    # ROI auto-alignment (AnchorTracker) lives in the shared `rois` dict.
+                    roi_dx = None
+                    roi_dy = None
+                    roi_score = None
+                    try:
+                        if isinstance(rois, dict):
+                            off = rois.get("_roi_offset_px")
+                            if isinstance(off, (list, tuple)) and len(off) >= 2:
+                                roi_dx = float(off[0])
+                                roi_dy = float(off[1])
+                            roi_score = rois.get("_roi_offset_score")
+                            if roi_score is not None:
+                                roi_score = float(roi_score)
+                    except Exception:
+                        roi_dx = None
+                        roi_dy = None
+                        roi_score = None
+
+                    runtime_config.update_health(
+                        ts=now,
+                        uptime_s=max(0.0, now - float(snap.get("start_ts", now))),
+                        frame_age_s=frame_age if frame_age < 1e8 else None,
+                        gs_age_s=gs_age if gs_age < 1e8 else None,
+                        dead_threads=",".join(dead) if dead else "",
+                        capture_ok=int(snap.get("capture_ok", 0.0)),
+                        capture_none=int(snap.get("capture_none", 0.0)),
+                        vision_ok=int(snap.get("vision_ok", 0.0)),
+                        vision_ex=int(snap.get("vision_ex", 0.0)),
+                        decision_ok=int(snap.get("decision_ok", 0.0)),
+                        decision_ex=int(snap.get("decision_ex", 0.0)),
+                        drop_frame_queue=int(snap.get("drop_frame_queue", 0.0)),
+                        drop_gs_queue=int(snap.get("drop_gs_queue", 0.0)),
+                        drop_replay_queue=int(snap.get("drop_replay_queue", 0.0)),
+                        drop_jsonl_queue=int(snap.get("drop_jsonl_queue", 0.0)),
+                        q_frame=int(getattr(frame_queue, "qsize", lambda: 0)()),
+                        q_gs=int(getattr(gs_queue, "qsize", lambda: 0)()),
+                        capture_ms_last=float(snap.get("capture_ms_last", 0.0)),
+                        vision_ms_last=float(snap.get("vision_ms_last", 0.0)),
+                        decision_ms_last=float(snap.get("decision_ms_last", 0.0)),
+                        capture_latency_ms=float(getattr(capture, "latency_ms", 0.0) or 0.0),
+                        roi_offset_dx_px=roi_dx,
+                        roi_offset_dy_px=roi_dy,
+                        roi_offset_score=roi_score,
+                        warn=(f"dead={dead}" if dead else (f"stale_gs={gs_age:.1f}s" if gs_age >= stale_gs_s else "")),
+                    )
+            except Exception:
+                pass
+
+            if dead or (gs_age >= stale_gs_s):
+                if now - last_warn_ts >= 2.0:
+                    last_warn_ts = now
+                    msg = ""
+                    if dead:
+                        msg = f"⚠️  Watchdog: dead threads={dead}"
+                    elif gs_age >= stale_gs_s:
+                        msg = f"⚠️  Watchdog: stale GameState ({gs_age:.1f}s)"
+                    try:
+                        print(msg)
+                    except Exception:
+                        pass
+                    if runtime_config is not None:
+                        try:
+                            runtime_config.update_telemetry(note=msg)
+                        except Exception:
+                            pass
+
+                if dead and stop_on_dead:
+                    stop_event.set()
+                elif (gs_age >= stale_gs_s) and stop_on_stale:
+                    stop_event.set()
+
+            # Optional health JSONL
+            try:
+                if now - last_health_emit_ts >= health_emit_s:
+                    last_health_emit_ts = now
+
+                    # Determine logging config source.
+                    if runtime_config is not None:
+                        log_cfg = runtime_config.logging_snapshot()
+                        log_enabled = bool(log_cfg.enabled)
+                        log_out_file = str(log_cfg.out_file)
+                    else:
+                        log_enabled_env_raw = os.getenv("LOG_JSONL_ENABLED", "").strip().lower() or os.getenv("LOG_ENABLED", "").strip().lower()
+                        log_enabled = log_enabled_env_raw in {"1", "true", "yes"}
+                        log_out_file = os.getenv("LOG_JSONL_OUT_FILE", "logs/telemetry.jsonl").strip() or "logs/telemetry.jsonl"
+
+                    if log_enabled:
+                        snap = _h_snapshot()
+                        event = {
+                            "kind": "health",
+                            "ts": now,
+                            "uptime_s": max(0.0, now - float(snap.get("start_ts", now))),
+                            "frame_age_s": max(0.0, now - float(snap.get("last_frame_ts", 0.0))) if snap.get("last_frame_ts", 0.0) else None,
+                            "gs_age_s": max(0.0, now - float(snap.get("last_gs_ts", 0.0))) if snap.get("last_gs_ts", 0.0) else None,
+                            "capture_ok": int(snap.get("capture_ok", 0.0)),
+                            "capture_none": int(snap.get("capture_none", 0.0)),
+                            "vision_ok": int(snap.get("vision_ok", 0.0)),
+                            "vision_ex": int(snap.get("vision_ex", 0.0)),
+                            "decision_ok": int(snap.get("decision_ok", 0.0)),
+                            "decision_ex": int(snap.get("decision_ex", 0.0)),
+                            "drop_frame_queue": int(snap.get("drop_frame_queue", 0.0)),
+                            "drop_gs_queue": int(snap.get("drop_gs_queue", 0.0)),
+                            "drop_replay_queue": int(snap.get("drop_replay_queue", 0.0)),
+                            "drop_jsonl_queue": int(snap.get("drop_jsonl_queue", 0.0)),
+                            "q_frame": int(getattr(frame_queue, "qsize", lambda: 0)()),
+                            "q_gs": int(getattr(gs_queue, "qsize", lambda: 0)()),
+                            "capture_ms_last": float(snap.get("capture_ms_last", 0.0)),
+                            "vision_ms_last": float(snap.get("vision_ms_last", 0.0)),
+                            "decision_ms_last": float(snap.get("decision_ms_last", 0.0)),
+                            "capture_latency_ms": float(getattr(capture, "latency_ms", 0.0) or 0.0),
+                        }
+                        _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, event)), drop_key="drop_jsonl_queue")
+            except Exception:
+                pass
+
+            try:
+                time.sleep(check_s)
+            except Exception:
+                pass
+
     # Iniciar threads
     threads = [
-        threading.Thread(target=writer_thread, daemon=True),
-        threading.Thread(target=capture_thread, daemon=True),
-        threading.Thread(target=vision_thread, daemon=True),
-        threading.Thread(target=decision_thread, daemon=True)
+        threading.Thread(target=writer_thread, daemon=True, name="writer"),
+        threading.Thread(target=capture_thread, daemon=True, name="capture"),
+        threading.Thread(target=vision_thread, daemon=True, name="vision"),
+        threading.Thread(target=decision_thread, daemon=True, name="decision"),
+        threading.Thread(target=watchdog_thread, daemon=True, name="watchdog"),
     ]
+
+    # Expose threads to watchdog.
+    try:
+        thread_map = {t.name: t for t in threads if getattr(t, "name", "")}
+    except Exception:
+        thread_map = {}
 
     for t in threads:
         t.start()
