@@ -184,6 +184,11 @@ class OCRProcessor:
 
         Requires an ROI named `coords_ocr` in the ROI config.
         Returns None if ROI is missing or OCR/parsing fails.
+
+        Aqui se puede mejorar: si el cliente no muestra coordenadas en pantalla,
+        esta extracción por OCR no es fiable y puede producir falsos positivos.
+        En ese caso, conviene deshabilitarlo o reemplazarlo por otra estrategia
+        (p.ej. minimap/anchor-based inference, o telemetría externa).
         """
 
         try:
@@ -246,9 +251,11 @@ class OCRProcessor:
             # Sanity-check parsed coords: prevents false positives when ROI drifts
             # into HP/MP/CAP areas (common early in calibration).
             try:
-                min_xy = int(float(os.getenv("COORDS_MIN_XY", "1000").strip() or "1000"))
+                # Default más alto para evitar falsos positivos cuando NO hay coords visibles.
+                # Si tu servidor/cliente usa coords más bajas, override vía COORDS_MIN_XY.
+                min_xy = int(float(os.getenv("COORDS_MIN_XY", "20000").strip() or "20000"))
             except Exception:
-                min_xy = 1000
+                min_xy = 20000
             try:
                 max_xy = int(float(os.getenv("COORDS_MAX_XY", "100000").strip() or "100000"))
             except Exception:
@@ -275,6 +282,32 @@ class OCRProcessor:
             parsed = self._parse_coords_from_text(joined)
             if parsed is not None and _valid_coords(parsed):
                 return parsed
+
+            # Fallback: OCR sometimes returns X and Y as separate tokens without labels.
+            # The generic parser may grab early small numbers (timers, counters) and fail validation.
+            # Here we try to find the first two "large" numbers in-range and treat them as (x,y).
+            try:
+                nums_all = [int(n) for n in re.findall(r"-?\d+", joined)]
+                nums_big = [v for v in nums_all if (min_xy <= abs(int(v)) <= max_xy)]
+                if len(nums_big) >= 2:
+                    x2 = int(nums_big[0])
+                    y2 = int(nums_big[1])
+                    z2: int | None = None
+                    # Optional Z: look for the first small integer after y.
+                    try:
+                        for v in nums_all:
+                            vv = int(v)
+                            if 0 <= vv <= int(max_z):
+                                z2 = vv
+                                break
+                    except Exception:
+                        z2 = None
+
+                    cand = (x2, y2, z2)
+                    if _valid_coords(cand):
+                        return cand
+            except Exception:
+                pass
 
             # Last resort: parse each candidate line independently.
             for c in candidates:

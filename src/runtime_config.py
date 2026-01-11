@@ -72,6 +72,9 @@ class TelemetrySnapshot:
     pos_x: int | None = None
     pos_y: int | None = None
     pos_z: int | None = None
+    # Coords quality
+    coords_status: str = ""  # "OK"|"NO_COORDS"|"BAD_JUMP"|"UNSTABLE"|""
+    coords_jump: int | None = None  # manhattan jump vs last coords
     ring_equipped: bool | None = None
     amulet_equipped: bool | None = None
     # Señales/estados
@@ -87,11 +90,19 @@ class TelemetrySnapshot:
     cavebot_next: str = ""
     cavebot_waypoint: str = ""
     cavebot_action: str = ""
+    cavebot_step_idx: int | None = None
+    cavebot_step_next_idx: int | None = None
+    cavebot_step_total: int | None = None
     # What the bot would do (assistant mode): serialized mock action(s)
     action_request: str = ""
     action_committed: bool = False
     # Texto amigable opcional
     note: str = ""
+    # Diagnóstico estructurado (sin inputs)
+    stuck_reason: str = ""  # "STALE_GS"|"NO_COORDS"|"BLOCKED"|"MOVE_COMMITTED_NO_CHANGE"|"IDLE"|""
+    stuck_idle_s: float | None = None
+    stuck_blockers: int | None = None
+    stuck_extra: str = ""
 
 
 @dataclass
@@ -183,6 +194,8 @@ class RuntimeConfig:
                 pos_x=self.telemetry.pos_x,
                 pos_y=self.telemetry.pos_y,
                 pos_z=self.telemetry.pos_z,
+                coords_status=str(getattr(self.telemetry, "coords_status", "")),
+                coords_jump=getattr(self.telemetry, "coords_jump", None),
                 ring_equipped=self.telemetry.ring_equipped,
                 amulet_equipped=self.telemetry.amulet_equipped,
                 low_hp=self.telemetry.low_hp,
@@ -197,9 +210,16 @@ class RuntimeConfig:
                 cavebot_next=str(self.telemetry.cavebot_next),
                 cavebot_waypoint=str(self.telemetry.cavebot_waypoint),
                 cavebot_action=str(self.telemetry.cavebot_action),
+                cavebot_step_idx=getattr(self.telemetry, "cavebot_step_idx", None),
+                cavebot_step_next_idx=getattr(self.telemetry, "cavebot_step_next_idx", None),
+                cavebot_step_total=getattr(self.telemetry, "cavebot_step_total", None),
                 action_request=str(self.telemetry.action_request),
                 action_committed=bool(self.telemetry.action_committed),
                 note=str(self.telemetry.note),
+                stuck_reason=str(getattr(self.telemetry, "stuck_reason", "")),
+                stuck_idle_s=getattr(self.telemetry, "stuck_idle_s", None),
+                stuck_blockers=getattr(self.telemetry, "stuck_blockers", None),
+                stuck_extra=str(getattr(self.telemetry, "stuck_extra", "")),
             )
 
     def health_snapshot(self) -> HealthSnapshot:
@@ -377,6 +397,8 @@ class RuntimeConfig:
         pos_x: int | None = None,
         pos_y: int | None = None,
         pos_z: int | None = None,
+        coords_status: str | None = None,
+        coords_jump: int | None = None,
         ring_equipped: bool | None = None,
         amulet_equipped: bool | None = None,
         low_hp: bool | None = None,
@@ -391,9 +413,16 @@ class RuntimeConfig:
         cavebot_next: str | None = None,
         cavebot_waypoint: str | None = None,
         cavebot_action: str | None = None,
+        cavebot_step_idx: int | None = None,
+        cavebot_step_next_idx: int | None = None,
+        cavebot_step_total: int | None = None,
         action_request: str | None = None,
         action_committed: bool | None = None,
         note: str | None = None,
+        stuck_reason: str | None = None,
+        stuck_idle_s: float | None = None,
+        stuck_blockers: int | None = None,
+        stuck_extra: str | None = None,
     ) -> None:
         with self._lock:
             self.telemetry.ts = time.time()
@@ -417,6 +446,13 @@ class RuntimeConfig:
                 self.telemetry.pos_y = int(pos_y)
             if pos_z is not None:
                 self.telemetry.pos_z = int(pos_z)
+            if coords_status is not None:
+                self.telemetry.coords_status = str(coords_status)
+            if coords_jump is not None:
+                try:
+                    self.telemetry.coords_jump = int(coords_jump)
+                except Exception:
+                    self.telemetry.coords_jump = None
             if ring_equipped is not None:
                 self.telemetry.ring_equipped = bool(ring_equipped)
             if amulet_equipped is not None:
@@ -445,12 +481,41 @@ class RuntimeConfig:
                 self.telemetry.cavebot_waypoint = str(cavebot_waypoint)
             if cavebot_action is not None:
                 self.telemetry.cavebot_action = str(cavebot_action)
+            if cavebot_step_idx is not None:
+                try:
+                    self.telemetry.cavebot_step_idx = int(cavebot_step_idx)
+                except Exception:
+                    self.telemetry.cavebot_step_idx = None
+            if cavebot_step_next_idx is not None:
+                try:
+                    self.telemetry.cavebot_step_next_idx = int(cavebot_step_next_idx)
+                except Exception:
+                    self.telemetry.cavebot_step_next_idx = None
+            if cavebot_step_total is not None:
+                try:
+                    self.telemetry.cavebot_step_total = int(cavebot_step_total)
+                except Exception:
+                    self.telemetry.cavebot_step_total = None
             if action_request is not None:
                 self.telemetry.action_request = str(action_request)
             if action_committed is not None:
                 self.telemetry.action_committed = bool(action_committed)
             if note is not None:
                 self.telemetry.note = str(note)
+            if stuck_reason is not None:
+                self.telemetry.stuck_reason = str(stuck_reason)
+            if stuck_idle_s is not None:
+                try:
+                    self.telemetry.stuck_idle_s = float(stuck_idle_s)
+                except Exception:
+                    self.telemetry.stuck_idle_s = None
+            if stuck_blockers is not None:
+                try:
+                    self.telemetry.stuck_blockers = int(stuck_blockers)
+                except Exception:
+                    self.telemetry.stuck_blockers = None
+            if stuck_extra is not None:
+                self.telemetry.stuck_extra = str(stuck_extra)
 
     def update_health(
         self,

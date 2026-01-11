@@ -79,6 +79,37 @@ Opcional: limpiar duplicados consecutivos y escribir otra ruta:
 poetry run python tools/validate_route.py configs/route.json --drop-duplicates --out configs/route.cleaned.json
 ```
 
+## Coordenadas (pos_x/pos_y): `COORDS_PROVIDER`
+
+El bot puede obtener coordenadas de distintas fuentes. Esto es importante porque **si tu cliente no muestra coords en pantalla**, el OCR puede producir falsos positivos.
+
+Variables de entorno:
+
+- `COORDS_PROVIDER=ocr|env|file|disabled` (default: `ocr`)
+  - `ocr`: OCR de la ROI `coords_ocr`.
+  - `env`: lee `PLAYER_X`, `PLAYER_Y` y opcional `PLAYER_Z`.
+  - `file`: lee `COORDS_FILE` (JSON con `{x,y,z}` o lista `[x,y,z]`).
+  - `disabled`: fuerza coords `None` (y el cavebot en modo `pos` se degrada a “no coords”).
+
+Ejemplos (PowerShell):
+
+```powershell
+# Deshabilitar coords OCR (recomendado si NO hay coords visibles)
+$env:COORDS_PROVIDER='disabled'
+
+# Proveer coords por env vars
+$env:COORDS_PROVIDER='env'
+$env:PLAYER_X='32561'
+$env:PLAYER_Y='32496'
+$env:PLAYER_Z='7'
+
+# Proveer coords por archivo JSON
+$env:COORDS_PROVIDER='file'
+$env:COORDS_FILE='logs/coords.json'
+```
+
+Si quieres cavebot sin coords, usa `CAVEBOT_MODE=steps`.
+
 ## Replay (ROI + JSON) y export JSONL
 
 ### Replay (snapshots)

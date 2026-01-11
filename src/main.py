@@ -607,6 +607,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_idle_warn_ts = 0.0
         last_idle_beep_ts = 0.0
         last_gs_ts = 0.0
+        # Coords confidence (OCR can jitter): keep last 'good' coords to compute jumps.
+        last_good_coords: tuple[int, int, int | None] | None = None
+
+        # Coords source/provider (affects diagnostics).
+        coords_provider = (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
+        coords_provider_disabled = coords_provider in {"disabled", "none", "off", "0", "false", "no"}
+        try:
+            coords_warn_jump = int(float(os.getenv("ASSIST_COORDS_WARN_JUMP", "6").strip() or "6"))
+        except Exception:
+            coords_warn_jump = 6
+        try:
+            coords_fail_jump = int(float(os.getenv("ASSIST_COORDS_FAIL_JUMP", "25").strip() or "25"))
+        except Exception:
+            coords_fail_jump = 25
+        coords_warn_jump = max(1, int(coords_warn_jump))
+        coords_fail_jump = max(coords_warn_jump, int(coords_fail_jump))
         last_event_target = ""
         last_event_reco = ""
         last_event_wp = ""
@@ -614,6 +630,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_action_req = ""
         last_event_action_committed: bool | None = None
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
+        last_event_note = ""
         last_block_log_ts = 0.0
 
         # Env-based JSONL logging (used when no RuntimeConfig/UI is attached).
@@ -687,7 +704,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     if now - last_gs_ts >= 2.0:
                         last_gs_ts = now
                         try:
-                            runtime_config.update_telemetry(note="Sin GameState (stale)")
+                            runtime_config.update_telemetry(
+                                note="⛔ Stuck: STALE_GS | sin GameState",
+                                stuck_reason="STALE_GS",
+                                stuck_idle_s=0.0,
+                                stuck_blockers=0,
+                                stuck_extra="",
+                            )
                         except Exception:
                             pass
                 continue
@@ -701,54 +724,61 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 sig = None
 
-            # Idle detection: requires valid coords.
-            if idle_alert_s > 0.0:
-                try:
-                    gx = getattr(gamestate, "pos_x", None)
-                    gy = getattr(gamestate, "pos_y", None)
-                    gz = getattr(gamestate, "pos_z", None)
-                    if gx is not None and gy is not None:
-                        key = (int(gx), int(gy), int(gz) if gz is not None else None)
-                        now = time.time()
-                        if last_pos_key is None:
-                            last_pos_key = key
-                            last_pos_change_ts = now
-                        elif key != last_pos_key:
-                            last_pos_key = key
-                            last_pos_change_ts = now
+            # Anti-stuck inputs-free: track last position change and compute idle duration.
+            note_out = ""
+            pos_key: tuple[int, int, int | None] | None = None
+            idle_for_s: float | None = None
+            coords_status = ""
+            coords_jump = 0
+            # Structured stuck fields (sent to UI regardless of note throttling)
+            stuck_reason_tick = ""
+            stuck_idle_s_tick = 0.0
+            stuck_blockers_tick = 0
+            stuck_extra_tick = ""
+            now = time.time()
+            try:
+                gx = getattr(gamestate, "pos_x", None)
+                gy = getattr(gamestate, "pos_y", None)
+                gz = getattr(gamestate, "pos_z", None)
+                if gx is not None and gy is not None:
+                    pos_key = (int(gx), int(gy), int(gz) if gz is not None else None)
+
+                    # Coords confidence vs OCR jitter.
+                    if last_good_coords is None:
+                        coords_status = "OK"
+                        coords_jump = 0
+                        last_good_coords = pos_key
+                    else:
+                        dx = abs(int(pos_key[0]) - int(last_good_coords[0]))
+                        dy = abs(int(pos_key[1]) - int(last_good_coords[1]))
+                        z_changed = (pos_key[2] is not None and last_good_coords[2] is not None and int(pos_key[2]) != int(last_good_coords[2]))
+                        coords_jump = int(dx + dy + (50 if z_changed else 0))
+                        if coords_jump >= coords_fail_jump:
+                            coords_status = "BAD_JUMP"
+                        elif coords_jump >= coords_warn_jump:
+                            coords_status = "UNSTABLE"
                         else:
-                            idle_for = max(0.0, now - float(last_pos_change_ts or now))
-                            if idle_for >= idle_alert_s and (now - last_idle_warn_ts) >= idle_repeat_s:
-                                last_idle_warn_ts = now
-                                msg = f"⏳ Idle: pos sin cambio {idle_for:.0f}s"
-                                try:
-                                    print(msg)
-                                except Exception:
-                                    pass
-                                if runtime_config is not None:
-                                    try:
-                                        runtime_config.update_telemetry(note=msg)
-                                    except Exception:
-                                        pass
+                            coords_status = "OK"
+                            last_good_coords = pos_key
 
-                                # Optional beep, only if assistant sound alerts are enabled.
-                                try:
-                                    if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
-                                        if now - last_idle_beep_ts >= max(1.0, idle_repeat_s):
-                                            last_idle_beep_ts = now
-                                            try:
-                                                import winsound
-
-                                                winsound.Beep(660, 120)
-                                            except Exception:
-                                                try:
-                                                    print("\a", end="")
-                                                except Exception:
-                                                    pass
-                                except Exception:
-                                    pass
-                except Exception:
-                    pass
+                    if last_pos_key is None:
+                        last_pos_key = pos_key
+                        last_pos_change_ts = now
+                    elif pos_key != last_pos_key:
+                        last_pos_key = pos_key
+                        last_pos_change_ts = now
+                    else:
+                        idle_for_s = max(0.0, now - float(last_pos_change_ts or now))
+                else:
+                    pos_key = None
+                    idle_for_s = None
+                    coords_status = "DISABLED" if coords_provider_disabled else "NO_COORDS"
+                    coords_jump = 0
+            except Exception:
+                pos_key = None
+                idle_for_s = None
+                coords_status = "DISABLED" if coords_provider_disabled else "NO_COORDS"
+                coords_jump = 0
 
             cap_current = getattr(gamestate, "cap_current", None)
             ring_equipped = getattr(gamestate, "ring_equipped", None)
@@ -833,6 +863,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             cavebot_next = ""
             cavebot_waypoint = ""
             cavebot_action = ""
+            cavebot_step_idx = 0
+            cavebot_step_next_idx = 0
+            cavebot_step_total = 0
 
             if cavebot_cfg is not None and cavebot_cfg.enabled:
                 cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
@@ -895,6 +928,28 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             wp = decision.waypoint
                             label = wp.name or f"({wp.x},{wp.y})"
                             cavebot_next = f"reached {label}"
+
+                        # StepNavigator index exposure for UI checklist.
+                        try:
+                            cavebot_step_total = int(len(getattr(step_navigator, "route", []) or []))
+                        except Exception:
+                            cavebot_step_total = 0
+                        try:
+                            cavebot_step_idx = int(getattr(step_navigator, "idx", 0) or 0)
+                        except Exception:
+                            cavebot_step_idx = 0
+                        try:
+                            if cavebot_step_total > 0:
+                                j = cavebot_step_idx + 1
+                                loop = bool(getattr(step_navigator, "loop", False))
+                                if j >= cavebot_step_total:
+                                    cavebot_step_next_idx = 0 if loop else cavebot_step_total - 1
+                                else:
+                                    cavebot_step_next_idx = j
+                            else:
+                                cavebot_step_next_idx = 0
+                        except Exception:
+                            cavebot_step_next_idx = 0
                     except Exception:
                         pass
 
@@ -925,11 +980,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pos = None
 
-                    if pos is None:
+                    # Degradación/gating por coords: no usar coords si NO_COORDS o jitter/saltos.
+                    if pos is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED"}:
                         now = time.time()
                         if now - last_pos_warn_ts >= 5.0:
                             last_pos_warn_ts = now
-                            print("🧭 Cavebot: setea PLAYER_X y PLAYER_Y o usa CAVEBOT_MODE=steps")
+                            if coords_status in {"NO_COORDS", "DISABLED"}:
+                                print(
+                                    "🧭 Cavebot: no coords (pos_x/pos_y). Ajusta ROI coords_ocr o usa CAVEBOT_MODE=steps"
+                                )
+                            else:
+                                print(
+                                    f"🧭 Cavebot: coords inestables ({coords_status}, jump={coords_jump}). Ajusta ROI coords_ocr o usa CAVEBOT_MODE=steps"
+                                )
+                        # Degradación explícita: sin coords no tomamos decisiones de navegación.
+                        cavebot_next = "no coords"
+                        cavebot_waypoint = ""
+                        cavebot_action = ""
                     else:
                         # Record coordinates for route building (pos mode).
                         try:
@@ -1063,6 +1130,118 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 action_req_str = ""
                 action_committed = False
 
+            # Anti-stuck diagnosis (no action): infer probable cause and publish as a note.
+            try:
+                if idle_alert_s > 0.0:
+                    require_cavebot = os.getenv("ASSIST_STUCK_REQUIRE_CAVEBOT", "1").strip().lower() not in {
+                        "0",
+                        "false",
+                        "no",
+                    }
+                    cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
+                    cavebot_pos_mode = cavebot_mode not in {"steps", "step"}
+
+                    stuck_reason: str | None = None
+                    extra = ""
+
+                    cavebot_enabled_now = bool(cavebot_cfg is not None and cavebot_cfg.enabled)
+                    if require_cavebot and not cavebot_enabled_now:
+                        stuck_reason = None
+                        extra = ""
+
+                    # If cavebot wants coords (pos mode) but we don't have them, call it out.
+                    if cavebot_enabled_now and cavebot_pos_mode and (
+                        pos_key is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED"}
+                    ):
+                        stuck_reason = "NO_COORDS"
+                        if coords_status == "DISABLED":
+                            extra = "coords provider disabled (COORDS_PROVIDER=disabled)"
+                        else:
+                            extra = (
+                                "ajusta ROI coords_ocr o usa CAVEBOT_MODE=steps"
+                                if coords_status == "NO_COORDS"
+                                else f"coords={coords_status} jump={coords_jump}"
+                            )
+                        stuck_reason_tick = str(stuck_reason)
+                        stuck_idle_s_tick = 0.0
+                        stuck_blockers_tick = 0
+                        stuck_extra_tick = str(extra)
+
+                    # If we have coords and haven't moved for a while, attempt a cause.
+                    elif cavebot_enabled_now and idle_for_s is not None and idle_for_s >= float(idle_alert_s):
+                        offs = getattr(gamestate, "viewport_tile_offsets", None)
+                        n_offs = 0
+                        try:
+                            n_offs = len(offs) if offs else 0
+                        except Exception:
+                            n_offs = 0
+                        stuck_idle_s_tick = float(idle_for_s or 0.0)
+                        stuck_blockers_tick = int(n_offs or 0)
+
+                        if n_offs > 0:
+                            stuck_reason = "BLOCKED"
+                            extra = f"blockers={n_offs}"
+                        else:
+                            committed_move = False
+                            try:
+                                # committed move requests are serialized with a '*' suffix
+                                committed_move = bool(action_committed) and ("move:" in action_req_str) and ("*" in action_req_str)
+                            except Exception:
+                                committed_move = False
+
+                            if committed_move:
+                                stuck_reason = "MOVE_COMMITTED_NO_CHANGE"
+                            else:
+                                stuck_reason = "IDLE"
+
+                        if stuck_reason is not None:
+                            stuck_reason_tick = str(stuck_reason)
+                            stuck_extra_tick = str(extra)
+
+                    if stuck_reason is not None and (now - last_idle_warn_ts) >= float(idle_repeat_s):
+                        last_idle_warn_ts = now
+
+                        pos_s = "?"
+                        try:
+                            if pos_key is not None:
+                                pos_s = f"{pos_key[0]},{pos_key[1]}" + (f",{pos_key[2]}" if pos_key[2] is not None else "")
+                        except Exception:
+                            pos_s = "?"
+
+                        dur_s = "?"
+                        try:
+                            dur_s = f"{float(idle_for_s):.0f}s" if idle_for_s is not None else "?"
+                        except Exception:
+                            dur_s = "?"
+
+                        msg = f"⛔ Stuck: {stuck_reason} | pos {pos_s} | idle {dur_s}"
+                        if extra:
+                            msg = f"{msg} | {extra}"
+                        note_out = msg
+                        try:
+                            print(msg)
+                        except Exception:
+                            pass
+
+                        # Optional beep, only if assistant sound alerts are enabled.
+                        try:
+                            if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
+                                if now - last_idle_beep_ts >= max(1.0, float(idle_repeat_s)):
+                                    last_idle_beep_ts = now
+                                    try:
+                                        import winsound
+
+                                        winsound.Beep(660, 120)
+                                    except Exception:
+                                        try:
+                                            print("\a", end="")
+                                        except Exception:
+                                            pass
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
             # Alertas sonoras (solo asistente)
             try:
                 if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
@@ -1100,6 +1279,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         pos_x=getattr(gamestate, "pos_x", None),
                         pos_y=getattr(gamestate, "pos_y", None),
                         pos_z=getattr(gamestate, "pos_z", None),
+                        coords_status=coords_status,
+                        coords_jump=coords_jump,
                         ring_equipped=ring_equipped,
                         amulet_equipped=amulet_equipped,
                         low_hp=sig.low_hp,
@@ -1114,9 +1295,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cavebot_next=cavebot_next,
                         cavebot_waypoint=cavebot_waypoint,
                         cavebot_action=cavebot_action,
+                        cavebot_step_idx=cavebot_step_idx,
+                        cavebot_step_next_idx=cavebot_step_next_idx,
+                        cavebot_step_total=cavebot_step_total,
                         action_request=action_req_str,
                         action_committed=action_committed,
-                        note="",
+                        note=note_out if note_out else None,
+                        stuck_reason=stuck_reason_tick,
+                        stuck_idle_s=stuck_idle_s_tick,
+                        stuck_blockers=stuck_blockers_tick,
+                        stuck_extra=stuck_extra_tick,
                     )
                 except Exception:
                     pass
@@ -1195,6 +1383,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 },
                             )
                             last_event_flags = flags
+
+                        # Note (stuck/stale diagnostics)
+                        try:
+                            if note_out and note_out != last_event_note:
+                                emit("event.note", {"note": note_out})
+                                last_event_note = note_out
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
@@ -1218,6 +1414,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "pos_x": getattr(tel, "pos_x", None),
                         "pos_y": getattr(tel, "pos_y", None),
                         "pos_z": getattr(tel, "pos_z", None),
+                        "coords_status": getattr(tel, "coords_status", ""),
+                        "coords_jump": getattr(tel, "coords_jump", None),
                         "ring_equipped": getattr(tel, "ring_equipped", None),
                         "amulet_equipped": getattr(tel, "amulet_equipped", None),
                         "low_hp": tel.low_hp,
@@ -1232,9 +1430,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_next": tel.cavebot_next,
                         "cavebot_waypoint": tel.cavebot_waypoint,
                         "cavebot_action": tel.cavebot_action,
+                        "cavebot_step_idx": getattr(tel, "cavebot_step_idx", None),
+                        "cavebot_step_next_idx": getattr(tel, "cavebot_step_next_idx", None),
+                        "cavebot_step_total": getattr(tel, "cavebot_step_total", None),
                         "action_request": getattr(tel, "action_request", ""),
                         "action_committed": bool(getattr(tel, "action_committed", False)),
                         "note": tel.note,
+                        "stuck_reason": getattr(tel, "stuck_reason", ""),
+                        "stuck_idle_s": getattr(tel, "stuck_idle_s", None),
+                        "stuck_blockers": getattr(tel, "stuck_blockers", None),
+                        "stuck_extra": getattr(tel, "stuck_extra", ""),
                     }
                 else:
                     log_enabled = bool(log_enabled_env)
@@ -1252,6 +1457,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "pos_x": getattr(gamestate, "pos_x", None),
                         "pos_y": getattr(gamestate, "pos_y", None),
                         "pos_z": getattr(gamestate, "pos_z", None),
+                        "coords_status": coords_status,
+                        "coords_jump": coords_jump,
                         "ring_equipped": ring_equipped,
                         "amulet_equipped": amulet_equipped,
                         "low_hp": bool(getattr(sig, "low_hp", False)) if sig is not None else None,
@@ -1266,9 +1473,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_next": cavebot_next,
                         "cavebot_waypoint": cavebot_waypoint,
                         "cavebot_action": cavebot_action,
+                        "cavebot_step_idx": cavebot_step_idx,
+                        "cavebot_step_next_idx": cavebot_step_next_idx,
+                        "cavebot_step_total": cavebot_step_total,
                         "action_request": action_req_str,
                         "action_committed": bool(action_committed),
                         "note": "",
+                        "stuck_reason": stuck_reason_tick,
+                        "stuck_idle_s": stuck_idle_s_tick,
+                        "stuck_blockers": stuck_blockers_tick,
+                        "stuck_extra": stuck_extra_tick,
                     }
 
                 if log_enabled and jsonl.should_log(enabled=log_enabled, interval_ms=log_interval_ms):
@@ -1362,7 +1576,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Staleness
             snap = _h_snapshot()
             last_gs = float(snap.get("last_gs_ts", 0.0) or 0.0)
-            gs_age = (now - last_gs) if last_gs > 0 else 1e9
+            # last_gs_ts==0 means we haven't produced any GameState yet.
+            # Avoid emitting noisy 'stale' warnings during startup.
+            gs_age = (now - last_gs) if last_gs > 0 else None
 
             # Publish health snapshot to UI (separate from TelemetrySnapshot.ts).
             try:
@@ -1392,7 +1608,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         ts=now,
                         uptime_s=max(0.0, now - float(snap.get("start_ts", now))),
                         frame_age_s=frame_age if frame_age < 1e8 else None,
-                        gs_age_s=gs_age if gs_age < 1e8 else None,
+                        gs_age_s=(gs_age if (gs_age is not None and gs_age < 1e8) else None),
                         dead_threads=",".join(dead) if dead else "",
                         capture_ok=int(snap.get("capture_ok", 0.0)),
                         capture_none=int(snap.get("capture_none", 0.0)),
@@ -1413,18 +1629,24 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         roi_offset_dx_px=roi_dx,
                         roi_offset_dy_px=roi_dy,
                         roi_offset_score=roi_score,
-                        warn=(f"dead={dead}" if dead else (f"stale_gs={gs_age:.1f}s" if gs_age >= stale_gs_s else "")),
+                        warn=(
+                            f"dead={dead}"
+                            if dead
+                            else (
+                                f"stale_gs={gs_age:.1f}s" if (gs_age is not None and gs_age >= stale_gs_s) else ""
+                            )
+                        ),
                     )
             except Exception:
                 pass
 
-            if dead or (gs_age >= stale_gs_s):
+            if dead or (gs_age is not None and gs_age >= stale_gs_s):
                 if now - last_warn_ts >= 2.0:
                     last_warn_ts = now
                     msg = ""
                     if dead:
                         msg = f"⚠️  Watchdog: dead threads={dead}"
-                    elif gs_age >= stale_gs_s:
+                    elif gs_age is not None and gs_age >= stale_gs_s:
                         msg = f"⚠️  Watchdog: stale GameState ({gs_age:.1f}s)"
                     try:
                         print(msg)
@@ -1438,7 +1660,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 if dead and stop_on_dead:
                     stop_event.set()
-                elif (gs_age >= stale_gs_s) and stop_on_stale:
+                elif (gs_age is not None and gs_age >= stale_gs_s) and stop_on_stale:
                     stop_event.set()
 
             # Optional health JSONL

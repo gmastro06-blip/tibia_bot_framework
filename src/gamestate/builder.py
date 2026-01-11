@@ -1,6 +1,8 @@
 from typing import Optional, Dict, Any, Tuple, List
 import os
 import time
+import json
+from pathlib import Path
 import numpy as np
 from dataclasses import dataclass
 from vision.ocr import OCRProcessor
@@ -70,6 +72,100 @@ class GameStateBuilder:
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
 
+    @staticmethod
+    def _coords_provider_kind() -> str:
+        return (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
+
+    @staticmethod
+    def _is_coords_disabled(kind: str) -> bool:
+        return kind in {"disabled", "none", "off", "0", "false", "no"}
+
+    @staticmethod
+    def _coords_from_env() -> tuple[int, int, int | None] | None:
+        px = (os.getenv("PLAYER_X", "") or "").strip()
+        py = (os.getenv("PLAYER_Y", "") or "").strip()
+        pz = (os.getenv("PLAYER_Z", "") or "").strip()
+        if not (px and py):
+            return None
+        try:
+            x = int(px)
+            y = int(py)
+        except Exception:
+            return None
+        z: int | None = None
+        if pz:
+            try:
+                z = int(pz)
+            except Exception:
+                z = None
+        return (x, y, z)
+
+    @staticmethod
+    def _coords_from_file() -> tuple[int, int, int | None] | None:
+        raw = (os.getenv("COORDS_FILE", "") or "").strip()
+        if not raw:
+            return None
+        try:
+            p = Path(raw)
+            if not p.is_absolute():
+                # Resolve relative to repo root (best-effort)
+                repo_root = Path(__file__).resolve().parent.parent.parent
+                p = (repo_root / p).resolve()
+            if not p.exists() or not p.is_file():
+                return None
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        try:
+            if isinstance(data, dict):
+                if "coords" in data:
+                    data = data.get("coords")
+                elif "x" in data and "y" in data:
+                    x_raw = data.get("x")
+                    y_raw = data.get("y")
+                    if x_raw is None or y_raw is None:
+                        return None
+                    x = int(x_raw)
+                    y = int(y_raw)
+                    z_raw = data.get("z", None)
+                    z = int(z_raw) if z_raw is not None else None
+                    return (x, y, z)
+            if isinstance(data, (list, tuple)) and len(data) >= 2:
+                x = int(data[0])
+                y = int(data[1])
+                z = int(data[2]) if len(data) >= 3 and data[2] is not None else None
+                return (x, y, z)
+        except Exception:
+            return None
+        return None
+
+    def _coords_from_provider(
+        self,
+        frame: np.ndarray,
+        rois: Dict[str, Dict[str, float]],
+        resolution: Tuple[int, int],
+        *,
+        allow_ocr: bool,
+    ) -> tuple[tuple[int, int, int | None] | None, bool]:
+        kind = self._coords_provider_kind()
+        if self._is_coords_disabled(kind):
+            return None, True
+
+        if kind in {"env", "player_env"}:
+            return self._coords_from_env(), False
+
+        if kind in {"file", "json", "external"}:
+            return self._coords_from_file(), False
+
+        # Default: OCR
+        if not allow_ocr:
+            return None, False
+        try:
+            return self.ocr_processor.extract_coords(frame, rois, resolution), False
+        except Exception:
+            return None, False
+
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
         rf_boxes: Optional[List[Dict[str, Any]]] = None
@@ -122,24 +218,12 @@ class GameStateBuilder:
             except Exception:
                 cap_current = None
 
-            try:
-                coords = self.ocr_processor.extract_coords(frame, rois, resolution)
-                if coords is not None:
-                    pos_x, pos_y, pos_z = coords
-                else:
-                    pos_x, pos_y, pos_z = None, None, None
-            except Exception:
-                pos_x, pos_y, pos_z = None, None, None
-
             self._ocr_last_ts = now
             self._last_hp_current = hp_current
             self._last_hp_max = hp_max
             self._last_mp_current = mp_current
             self._last_mp_max = mp_max
             self._last_cap_current = cap_current
-            self._last_pos_x = pos_x
-            self._last_pos_y = pos_y
-            self._last_pos_z = pos_z
         else:
             # Reusar lo último conocido
             hp_current = self._last_hp_current
@@ -150,6 +234,21 @@ class GameStateBuilder:
             pos_x = self._last_pos_x
             pos_y = self._last_pos_y
             pos_z = self._last_pos_z
+
+        # Coords provider: permite deshabilitar OCR coords (o usar fuente externa) cuando no hay coords visibles.
+        try:
+            coords, disabled = self._coords_from_provider(frame, rois, resolution, allow_ocr=bool(do_ocr))
+            if disabled:
+                pos_x, pos_y, pos_z = None, None, None
+                self._last_pos_x, self._last_pos_y, self._last_pos_z = None, None, None
+            elif coords is not None:
+                pos_x, pos_y, pos_z = coords
+                self._last_pos_x, self._last_pos_y, self._last_pos_z = pos_x, pos_y, pos_z
+            else:
+                # Keep last-known (already set above)
+                self._last_pos_x, self._last_pos_y, self._last_pos_z = pos_x, pos_y, pos_z
+        except Exception:
+            self._last_pos_x, self._last_pos_y, self._last_pos_z = pos_x, pos_y, pos_z
 
         # Defaults de max (útiles si solo usamos barras)
         if hp_max is None:

@@ -23,6 +23,7 @@ class BotUI:
         self._last_roi_sanity_dir: str | None = None
         self._last_ocr_sanity_dir: str | None = None
         self._last_anchor_sanity_dir: str | None = None
+        self._last_coords_sanity_dir: str | None = None
 
         try:
             import tkinter as tk
@@ -56,16 +57,42 @@ class BotUI:
         self.anchor_status_var = tk.StringVar(value="OFF")
         self.idle_var = tk.StringVar(value="-")
         self.idle_status_var = tk.StringVar(value="OFF")
+        self.stuck_var = tk.StringVar(value="-")
+        self.stuck_status_var = tk.StringVar(value="OFF")
 
         # UI-side idle tracking (derived from telemetry coords)
         self._idle_last_pos_key: tuple[int, int, int | None] | None = None
         self._idle_last_pos_change_ts: float = 0.0
+
+        # UI operator panel (event stream)
+        self._event_lines: list[str] = []
+        self._event_max_lines = 30
+        self._last_event_target: str = ""
+        self._last_event_reco: str = ""
+        self._last_event_action_req: str = ""
+        self._last_event_action_committed: bool | None = None
+        self._last_event_wp: str = ""
+        self._last_event_wp_action: str = ""
+        self._last_event_health_status: str = ""
+        self._last_event_idle_status: str = ""
+        self._last_event_note: str = ""
+        self._last_event_coords_status: str = ""
+        self._last_event_stuck_reason: str = ""
+        self._last_event_step_idx: int | None = None
+        self._last_event_step_total: int | None = None
+
+        # Route checklist state (UI-only)
+        self._route_items: list[dict] = []
+        self._route_loaded_from: str = ""
+        self._route_current_index: int | None = None
 
         # Últimos resultados de sanity-check (persisten en UI)
         self.last_roi_summary_var = tk.StringVar(value="-")
         self.last_roi_dir_var = tk.StringVar(value="-")
         self.last_ocr_summary_var = tk.StringVar(value="-")
         self.last_ocr_dir_var = tk.StringVar(value="-")
+        self.last_coords_summary_var = tk.StringVar(value="-")
+        self.last_coords_dir_var = tk.StringVar(value="-")
         self.last_anchor_summary_var = tk.StringVar(value="-")
         self.last_anchor_dir_var = tk.StringVar(value="-")
 
@@ -199,9 +226,24 @@ class BotUI:
         self._idle_detail_label = tk.Label(tab_control, textvariable=self.idle_var, width=52, anchor="w")
         self._idle_detail_label.grid(row=12, column=2, sticky="w", pady=(6, 0))
 
+        tk.Label(tab_control, text="Stuck:").grid(row=13, column=0, sticky="w", pady=(6, 0))
+        self._stuck_status_label = tk.Label(tab_control, textvariable=self.stuck_status_var, width=8, anchor="w")
+        self._stuck_status_label.grid(row=13, column=1, sticky="w", pady=(6, 0))
+        self._stuck_detail_label = tk.Label(tab_control, textvariable=self.stuck_var, width=52, anchor="w")
+        self._stuck_detail_label.grid(row=13, column=2, sticky="w", pady=(6, 0))
+
+        # Panel operador: últimos eventos
+        tk.Label(tab_control, text="Eventos (últimos):").grid(row=14, column=0, sticky="w", pady=(6, 0))
+        self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none")
+        try:
+            self._events_text.configure(state="disabled")
+        except Exception:
+            pass
+        self._events_text.grid(row=15, column=0, columnspan=5, sticky="w", pady=(4, 0))
+
         # Herramientas de precisión (no bloquean; generan artefactos en logs/)
-        tk.Label(tab_control, text="").grid(row=13, column=0)  # separador simple
-        tk.Label(tab_control, text="Herramientas:").grid(row=13, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="").grid(row=16, column=0)  # separador simple
+        tk.Label(tab_control, text="Herramientas:").grid(row=16, column=0, sticky="w", pady=(6, 0))
 
         def _monitor_default() -> int:
             raw = os.getenv("FORCE_MONITOR", "2").strip() or "2"
@@ -275,6 +317,23 @@ class BotUI:
                         lines.append(
                             f"Ring: {pres.get('ring_equipped')} | Amulet: {pres.get('amulet_equipped')} | Hungry: {pres.get('hungry')}"
                         )
+                        return "\n".join(lines)
+
+                    if isinstance(data, dict) and "coords_sanity" in data:
+                        cs = data.get("coords_sanity") or {}
+                        ok = cs.get("ok")
+                        samples = cs.get("samples")
+                        ok_rate = cs.get("ok_rate")
+                        max_jump = cs.get("max_jump")
+                        warn_jumps = cs.get("warn_jumps")
+                        fail_jumps = cs.get("fail_jumps")
+                        lines = [
+                            f"Coords: ok={ok}/{samples} ({0 if ok_rate is None else float(ok_rate):.0%})",
+                            f"Jumps: max={max_jump} warn={warn_jumps} fail={fail_jumps}",
+                        ]
+                        last = cs.get("last_coords")
+                        if last is not None:
+                            lines.append(f"Last: {last}")
                         return "\n".join(lines)
 
                     if isinstance(data, dict) and "anchor" in data:
@@ -433,6 +492,50 @@ class BotUI:
 
             _run_tool_async(cmd, title="OCR Sanity Check", open_dir=out_dir, on_complete=_on_complete)
 
+        def run_coords_sanity_ui() -> None:
+            rois_path = str(self.rois_config_override.get()).strip()
+            out_dir = str(self._repo_root / "logs" / "coords_sanity_ui")
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "coords_sanity_check.py"),
+                "--monitor",
+                str(_monitor_default()),
+                "--out-dir",
+                out_dir,
+                "--save-overlay",
+                "--save-crops",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
+                if tool_out_dir:
+                    self._last_coords_sanity_dir = tool_out_dir
+                    try:
+                        self.last_coords_dir_var.set(str(tool_out_dir))
+                        self.last_coords_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                    return
+                try:
+                    base = Path(out_dir)
+                    if not base.exists():
+                        return
+                    dirs = [p for p in base.iterdir() if p.is_dir()]
+                    if not dirs:
+                        return
+                    newest = max(dirs, key=lambda p: p.stat().st_mtime)
+                    self._last_coords_sanity_dir = str(newest)
+                    try:
+                        self.last_coords_dir_var.set(str(newest))
+                        self.last_coords_summary_var.set(summary_short or ("OK" if ok else "FAIL"))
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            _run_tool_async(cmd, title="Coords Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+
         def run_anchor_sanity_ui() -> None:
             rois_path = str(self.rois_config_override.get()).strip()
             out_dir = str(self._repo_root / "logs" / "anchor_sanity_ui")
@@ -515,6 +618,8 @@ class BotUI:
                     last_dir = self._last_roi_sanity_dir
                 elif kind == "ocr":
                     last_dir = self._last_ocr_sanity_dir
+                elif kind == "coords":
+                    last_dir = self._last_coords_sanity_dir
                 else:
                     last_dir = self._last_anchor_sanity_dir
                 if not last_dir:
@@ -529,66 +634,85 @@ class BotUI:
                 pass
 
         tk.Button(tab_control, text="ROI sanity", width=12, command=run_roi_sanity_ui).grid(
-            row=14, column=1, sticky="w", pady=(6, 0)
+            row=17, column=1, sticky="w", pady=(6, 0)
         )
         tk.Button(tab_control, text="OCR test", width=12, command=run_ocr_sanity_ui).grid(
-            row=14, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=17, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Coords test", width=12, command=run_coords_sanity_ui).grid(
+            row=17, column=0, sticky="w", pady=(6, 0)
         )
 
         tk.Button(tab_control, text="Anchor test", width=12, command=run_anchor_sanity_ui).grid(
-            row=14, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=17, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Button(tab_control, text="Anchor setup", width=12, command=run_anchor_setup_ui).grid(
-            row=14, column=4, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=17, column=4, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Button(tab_control, text="ROI overlay", width=12, command=lambda: _open_last_artifact("overlay", "roi")).grid(
-            row=15, column=1, sticky="w", pady=(6, 0)
+            row=18, column=1, sticky="w", pady=(6, 0)
         )
         tk.Button(tab_control, text="ROI report", width=12, command=lambda: _open_last_artifact("report", "roi")).grid(
-            row=15, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=18, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Button(tab_control, text="Anchor overlay", width=12, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
-            row=15, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=18, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Button(tab_control, text="OCR overlay", width=12, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
-            row=16, column=1, sticky="w", pady=(6, 0)
+            row=19, column=1, sticky="w", pady=(6, 0)
         )
         tk.Button(tab_control, text="OCR report", width=12, command=lambda: _open_last_artifact("report", "ocr")).grid(
-            row=16, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=19, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_control, text="Coords overlay", width=12, command=lambda: _open_last_artifact("overlay", "coords")).grid(
+            row=18, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_control, text="Coords report", width=12, command=lambda: _open_last_artifact("report", "coords")).grid(
+            row=19, column=0, sticky="w", pady=(6, 0)
         )
 
         tk.Button(tab_control, text="Anchor report", width=12, command=lambda: _open_last_artifact("report", "anchor")).grid(
-            row=16, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=19, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         # Últimos resultados
-        tk.Label(tab_control, text="").grid(row=17, column=0)
-        tk.Label(tab_control, text="Último ROI:").grid(row=18, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="").grid(row=20, column=0)
+        tk.Label(tab_control, text="Último ROI:").grid(row=21, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(
-            row=18, column=1, sticky="w", pady=(6, 0)
+            row=21, column=1, sticky="w", pady=(6, 0)
         )
         tk.Label(tab_control, textvariable=self.last_roi_dir_var, width=52, anchor="w").grid(
-            row=19, column=1, columnspan=3, sticky="w"
+            row=22, column=1, columnspan=3, sticky="w"
         )
 
-        tk.Label(tab_control, text="Último OCR:").grid(row=20, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Último OCR:").grid(row=23, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(
-            row=20, column=1, sticky="w", pady=(6, 0)
+            row=23, column=1, sticky="w", pady=(6, 0)
         )
         tk.Label(tab_control, textvariable=self.last_ocr_dir_var, width=52, anchor="w").grid(
-            row=21, column=1, columnspan=3, sticky="w"
+            row=24, column=1, columnspan=3, sticky="w"
         )
 
-        tk.Label(tab_control, text="Último Anchor:").grid(row=22, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Último Coords:").grid(row=25, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(
+            row=25, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(tab_control, textvariable=self.last_coords_dir_var, width=52, anchor="w").grid(
+            row=26, column=1, columnspan=3, sticky="w"
+        )
+
+        tk.Label(tab_control, text="Último Anchor:").grid(row=27, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_control, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(
-            row=22, column=1, sticky="w", pady=(6, 0)
+            row=27, column=1, sticky="w", pady=(6, 0)
         )
         tk.Label(tab_control, textvariable=self.last_anchor_dir_var, width=52, anchor="w").grid(
-            row=23, column=1, columnspan=3, sticky="w"
+            row=28, column=1, columnspan=3, sticky="w"
         )
 
         # --- TAB: Healing ---
@@ -624,6 +748,79 @@ class BotUI:
             text="(Solo UI por ahora: no ejecuta navegación aún)",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # Checklist de ruta (UI-only)
+        tk.Label(tab_cavebot, text="").grid(row=7, column=0)
+        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=8, column=0, sticky="w", pady=(10, 0))
+
+        self._route_status_var = tk.StringVar(value="(ruta no cargada)")
+        tk.Label(tab_cavebot, textvariable=self._route_status_var, width=60, anchor="w").grid(
+            row=8, column=1, columnspan=2, sticky="w", pady=(10, 0)
+        )
+
+        self._route_listbox = tk.Listbox(tab_cavebot, height=10, width=60)
+        self._route_listbox.grid(row=9, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        self._route_next_var = tk.StringVar(value="-")
+        tk.Label(tab_cavebot, text="Próximos:").grid(row=10, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, textvariable=self._route_next_var, width=60, anchor="w").grid(
+            row=10, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def _route_format_item(idx: int, wp: object) -> str:
+            try:
+                name = getattr(wp, "name", None) or ""
+                x = getattr(wp, "x", None)
+                y = getattr(wp, "y", None)
+                z = getattr(wp, "z", None)
+                act = getattr(wp, "action", None) or ""
+                coord = ""
+                if x is not None and y is not None:
+                    coord = f"({x},{y}{'' if z is None else ','+str(z)})"
+                label = name or coord or "(wp)"
+                if act:
+                    return f"{idx:03d}  {label}  action={act}"
+                return f"{idx:03d}  {label}"
+            except Exception:
+                return f"{idx:03d}  (wp)"
+
+        def _load_route_for_ui() -> None:
+            path = str(self.cavebot_route_path.get()).strip() or "configs/route.json"
+            if path == self._route_loaded_from and self._route_items:
+                return
+            self._route_loaded_from = path
+            self._route_items = []
+            self._route_current_index = None
+            try:
+                from navigation.route import load_route
+
+                route = load_route(path)
+                self._route_items = [{"wp": wp} for wp in route]
+            except Exception:
+                self._route_items = []
+
+            try:
+                self._route_listbox.delete(0, "end")
+                for i, item in enumerate(self._route_items):
+                    self._route_listbox.insert("end", _route_format_item(i, item.get("wp")))
+            except Exception:
+                pass
+
+            try:
+                if self._route_items:
+                    self._route_status_var.set(f"Cargada: {path} ({len(self._route_items)} waypoints)")
+                else:
+                    self._route_status_var.set(f"No pude cargar ruta: {path}")
+            except Exception:
+                pass
+
+        def reload_route_ui() -> None:
+            self._route_loaded_from = ""
+            _load_route_for_ui()
+
+        tk.Button(tab_cavebot, text="Recargar ruta", width=14, command=reload_route_ui).grid(
+            row=9, column=2, sticky="w", padx=(8, 0)
+        )
+
         tk.Label(tab_cavebot, text="Próxima acción:").grid(row=3, column=0, sticky="w", pady=(12, 0))
         tk.Label(tab_cavebot, textvariable=self.cavebot_next_text, width=40, anchor="w").grid(
             row=3, column=1, sticky="w", pady=(12, 0)
@@ -651,6 +848,13 @@ class BotUI:
         tk.Button(tab_cavebot, text="Siguiente acción", width=14, command=request_advance).grid(
             row=6, column=1, sticky="w", pady=(10, 0)
         )
+
+        # Mantener la ruta cargada para checklist cuando cambie el path.
+        try:
+            self.cavebot_route_path.trace_add("write", lambda *_args: reload_route_ui())
+        except Exception:
+            pass
+        _load_route_for_ui()
 
         # --- TAB: Configuración ---
         tk.Checkbutton(tab_config, text="Habilitar simulación de señales", variable=self.sim_enabled).grid(
@@ -909,6 +1113,15 @@ class BotUI:
                 self.cap_text.set(cap_str)
 
                 parts = []
+                # Coords confidence (estructurado desde el core)
+                coords_status = str(getattr(tel, "coords_status", "") or "")
+                coords_jump = getattr(tel, "coords_jump", None)
+                if coords_status == "NO_COORDS" or getattr(tel, "pos_x", None) is None or getattr(tel, "pos_y", None) is None:
+                    parts.append("no_coords")
+                elif coords_status == "UNSTABLE":
+                    parts.append("coords_unstable")
+                elif coords_status == "BAD_JUMP":
+                    parts.append("coords_bad")
                 if tel.low_hp:
                     parts.append("low_hp")
                 if tel.low_mp:
@@ -1119,7 +1332,13 @@ class BotUI:
 
                         try:
                             idle_fail_raw = os.getenv("UI_IDLE_FAIL_S", "").strip()
-                            idle_fail_s = float(idle_fail_raw) if idle_fail_raw else (max(idle_warn_s * 2.0, idle_warn_s + 30.0) if idle_warn_s > 0 else 0.0)
+                            idle_fail_s = (
+                                float(idle_fail_raw)
+                                if idle_fail_raw
+                                else (
+                                    max(idle_warn_s * 2.0, idle_warn_s + 30.0) if idle_warn_s > 0 else 0.0
+                                )
+                            )
                         except Exception:
                             idle_fail_s = max(idle_warn_s * 2.0, idle_warn_s + 30.0) if idle_warn_s > 0 else 0.0
                         idle_fail_s = max(0.0, float(idle_fail_s))
@@ -1136,7 +1355,17 @@ class BotUI:
                             gy = getattr(tel, "pos_y", None)
                             gz = getattr(tel, "pos_z", None)
 
-                            if gx is None or gy is None:
+                            # If coords are not trusted/available, don't compute idle (it would be garbage).
+                            if coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED"}:
+                                self.idle_status_var.set("-")
+                                jump_s = "" if coords_jump is None else f" (jump={coords_jump})"
+                                self.idle_var.set(f"coords {coords_status or 'unknown'}{jump_s}")
+                                try:
+                                    self._idle_status_label.config(fg="#666666")
+                                except Exception:
+                                    pass
+
+                            elif gx is None or gy is None:
                                 self.idle_status_var.set("-")
                                 self.idle_var.set("no coords")
                                 try:
@@ -1191,6 +1420,265 @@ class BotUI:
                                 pass
                         except Exception:
                             pass
+
+                    # Stuck status (diagnóstico del bot en tel.note)
+                    try:
+                        note = str(getattr(tel, "note", "") or "").strip()
+                        s_reason = str(getattr(tel, "stuck_reason", "") or "").strip()
+                        s_idle = getattr(tel, "stuck_idle_s", None)
+                        s_block = getattr(tel, "stuck_blockers", None)
+                        s_extra = str(getattr(tel, "stuck_extra", "") or "").strip()
+
+                        if not s_reason and not note:
+                            self.stuck_status_var.set("OFF")
+                            self.stuck_var.set("-")
+                            try:
+                                self._stuck_status_label.config(fg="#666666")
+                            except Exception:
+                                pass
+                        elif s_reason:
+                            status = "FAIL" if s_reason == "STALE_GS" else "WARN"
+                            self.stuck_status_var.set(status)
+                            if note.startswith("⛔ Stuck:"):
+                                self.stuck_var.set(note)
+                            else:
+                                try:
+                                    idle_s = "?" if s_idle is None else f"{float(s_idle):.0f}s"
+                                except Exception:
+                                    idle_s = "?"
+                                try:
+                                    blk_s = "?" if s_block is None else str(int(s_block))
+                                except Exception:
+                                    blk_s = "?"
+                                msg = f"⛔ Stuck: {s_reason} | idle {idle_s} | blockers {blk_s}"
+                                if s_extra:
+                                    msg = f"{msg} | {s_extra}"
+                                self.stuck_var.set(msg)
+                            try:
+                                if status == "FAIL":
+                                    self._stuck_status_label.config(fg="#b00020")
+                                else:
+                                    self._stuck_status_label.config(fg="#b26a00")
+                            except Exception:
+                                pass
+                        else:
+                            # Any other note (informational)
+                            self.stuck_status_var.set("ON")
+                            self.stuck_var.set(note)
+                            try:
+                                self._stuck_status_label.config(fg="#1f6feb")
+                            except Exception:
+                                pass
+                    except Exception:
+                        self.stuck_status_var.set("-")
+                        self.stuck_var.set("-")
+
+                    # Panel de eventos + checklist: detectar cambios relevantes.
+                    try:
+                        def _ts() -> str:
+                            try:
+                                return time.strftime("%H:%M:%S")
+                            except Exception:
+                                return "--:--:--"
+
+                        def _push(line: str) -> None:
+                            try:
+                                self._event_lines.append(line)
+                                if len(self._event_lines) > int(self._event_max_lines):
+                                    self._event_lines = self._event_lines[-int(self._event_max_lines) :]
+                                # render
+                                try:
+                                    self._events_text.configure(state="normal")
+                                except Exception:
+                                    pass
+                                try:
+                                    self._events_text.delete("1.0", "end")
+                                    self._events_text.insert("end", "\n".join(self._event_lines))
+                                    self._events_text.see("end")
+                                except Exception:
+                                    pass
+                                try:
+                                    self._events_text.configure(state="disabled")
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
+
+                        tgt = str(getattr(tel, "target", "") or "")
+                        reco = str(getattr(tel, "recommendation", "") or "")
+                        action_req = str(getattr(tel, "action_request", "") or "")
+                        action_committed = getattr(tel, "action_committed", None)
+                        wp = str(getattr(tel, "cavebot_waypoint", "") or "")
+                        wp_action = str(getattr(tel, "cavebot_action", "") or "")
+
+                        # Coords confidence transitions (structured telemetry)
+                        coords_status = str(getattr(tel, "coords_status", "") or "")
+                        coords_jump = getattr(tel, "coords_jump", None)
+
+                        def _coords_trouble(s: str) -> bool:
+                            return str(s or "") in {"NO_COORDS", "UNSTABLE", "BAD_JUMP", "DISABLED"}
+
+                        if coords_status != self._last_event_coords_status:
+                            if _coords_trouble(coords_status) or _coords_trouble(self._last_event_coords_status):
+                                jump_s = "" if coords_jump is None else f" (jump={coords_jump})"
+                                _push(f"{_ts()} coords: {coords_status or 'OK'}{jump_s}")
+                            self._last_event_coords_status = coords_status
+
+                        # Stuck reason transitions (structured telemetry)
+                        s_reason = str(getattr(tel, "stuck_reason", "") or "").strip()
+                        s_idle = getattr(tel, "stuck_idle_s", None)
+                        s_block = getattr(tel, "stuck_blockers", None)
+                        s_extra = str(getattr(tel, "stuck_extra", "") or "").strip()
+                        if s_reason != self._last_event_stuck_reason:
+                            if s_reason:
+                                try:
+                                    idle_s = "?" if s_idle is None else f"{float(s_idle):.0f}s"
+                                except Exception:
+                                    idle_s = "?"
+                                try:
+                                    blk_s = "?" if s_block is None else str(int(s_block))
+                                except Exception:
+                                    blk_s = "?"
+                                extra_s = f" | {s_extra}" if s_extra else ""
+                                _push(f"{_ts()} stuck: {s_reason} | idle {idle_s} | blockers {blk_s}{extra_s}")
+                            elif self._last_event_stuck_reason:
+                                _push(f"{_ts()} stuck: cleared")
+                            self._last_event_stuck_reason = s_reason
+
+                        # StepNavigator index transitions (structured telemetry)
+                        try:
+                            step_total = int(getattr(tel, "cavebot_step_total", 0) or 0)
+                            step_idx = int(getattr(tel, "cavebot_step_idx", 0) or 0)
+                        except Exception:
+                            step_total = 0
+                            step_idx = 0
+
+                        if step_total > 0:
+                            prev_total = int(self._last_event_step_total or 0)
+                            prev_idx = self._last_event_step_idx
+                            if prev_total <= 0:
+                                # Step mode just became active.
+                                _push(f"{_ts()} step: {step_idx + 1}/{step_total} ({wp})")
+                            elif prev_idx is not None and step_idx != int(prev_idx):
+                                _push(f"{_ts()} step: {step_idx + 1}/{step_total} ({wp})")
+                            self._last_event_step_total = step_total
+                            self._last_event_step_idx = step_idx
+                        else:
+                            # Reset when not in step mode.
+                            self._last_event_step_total = 0
+                            self._last_event_step_idx = None
+
+                        if tgt != self._last_event_target:
+                            _push(f"{_ts()} target: {tgt}")
+                            self._last_event_target = tgt
+
+                        if reco != self._last_event_reco:
+                            _push(f"{_ts()} reco: {reco}")
+                            self._last_event_reco = reco
+
+                        if (
+                            action_req != self._last_event_action_req
+                            or self._last_event_action_committed is None
+                            or (action_committed is not None and bool(action_committed) != bool(self._last_event_action_committed))
+                        ):
+                            star = "*" if bool(action_committed) else ""
+                            _push(f"{_ts()} action{star}: {action_req}")
+                            self._last_event_action_req = action_req
+                            self._last_event_action_committed = bool(action_committed) if action_committed is not None else None
+
+                        if wp != self._last_event_wp or wp_action != self._last_event_wp_action:
+                            if wp or wp_action:
+                                _push(f"{_ts()} cavebot: {wp} action={wp_action}")
+                            self._last_event_wp = wp
+                            self._last_event_wp_action = wp_action
+
+                        # Health / Idle status transitions
+                        hs = str(self.health_status_var.get() or "")
+                        if hs and hs != self._last_event_health_status and hs in {"WARN", "FAIL"}:
+                            _push(f"{_ts()} health: {hs}")
+                        self._last_event_health_status = hs
+
+                        is_ = str(self.idle_status_var.get() or "")
+                        if is_ and is_ != self._last_event_idle_status and is_ in {"WARN", "FAIL"}:
+                            _push(f"{_ts()} idle: {is_} ({self.idle_var.get()})")
+                        self._last_event_idle_status = is_
+
+                        # Note / stuck diagnostics
+                        try:
+                            note = str(getattr(tel, "note", "") or "").strip()
+                        except Exception:
+                            note = ""
+                        if note and note != self._last_event_note:
+                            _push(f"{_ts()} note: {note}")
+                            self._last_event_note = note
+
+                        # Checklist: resaltar waypoint actual si podemos mapearlo.
+                        try:
+                            _load_route_for_ui()
+                            if self._route_items:
+                                cur_idx = None
+                                # Prefer StepNavigator structured index when available.
+                                try:
+                                    step_total = int(getattr(tel, "cavebot_step_total", 0) or 0)
+                                    step_idx = int(getattr(tel, "cavebot_step_idx", 0) or 0)
+                                except Exception:
+                                    step_total = 0
+                                    step_idx = 0
+
+                                if step_total > 0:
+                                    cur_idx = max(0, step_idx)
+                                    # Bound by loaded route length.
+                                    try:
+                                        if cur_idx >= len(self._route_items):
+                                            cur_idx = max(0, len(self._route_items) - 1)
+                                    except Exception:
+                                        pass
+
+                                if cur_idx is None and wp:
+                                    # match by name or by "(x,y" string
+                                    for i, item in enumerate(self._route_items):
+                                        wpi = item.get("wp")
+                                        name_i = str(getattr(wpi, "name", "") or "")
+                                        x_i = getattr(wpi, "x", None)
+                                        y_i = getattr(wpi, "y", None)
+                                        z_i = getattr(wpi, "z", None)
+                                        if name_i and name_i == wp:
+                                            cur_idx = i
+                                            break
+                                        if x_i is not None and y_i is not None:
+                                            cand2 = f"({x_i},{y_i})"
+                                            cand3 = f"({x_i},{y_i},{z_i})" if z_i is not None else ""
+                                            if wp == cand2 or (cand3 and wp == cand3):
+                                                cur_idx = i
+                                                break
+                                if cur_idx is not None and cur_idx != self._route_current_index:
+                                    self._route_current_index = cur_idx
+                                    try:
+                                        self._route_listbox.selection_clear(0, "end")
+                                        self._route_listbox.selection_set(cur_idx)
+                                        self._route_listbox.see(cur_idx)
+                                    except Exception:
+                                        pass
+
+                                # Próximos N
+                                try:
+                                    n = 3
+                                    if self._route_current_index is not None:
+                                        start = min(len(self._route_items) - 1, max(0, int(self._route_current_index)))
+                                        nxt = []
+                                        for j in range(start, min(len(self._route_items), start + n)):
+                                            wpp = self._route_items[j].get("wp")
+                                            label = getattr(wpp, "name", None) or f"({getattr(wpp, 'x', '?')},{getattr(wpp, 'y', '?')})"
+                                            nxt.append(str(label))
+                                        self._route_next_var.set(" → ".join(nxt) if nxt else "-")
+                                    else:
+                                        self._route_next_var.set("-")
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
                 except Exception:
                     self.health_var.set("-")
                     try:
