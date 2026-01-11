@@ -10,6 +10,7 @@ from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio
 from vision.obstacles import compute_viewport_tile_offsets
 from vision.presence import is_hungry_hsv, is_nonempty_icon
+from vision.minimap_motion import MinimapMotionTracker
 
 @dataclass
 class GameState:
@@ -72,6 +73,11 @@ class GameStateBuilder:
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
 
+        # Coords por minimapa (requiere seed, NO hace OCR de coords).
+        self._minimap_tracker = MinimapMotionTracker()
+        self._minimap_seed: tuple[int, int, int | None] | None = None
+        self._minimap_coords: tuple[int, int, int | None] | None = None
+
     @staticmethod
     def _coords_provider_kind() -> str:
         return (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
@@ -99,6 +105,138 @@ class GameStateBuilder:
             except Exception:
                 z = None
         return (x, y, z)
+
+    @staticmethod
+    def _coords_seed_from_env() -> tuple[int, int, int | None] | None:
+        """Seed de coords para COORDS_PROVIDER=minimap.
+
+        Usa COORDS_SEED_X / COORDS_SEED_Y / opcional COORDS_SEED_Z.
+        Fallback a PLAYER_X/PLAYER_Y/PLAYER_Z por conveniencia.
+        """
+
+        sx = (os.getenv("COORDS_SEED_X", "") or "").strip()
+        sy = (os.getenv("COORDS_SEED_Y", "") or "").strip()
+        sz = (os.getenv("COORDS_SEED_Z", "") or "").strip()
+        if sx and sy:
+            try:
+                x = int(sx)
+                y = int(sy)
+            except Exception:
+                return None
+            z: int | None = None
+            if sz:
+                try:
+                    z = int(sz)
+                except Exception:
+                    z = None
+            return (x, y, z)
+
+        # Fallback
+        return GameStateBuilder._coords_from_env()
+
+    @staticmethod
+    def _coords_from_file_path(path_raw: str) -> tuple[int, int, int | None] | None:
+        raw = (path_raw or "").strip()
+        if not raw:
+            return None
+        try:
+            p = Path(raw)
+            if not p.is_absolute():
+                repo_root = Path(__file__).resolve().parent.parent.parent
+                p = (repo_root / p).resolve()
+            if not p.exists() or not p.is_file():
+                return None
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        try:
+            if isinstance(data, dict):
+                if "coords" in data:
+                    data = data.get("coords")
+                if isinstance(data, dict) and ("x" in data and "y" in data):
+                    x_raw = data.get("x")
+                    y_raw = data.get("y")
+                    if x_raw is None or y_raw is None:
+                        return None
+                    x = int(x_raw)
+                    y = int(y_raw)
+                    z_raw = data.get("z", None)
+                    z = int(z_raw) if z_raw is not None else None
+                    return (x, y, z)
+            if isinstance(data, (list, tuple)) and len(data) >= 2:
+                x = int(data[0])
+                y = int(data[1])
+                z = int(data[2]) if len(data) >= 3 and data[2] is not None else None
+                return (x, y, z)
+        except Exception:
+            return None
+        return None
+
+    def _coords_from_minimap(
+        self,
+        frame: np.ndarray,
+        rois: Dict[str, Dict[str, float]],
+        resolution: Tuple[int, int],
+    ) -> tuple[int, int, int | None] | None:
+        """Infiera coords absolutas trackeando la traslación del minimapa.
+
+        Requisitos:
+        - Debe existir la ROI `minimap_content`.
+        - Debe haber seed vía COORDS_SEED_X/Y[/Z] o COORDS_SEED_FILE.
+        """
+
+        if not (isinstance(rois, dict) and rois.get("minimap_content") is not None):
+            return None
+
+        # Seed una vez (o si todavía no existe).
+        if self._minimap_seed is None:
+            seed_file = (os.getenv("COORDS_SEED_FILE", "") or "").strip()
+            seed = None
+            if seed_file:
+                seed = self._coords_from_file_path(seed_file)
+            if seed is None:
+                seed = self._coords_seed_from_env()
+            if seed is None:
+                # Último recurso: permitir COORDS_FILE como seed (one-shot).
+                seed = self._coords_from_file()
+
+            if seed is None:
+                return None
+
+            self._minimap_seed = seed
+            self._minimap_coords = seed
+
+        # Cortar minimapa y actualizar motion tracker.
+        try:
+            mx, my, mw, mh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["minimap_content"])
+            crop = frame[my : my + mh, mx : mx + mw]
+            if crop is None or crop.size == 0:
+                return self._minimap_coords
+        except Exception:
+            return self._minimap_coords
+
+        step = None
+        try:
+            step = self._minimap_tracker.update(crop)
+        except Exception:
+            step = None
+
+        if step is None:
+            return self._minimap_coords
+
+        dx_tiles, dy_tiles, _resp = step
+        if self._minimap_coords is None:
+            self._minimap_coords = self._minimap_seed
+
+        if self._minimap_coords is None:
+            return None
+
+        x0, y0, z0 = self._minimap_coords
+        x1 = int(x0) + int(dx_tiles)
+        y1 = int(y0) + int(dy_tiles)
+        self._minimap_coords = (x1, y1, z0)
+        return self._minimap_coords
 
     @staticmethod
     def _coords_from_file() -> tuple[int, int, int | None] | None:
@@ -157,6 +295,12 @@ class GameStateBuilder:
 
         if kind in {"file", "json", "external"}:
             return self._coords_from_file(), False
+
+        if kind in {"minimap", "map", "minimap_motion"}:
+            try:
+                return self._coords_from_minimap(frame, rois, resolution), False
+            except Exception:
+                return None, False
 
         # Default: OCR
         if not allow_ocr:

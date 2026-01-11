@@ -613,6 +613,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         # Coords source/provider (affects diagnostics).
         coords_provider = (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
         coords_provider_disabled = coords_provider in {"disabled", "none", "off", "0", "false", "no"}
+        coords_provider_minimap = coords_provider in {"minimap", "map", "minimap_motion"}
+        last_coords_warn_ts = 0.0
         try:
             coords_warn_jump = int(float(os.getenv("ASSIST_COORDS_WARN_JUMP", "6").strip() or "6"))
         except Exception:
@@ -779,6 +781,49 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 idle_for_s = None
                 coords_status = "DISABLED" if coords_provider_disabled else "NO_COORDS"
                 coords_jump = 0
+
+            # Diagnóstico específico para minimap (seed/ROI), rate-limited.
+            try:
+                if coords_provider_minimap and pos_key is None and not coords_provider_disabled:
+                    seed_file = (os.getenv("COORDS_SEED_FILE", "") or "").strip()
+                    seed_x = (os.getenv("COORDS_SEED_X", "") or "").strip()
+                    seed_y = (os.getenv("COORDS_SEED_Y", "") or "").strip()
+                    has_seed = bool(seed_file or (seed_x and seed_y))
+
+                    has_minimap_roi = False
+                    try:
+                        if isinstance(rois, dict):
+                            has_minimap_roi = "minimap_content" in rois
+                    except Exception:
+                        has_minimap_roi = False
+
+                    if not has_minimap_roi:
+                        coords_status = "NO_MINIMAP_ROI"
+                    elif not has_seed:
+                        coords_status = "NO_SEED"
+                    else:
+                        coords_status = "NO_COORDS"
+
+                    now = time.time()
+                    if now - last_coords_warn_ts >= 5.0:
+                        last_coords_warn_ts = now
+                        msg = ""
+                        if coords_status == "NO_MINIMAP_ROI":
+                            msg = "⚠️  minimap: falta ROI 'minimap_content' (ajusta ROIS_CONFIG)"
+                        elif coords_status == "NO_SEED":
+                            msg = "⚠️  minimap: falta seed (COORDS_SEED_X/COORDS_SEED_Y o COORDS_SEED_FILE)"
+                        if msg:
+                            try:
+                                print(msg)
+                            except Exception:
+                                pass
+                            try:
+                                if runtime_config is not None:
+                                    runtime_config.update_telemetry(note=msg)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
 
             cap_current = getattr(gamestate, "cap_current", None)
             ring_equipped = getattr(gamestate, "ring_equipped", None)
@@ -981,13 +1026,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             pos = None
 
                     # Degradación/gating por coords: no usar coords si NO_COORDS o jitter/saltos.
-                    if pos is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED"}:
+                    if pos is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED", "NO_SEED", "NO_MINIMAP_ROI"}:
                         now = time.time()
                         if now - last_pos_warn_ts >= 5.0:
                             last_pos_warn_ts = now
-                            if coords_status in {"NO_COORDS", "DISABLED"}:
+                            if coords_status in {"NO_COORDS", "DISABLED", "NO_SEED", "NO_MINIMAP_ROI"}:
                                 print(
-                                    "🧭 Cavebot: no coords (pos_x/pos_y). Ajusta ROI coords_ocr o usa CAVEBOT_MODE=steps"
+                                    "🧭 Cavebot: no coords (pos_x/pos_y). Ajusta provider/seed o usa CAVEBOT_MODE=steps"
                                 )
                             else:
                                 print(
@@ -1151,14 +1196,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                     # If cavebot wants coords (pos mode) but we don't have them, call it out.
                     if cavebot_enabled_now and cavebot_pos_mode and (
-                        pos_key is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED"}
+                        pos_key is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED", "NO_SEED", "NO_MINIMAP_ROI"}
                     ):
                         stuck_reason = "NO_COORDS"
                         if coords_status == "DISABLED":
                             extra = "coords provider disabled (COORDS_PROVIDER=disabled)"
+                        elif coords_status == "NO_SEED":
+                            extra = "minimap sin seed (COORDS_SEED_X/Y o COORDS_SEED_FILE)"
+                        elif coords_status == "NO_MINIMAP_ROI":
+                            extra = "minimap sin ROI minimap_content (ROIS_CONFIG)"
                         else:
                             extra = (
-                                "ajusta ROI coords_ocr o usa CAVEBOT_MODE=steps"
+                                "ajusta provider/seed o usa CAVEBOT_MODE=steps"
                                 if coords_status == "NO_COORDS"
                                 else f"coords={coords_status} jump={coords_jump}"
                             )

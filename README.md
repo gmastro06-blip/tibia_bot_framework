@@ -85,10 +85,11 @@ El bot puede obtener coordenadas de distintas fuentes. Esto es importante porque
 
 Variables de entorno:
 
-- `COORDS_PROVIDER=ocr|env|file|disabled` (default: `ocr`)
+- `COORDS_PROVIDER=ocr|env|file|minimap|disabled` (default: `ocr`)
   - `ocr`: OCR de la ROI `coords_ocr`.
   - `env`: lee `PLAYER_X`, `PLAYER_Y` y opcional `PLAYER_Z`.
   - `file`: lee `COORDS_FILE` (JSON con `{x,y,z}` o lista `[x,y,z]`).
+  - `minimap`: **experimental**. No hace OCR de coords: estima movimiento midiendo el desplazamiento del `minimap_content` y lo acumula sobre una **seed**.
   - `disabled`: fuerza coords `None` (y el cavebot en modo `pos` se degrada a “no coords”).
 
 Ejemplos (PowerShell):
@@ -106,9 +107,86 @@ $env:PLAYER_Z='7'
 # Proveer coords por archivo JSON
 $env:COORDS_PROVIDER='file'
 $env:COORDS_FILE='logs/coords.json'
+
+# Minimap (experimental): necesitas una seed absoluta + minimap_content bien calibrado
+$env:COORDS_PROVIDER='minimap'
+$env:COORDS_SEED_X='32561'
+$env:COORDS_SEED_Y='32496'
+$env:COORDS_SEED_Z='7'
+
+# Alternativa: seed por archivo (mismo formato que COORDS_FILE)
+$env:COORDS_SEED_FILE='logs/coords_seed.json'
+```
+
+Notas para `minimap`:
+
+- Esto **nunca inventa coords**: si no hay seed o la correlación es mala, devuelve `None`/mantiene la última.
+- Si ves drift, ajusta estos knobs:
+  - `MINIMAP_TILE_PX` (default `4`)
+  - `MINIMAP_PHASECORR_MIN_RESPONSE` (default `0.15`)
+  - `MINIMAP_MAX_SHIFT_PX` (default `32`)
+  - `MINIMAP_MAX_STEP_PER_FRAME` (default `3`)
+  - `MINIMAP_INVERT_X`, `MINIMAP_INVERT_Y` (si el signo te queda al revés)
+
+Herramienta de debug (recomendado para calibrar):
+
+```powershell
+poetry run python tools/watch_minimap_motion.py --monitor 2 --seconds 30 --interval-ms 120 --print --save-crops
+```
+
+Modo integrado (seed + coords acumuladas):
+
+```powershell
+# Seed por env (o usa --seed-x/--seed-y/--seed-z)
+$env:COORDS_SEED_X='32561'
+$env:COORDS_SEED_Y='32496'
+$env:COORDS_SEED_Z='7'
+
+# Imprime dx/dy y también x/y acumuladas; además escribe un JSON compatible con COORDS_FILE
+poetry run python tools/watch_minimap_motion.py --monitor 2 --seconds 60 --print --out-coords logs/coords_minimap.json
+```
+
+Tip: si prefieres que el bot consuma ese archivo (en vez de `COORDS_PROVIDER=minimap`), puedes usar:
+
+```powershell
+$env:COORDS_PROVIDER='file'
+$env:COORDS_FILE='logs/coords_minimap.json'
 ```
 
 Si quieres cavebot sin coords, usa `CAVEBOT_MODE=steps`.
+
+### Fuente externa simple (clipboard -> `COORDS_FILE`)
+
+Si tu cliente no muestra coords en pantalla, una opción práctica es alimentar coords desde afuera y que el bot las lea con `COORDS_PROVIDER=file`.
+
+1) Arranca el writer (lee el portapapeles y escribe JSON):
+
+```powershell
+poetry run python tools/coords_file_writer.py --out logs/coords.json --print
+```
+
+2) En otra consola (o antes), configura el bot:
+
+```powershell
+$env:COORDS_PROVIDER='file'
+$env:COORDS_FILE='logs/coords.json'
+```
+
+### Perfil recomendado (sin coords visibles)
+
+Si NO tienes coords visibles y solo quieres cavebot estable, usa el perfil listo:
+
+```powershell
+./scripts/profile_no_coords_steps.ps1
+```
+
+### Perfil recomendado (minimap, experimental)
+
+Si quieres probar coords por minimapa (requiere seed):
+
+```powershell
+./scripts/profile_minimap.ps1 -Monitor 2 -SeedX 32561 -SeedY 32496 -SeedZ 7
+```
 
 ## Replay (ROI + JSON) y export JSONL
 
