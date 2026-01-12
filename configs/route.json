@@ -1,5 +1,704 @@
 [
-  {"x": 100, "y": 200, "name": "start", "action": "heal"},
-  {"x": 150, "y": 250},
-  {"x": 200, "y": 300, "name": "end"}
+  {
+    "raw_line": "label start",
+    "label": "start"
+  },
+  {
+    "raw_line": "stand (32336, 32845, 7)",
+    "x": 32336,
+    "y": 32845,
+    "z": 7,
+    "type": "stand"
+  },
+  {
+    "raw_line": "action deposit",
+    "action": "deposit"
+  },
+  {
+    "raw_line": "action refill",
+    "action": "refill"
+  },
+  {
+    "raw_line": "stand (32339, 32836, 7)",
+    "x": 32339,
+    "y": 32836,
+    "z": 7,
+    "type": "stand"
+  },
+  {
+    "raw_line": "action bank",
+    "action": "bank"
+  },
+  {
+    "raw_line": "node (32341, 32826, 7)",
+    "x": 32341,
+    "y": 32826,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32345, 32815, 7)",
+    "x": 32345,
+    "y": 32815,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "stand (32345, 32810, 7)",
+    "x": 32345,
+    "y": 32810,
+    "z": 7,
+    "type": "stand"
+  },
+  {
+    "raw_line": "action sell",
+    "action": "sell"
+  },
+  {
+    "raw_line": "action buy_potions",
+    "action": "buy_potions"
+  },
+  {
+    "raw_line": "node (32351, 32815, 7)",
+    "x": 32351,
+    "y": 32815,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32340, 32818, 7)",
+    "x": 32340,
+    "y": 32818,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32331, 32827, 7)",
+    "x": 32331,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32320, 32833, 7)",
+    "x": 32320,
+    "y": 32833,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32307, 32827, 7)",
+    "x": 32307,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32299, 32825, 7)",
+    "x": 32299,
+    "y": 32825,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "stand (32294, 32820, 7)",
+    "x": 32294,
+    "y": 32820,
+    "z": 7,
+    "type": "stand"
+  },
+  {
+    "raw_line": "label buy_distance",
+    "label": "buy_distance"
+  },
+  {
+    "raw_line": "action buy_ammo",
+    "action": "buy_ammo"
+  },
+  {
+    "raw_line": "node (32313, 32832, 7)",
+    "x": 32313,
+    "y": 32832,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32330, 32827, 7)",
+    "x": 32330,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32347, 32815, 7)",
+    "x": 32347,
+    "y": 32815,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "action check_supplies",
+    "action": "check_supplies"
+  },
+  {
+    "raw_line": "label go_hunt",
+    "label": "go_hunt"
+  },
+  {
+    "raw_line": "node (32340, 32826, 7)",
+    "x": 32340,
+    "y": 32826,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32325, 32827, 7)",
+    "x": 32325,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32309, 32827, 7)",
+    "x": 32309,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32289, 32826, 7)",
+    "x": 32289,
+    "y": 32826,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32279, 32814, 7)",
+    "x": 32279,
+    "y": 32814,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32260, 32817, 7)",
+    "x": 32260,
+    "y": 32817,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32242, 32811, 7)",
+    "x": 32242,
+    "y": 32811,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32222, 32793, 7)",
+    "x": 32222,
+    "y": 32793,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32200, 32790, 7)",
+    "x": 32200,
+    "y": 32790,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32182, 32786, 7)",
+    "x": 32182,
+    "y": 32786,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32164, 32783, 7)",
+    "x": 32164,
+    "y": 32783,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "shovel (32158, 32782, 7)",
+    "x": 32158,
+    "y": 32782,
+    "z": 7,
+    "type": "shovel"
+  },
+  {
+    "raw_line": "label hunt",
+    "label": "hunt"
+  },
+  {
+    "raw_line": "node (32151, 32784, 8)",
+    "x": 32151,
+    "y": 32784,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32150, 32797, 8)",
+    "x": 32150,
+    "y": 32797,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32147, 32805, 8)",
+    "x": 32147,
+    "y": 32805,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32146, 32814, 8)",
+    "x": 32146,
+    "y": 32814,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32143, 32826, 8)",
+    "x": 32143,
+    "y": 32826,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32130, 32829, 8)",
+    "x": 32130,
+    "y": 32829,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32117, 32824, 8)",
+    "x": 32117,
+    "y": 32824,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32103, 32825, 8)",
+    "x": 32103,
+    "y": 32825,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32089, 32827, 8)",
+    "x": 32089,
+    "y": 32827,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32080, 32823, 8)",
+    "x": 32080,
+    "y": 32823,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32100, 32827, 8)",
+    "x": 32100,
+    "y": 32827,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32113, 32823, 8)",
+    "x": 32113,
+    "y": 32823,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32130, 32829, 8)",
+    "x": 32130,
+    "y": 32829,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32143, 32828, 8)",
+    "x": 32143,
+    "y": 32828,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32146, 32812, 8)",
+    "x": 32146,
+    "y": 32812,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32147, 32800, 8)",
+    "x": 32147,
+    "y": 32800,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32152, 32783, 8)",
+    "x": 32152,
+    "y": 32783,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32137, 32771, 8)",
+    "x": 32137,
+    "y": 32771,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32123, 32778, 8)",
+    "x": 32123,
+    "y": 32778,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32112, 32775, 8)",
+    "x": 32112,
+    "y": 32775,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32093, 32772, 8)",
+    "x": 32093,
+    "y": 32772,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32087, 32785, 8)",
+    "x": 32087,
+    "y": 32785,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "call conditional_jump_script_options(\"var_name\":\"hunt_down\", \"label_jump\":\"hunt_down\", \"label_skip\":\"skip_hunt_down\")",
+    "conditional_jump": {
+      "var_name": "hunt_down",
+      "label_jump": "hunt_down",
+      "label_skip": "skip_hunt_down"
+    }
+  },
+  {
+    "raw_line": "label hunt_down",
+    "label": "hunt_down"
+  },
+  {
+    "raw_line": "action check2",
+    "action": "check2"
+  },
+  {
+    "raw_line": "label hunt2",
+    "label": "hunt2"
+  },
+  {
+    "raw_line": "stand (32087, 32796, 8)",
+    "x": 32087,
+    "y": 32796,
+    "z": 8,
+    "type": "stand"
+  },
+  {
+    "raw_line": "node (32080, 32791, 9)",
+    "x": 32080,
+    "y": 32791,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32081, 32782, 9)",
+    "x": 32081,
+    "y": 32782,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32087, 32779, 9)",
+    "x": 32087,
+    "y": 32779,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32097, 32774, 9)",
+    "x": 32097,
+    "y": 32774,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32107, 32783, 9)",
+    "x": 32107,
+    "y": 32783,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32110, 32793, 9)",
+    "x": 32110,
+    "y": 32793,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32108, 32803, 9)",
+    "x": 32108,
+    "y": 32803,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32120, 32805, 9)",
+    "x": 32120,
+    "y": 32805,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32128, 32804, 9)",
+    "x": 32128,
+    "y": 32804,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32111, 32804, 9)",
+    "x": 32111,
+    "y": 32804,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32110, 32794, 9)",
+    "x": 32110,
+    "y": 32794,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32106, 32780, 9)",
+    "x": 32106,
+    "y": 32780,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32092, 32764, 9)",
+    "x": 32092,
+    "y": 32764,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32080, 32760, 9)",
+    "x": 32080,
+    "y": 32760,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32075, 32769, 9)",
+    "x": 32075,
+    "y": 32769,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32076, 32783, 9)",
+    "x": 32076,
+    "y": 32783,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32080, 32791, 9)",
+    "x": 32080,
+    "y": 32791,
+    "z": 9,
+    "type": "node"
+  },
+  {
+    "raw_line": "stand (32087, 32796, 9)",
+    "x": 32087,
+    "y": 32796,
+    "z": 9,
+    "type": "stand"
+  },
+  {
+    "raw_line": "label skip_hunt_down",
+    "label": "skip_hunt_down"
+  },
+  {
+    "raw_line": "label leave2",
+    "label": "leave2"
+  },
+  {
+    "raw_line": "node (32089, 32772, 8)",
+    "x": 32089,
+    "y": 32772,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32101, 32774, 8)",
+    "x": 32101,
+    "y": 32774,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32117, 32776, 8)",
+    "x": 32117,
+    "y": 32776,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32128, 32779, 8)",
+    "x": 32128,
+    "y": 32779,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32138, 32771, 8)",
+    "x": 32138,
+    "y": 32771,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32149, 32775, 8)",
+    "x": 32149,
+    "y": 32775,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32151, 32782, 8)",
+    "x": 32151,
+    "y": 32782,
+    "z": 8,
+    "type": "node"
+  },
+  {
+    "raw_line": "action check",
+    "action": "check"
+  },
+  {
+    "raw_line": "label leave",
+    "label": "leave"
+  },
+  {
+    "raw_line": "rope (32158, 32782, 8)",
+    "x": 32158,
+    "y": 32782,
+    "z": 8,
+    "type": "rope"
+  },
+  {
+    "raw_line": "node (32183, 32786, 7)",
+    "x": 32183,
+    "y": 32786,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32209, 32798, 7)",
+    "x": 32209,
+    "y": 32798,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32239, 32802, 7)",
+    "x": 32239,
+    "y": 32802,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32259, 32817, 7)",
+    "x": 32259,
+    "y": 32817,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32277, 32814, 7)",
+    "x": 32277,
+    "y": 32814,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32297, 32813, 7)",
+    "x": 32297,
+    "y": 32813,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32306, 32827, 7)",
+    "x": 32306,
+    "y": 32827,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32317, 32833, 7)",
+    "x": 32317,
+    "y": 32833,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32327, 32835, 7)",
+    "x": 32327,
+    "y": 32835,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "node (32338, 32838, 7)",
+    "x": 32338,
+    "y": 32838,
+    "z": 7,
+    "type": "node"
+  },
+  {
+    "raw_line": "action check_time",
+    "action": "check_time"
+  },
+  {
+    "raw_line": "label train",
+    "label": "train"
+  },
+  {
+    "raw_line": "load scripts/general/dp_to_train_liberty_bay.in",
+    "load": "scripts/general/dp_to_train_liberty_bay.in"
+  },
+  {
+    "raw_line": "label start_trainer",
+    "label": "start_trainer"
+  },
+  {
+    "raw_line": "load scripts/general/train_to_dp_liberty_bay.in",
+    "load": "scripts/general/train_to_dp_liberty_bay.in"
+  }
 ]

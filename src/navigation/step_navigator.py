@@ -14,18 +14,9 @@ class StepDecision:
     waypoint: Optional[Waypoint] = None
 
 
+
 class StepNavigator:
-    """Cavebot básico sin posición: ejecuta pasos entre waypoints.
-
-    Interpreta la ruta como una secuencia de puntos en tiles, pero en vez de
-    requerir (x,y) actual, asume que el personaje está en el waypoint 0 al iniciar
-    y avanza ejecutando exactamente |dx| + |dy| pasos hacia el siguiente.
-
-    Útil cuando aún no tenemos coords (OCR o minimap experimental) para navegar por posición.
-
-    Env vars:
-    - CAVEBOT_LOOP (default 1): si llega al final, vuelve al inicio.
-    """
+    """Cavebot avanzado: soporta labels, saltos condicionales y acciones especiales."""
 
     def __init__(self, route: List[Waypoint]):
         self.route = route
@@ -35,6 +26,20 @@ class StepNavigator:
         self._segment_dx = 0
         self._segment_dy = 0
         self._segment_initialized = False
+
+        # Indexar labels para saltos rápidos
+        self._label_map = {}
+        for i, wp in enumerate(self.route):
+            if getattr(wp, "label", None):
+                self._label_map[str(wp.label)] = i
+
+    def _goto_label(self, label: str) -> bool:
+        idx = self._label_map.get(str(label))
+        if idx is not None:
+            self.idx = idx
+            self._segment_initialized = False
+            return True
+        return False
 
     def reset(self) -> None:
         self.idx = 0
@@ -78,57 +83,100 @@ class StepNavigator:
         self._segment_initialized = True
         return True
 
-    def decide(self) -> StepDecision:
-        """Consume 1 'tick' de navegación (mutando estado interno)."""
-        cur = self._current()
-        if cur is None:
-            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
 
-        # If there is no next, we are done.
-        nxt = self._next()
-        if nxt is None:
-            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+    def decide(self, gamestate=None, config=None) -> StepDecision:
+        """Consume 1 'tick' de navegación (mutando estado interno). Soporta labels y saltos condicionales."""
+        while True:
+            cur = self._current()
+            if cur is None:
+                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
 
-        if not self._ensure_segment():
-            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-
-        # If we already initialized this segment and there are no remaining steps,
-        # we reached the next waypoint.
-        if self._segment_dx == 0 and self._segment_dy == 0 and self._segment_initialized:
-            reached = nxt
-            # Advance idx
-            if self.idx + 1 < len(self.route):
-                self.idx += 1
-            else:
-                if self.loop:
-                    self.idx = 0
+            # Ejecutar saltos condicionales si existen
+            if getattr(cur, "conditional_jump", None):
+                cj = cur.conditional_jump
+                # Lógica de condición: por ahora, simula True siempre (puedes adaptar aquí)
+                # Ejemplo: if config and cj.get("var_name") and config.get(cj["var_name"]): ...
+                label_jump = cj.get("label_jump")
+                label_skip = cj.get("label_skip")
+                # Simulación: siempre salta a label_jump si existe
+                if label_jump and self._goto_label(label_jump):
+                    continue
+                elif label_skip and self._goto_label(label_skip):
+                    continue
                 else:
-                    self.idx = len(self.route)
+                    # Si no hay label válido, avanza normal
+                    self.idx += 1
+                    continue
 
-            # Reset segment state for the next segment.
-            self._segment_initialized = False
-            self._segment_dx = 0
-            self._segment_dy = 0
-            return StepDecision(direction=None, reached_waypoint=True, waypoint=reached)
+            # Ejecutar call/load como hooks (puedes extender aquí)
+            if getattr(cur, "call", None):
+                # Aquí podrías ejecutar un sub-script, función, etc.
+                print(f"[StepNavigator] call: {cur.call} (raw: {cur.raw_line})")
+            if getattr(cur, "load", None):
+                print(f"[StepNavigator] load: {cur.load} (raw: {cur.raw_line})")
 
-        # Execute dx first, then dy. (Deterministic)
-        if self._segment_dx != 0:
-            if self._segment_dx > 0:
-                self._segment_dx -= 1
-                return StepDecision(direction="east", reached_waypoint=False, waypoint=nxt)
-            self._segment_dx += 1
-            return StepDecision(direction="west", reached_waypoint=False, waypoint=nxt)
+            # Ejecutar acción especial
+            if getattr(cur, "action", None):
+                print(f"[StepNavigator] action: {cur.action} (raw: {cur.raw_line})")
 
-        if self._segment_dy != 0:
-            if self._segment_dy > 0:
-                self._segment_dy -= 1
-                return StepDecision(direction="south", reached_waypoint=False, waypoint=nxt)
-            self._segment_dy += 1
-            return StepDecision(direction="north", reached_waypoint=False, waypoint=nxt)
+            # Loggear comentarios
+            if getattr(cur, "comment", None):
+                print(f"[StepNavigator] comment: {cur.comment} (raw: {cur.raw_line})")
 
-        # If we get here, the segment is complete but we haven't emitted the reached event yet.
-        # Next call will emit it.
-        return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)
+            # Si el paso es solo label, acción, call, load, comentario, avanza
+            if (
+                getattr(cur, "label", None)
+                and not (hasattr(cur, "x") and hasattr(cur, "y"))
+                and not getattr(cur, "type", None)
+            ) or (
+                getattr(cur, "action", None) and not (hasattr(cur, "x") and hasattr(cur, "y"))
+            ) or getattr(cur, "call", None) or getattr(cur, "load", None) or getattr(cur, "comment", None):
+                self.idx += 1
+                continue
+
+            # Si es un waypoint real, navega como antes
+            nxt = self._next()
+            if nxt is None:
+                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+
+            if not self._ensure_segment():
+                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
+
+            if self._segment_dx == 0 and self._segment_dy == 0 and self._segment_initialized:
+                reached = nxt
+                # Advance idx
+                if self.idx + 1 < len(self.route):
+                    self.idx += 1
+                else:
+                    if self.loop:
+                        self.idx = 0
+                    else:
+                        self.idx = len(self.route)
+
+                # Reset segment state for the next segment.
+                self._segment_initialized = False
+                self._segment_dx = 0
+                self._segment_dy = 0
+                return StepDecision(direction=None, reached_waypoint=True, waypoint=reached)
+
+            # Execute dx first, then dy. (Deterministic)
+            if self._segment_dx != 0:
+                if self._segment_dx > 0:
+                    self._segment_dx -= 1
+                    return StepDecision(direction="east", reached_waypoint=False, waypoint=nxt)
+                self._segment_dx += 1
+                return StepDecision(direction="west", reached_waypoint=False, waypoint=nxt)
+
+            if self._segment_dy != 0:
+                if self._segment_dy > 0:
+                    self._segment_dy -= 1
+                    return StepDecision(direction="south", reached_waypoint=False, waypoint=nxt)
+                self._segment_dy += 1
+                return StepDecision(direction="north", reached_waypoint=False, waypoint=nxt)
+
+            # If we get here, the segment is complete but we haven't emitted the reached event yet.
+            # Next call will emit it.
+            return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)
 
     def preview(self) -> StepDecision:
         """Devuelve la próxima decisión sin mutar estado interno.
