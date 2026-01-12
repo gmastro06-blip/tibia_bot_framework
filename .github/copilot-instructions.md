@@ -96,8 +96,8 @@ mask_red = cv2.bitwise_or(mask_low, mask_high)
 6. **Black ROI images**: Fixed by implementing MSS fallback capture with multi-monitor detection - ensures real screen content instead of dummy frames
 
 ## Testing & Debugging
-- Add replay logging: `replay.save_roi('debug_name', crop, gamestate, action_str)`
-- View captured frames: Run [debug_overlay.py](../debug_overlay.py) (implementation TBD)
+- Add replay logging: enable `REPLAY_ENABLED=1` (writes JSON + ROI crops into `logs/replay/`)
+- View annotated frames: enable `OVERLAY_ENABLED=1` (writes PNGs into `logs/debug_overlay/`)
 - Verify ROIs: Check `data/ROIs_resueltos.json` for calibration output
 - Debug capture issues: Bot now captures real screen content via MSS fallback with multi-monitor detection, preventing black/dummy ROI images
 - Validate captures: System automatically validates frame quality (not black, has color variation, minimum resolution) before processing

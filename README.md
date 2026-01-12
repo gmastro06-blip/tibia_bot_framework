@@ -19,6 +19,19 @@ poetry install
 poetry run python -m src.main
 ```
 
+## Quick start (sin coords visibles) ✅
+
+Si tu cliente **no muestra coordenadas en pantalla**, el OCR de `coords_ocr` puede dar falsos positivos. El modo más estable recomendado es:
+
+- `COORDS_PROVIDER=disabled` (no inventa coords)
+- `CAVEBOT_MODE=steps` (cavebot por pasos, no requiere coords absolutas)
+
+En PowerShell:
+
+```powershell
+./scripts/profile_no_coords_steps.ps1
+```
+
 ## Tests (regresión)
 
 Ejecuta la suite de tests para validar que no se pierde funcionalidad clave (config runtime, selección de ROIs, etc.):
@@ -83,6 +96,19 @@ poetry run python tools/validate_route.py configs/route.json --drop-duplicates -
 
 El bot puede obtener coordenadas de distintas fuentes. Esto es importante porque **si tu cliente no muestra coords en pantalla**, el OCR puede producir falsos positivos.
 
+### Recomendado si NO hay coords visibles (estable)
+
+En este repo, el camino más estable cuando tu cliente **no** muestra coordenadas es:
+
+- Deshabilitar coords (`COORDS_PROVIDER=disabled`) para evitar falsos positivos.
+- Usar cavebot por pasos (`CAVEBOT_MODE=steps`) con `StepNavigator` (no requiere coords absolutas).
+
+Perfil listo (PowerShell):
+
+```powershell
+./scripts/profile_no_coords_steps.ps1
+```
+
 Variables de entorno:
 
 - `COORDS_PROVIDER=ocr|env|file|minimap|disabled` (default: `ocr`)
@@ -97,6 +123,9 @@ Ejemplos (PowerShell):
 ```powershell
 # Deshabilitar coords OCR (recomendado si NO hay coords visibles)
 $env:COORDS_PROVIDER='disabled'
+
+# Y usar cavebot por pasos (no requiere coords)
+$env:CAVEBOT_MODE='steps'
 
 # Proveer coords por env vars
 $env:COORDS_PROVIDER='env'
@@ -118,7 +147,7 @@ $env:COORDS_SEED_Z='7'
 $env:COORDS_SEED_FILE='logs/coords_seed.json'
 ```
 
-Notas para `minimap`:
+Notas para `minimap` (experimental):
 
 - Esto **nunca inventa coords**: si no hay seed o la correlación es mala, devuelve `None`/mantiene la última.
 - Si ves drift, ajusta estos knobs:
@@ -132,6 +161,12 @@ Herramienta de debug (recomendado para calibrar):
 
 ```powershell
 poetry run python tools/watch_minimap_motion.py --monitor 2 --seconds 30 --interval-ms 120 --print --save-crops
+
+Chequeo rápido de ROI (si `accepted==0` sospecha que `minimap_content` no apunta al minimapa real):
+
+```powershell
+poetry run python tools/minimap_roi_check.py --monitor 2 --seconds 20 --print --save-overlay --save-diff
+```
 ```
 
 Modo integrado (seed + coords acumuladas):
@@ -146,7 +181,7 @@ $env:COORDS_SEED_Z='7'
 poetry run python tools/watch_minimap_motion.py --monitor 2 --seconds 60 --print --out-coords logs/coords_minimap.json
 ```
 
-Tip: si prefieres que el bot consuma ese archivo (en vez de `COORDS_PROVIDER=minimap`), puedes usar:
+Tip: si prefieres un flujo más controlado, puedes hacer que el bot consuma un archivo (en vez de `COORDS_PROVIDER=minimap`):
 
 ```powershell
 $env:COORDS_PROVIDER='file'
@@ -170,14 +205,6 @@ poetry run python tools/coords_file_writer.py --out logs/coords.json --print
 ```powershell
 $env:COORDS_PROVIDER='file'
 $env:COORDS_FILE='logs/coords.json'
-```
-
-### Perfil recomendado (sin coords visibles)
-
-Si NO tienes coords visibles y solo quieres cavebot estable, usa el perfil listo:
-
-```powershell
-./scripts/profile_no_coords_steps.ps1
 ```
 
 ### Perfil recomendado (minimap, experimental)

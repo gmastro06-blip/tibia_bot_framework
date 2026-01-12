@@ -22,6 +22,7 @@ Thumbs.db
 *.log
 logs/
 debug_images/
+debug_images_real/
 runs/
 
 # Local datasets / downloads (Roboflow, YOLO exports)
@@ -31,3 +32,9 @@ datasets/**/wandb/
 # Telemetry/replays (generated)
 data/replays/
 data/datasets/
+
+# Generated reports (cloudbot analyzer outputs, etc.)
+reports/
+
+# Stray local artifacts
+/10
