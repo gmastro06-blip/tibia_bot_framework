@@ -194,7 +194,7 @@ def main() -> int:
     t_end = time.time() + max(1.0, float(args.seconds))
     interval_s = max(0.05, float(args.interval_ms) / 1000.0)
 
-    last = None
+    last: tuple[int, int, int | None] | None = None
     ok = 0
     total = 0
     changes = 0
@@ -226,7 +226,7 @@ def main() -> int:
     while time.time() < t_end:
         t0 = time.time()
         f = cap.capture()
-        coords = None
+        coords: tuple[int, int, int | None] | None = None
         if f is not None:
             try:
                 coords = ocr.extract_coords(f, rois, resolution)
@@ -242,10 +242,11 @@ def main() -> int:
             changes += 1
             dx = dy = dz = None
             try:
-                if last is not None:
-                    dx = int(coords[0]) - int(last[0])
-                    dy = int(coords[1]) - int(last[1])
-                    z0 = int(last[2]) if last[2] is not None else None
+                prev = last
+                if coords is not None and prev is not None:
+                    dx = int(coords[0]) - int(prev[0])
+                    dy = int(coords[1]) - int(prev[1])
+                    z0 = int(prev[2]) if prev[2] is not None else None
                     z1 = int(coords[2]) if coords[2] is not None else None
                     dz = (z1 - z0) if (z0 is not None and z1 is not None) else None
             except Exception:

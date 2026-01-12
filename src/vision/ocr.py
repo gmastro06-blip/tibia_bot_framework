@@ -188,7 +188,7 @@ class OCRProcessor:
         Aqui se puede mejorar: si el cliente no muestra coordenadas en pantalla,
         esta extracción por OCR no es fiable y puede producir falsos positivos.
         En ese caso, conviene deshabilitarlo o reemplazarlo por otra estrategia
-        (p.ej. minimap/anchor-based inference, o telemetría externa).
+        (p.ej. minimap-motion experimental, anchor-based inference, o telemetría externa).
         """
 
         try:

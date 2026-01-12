@@ -809,9 +809,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         last_coords_warn_ts = now
                         msg = ""
                         if coords_status == "NO_MINIMAP_ROI":
-                            msg = "⚠️  minimap: falta ROI 'minimap_content' (ajusta ROIS_CONFIG)"
+                            msg = (
+                                "⚠️  minimap (experimental): falta ROI 'minimap_content' (ajusta ROIS_CONFIG). "
+                                "Si no tienes coords visibles: COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps"
+                            )
                         elif coords_status == "NO_SEED":
-                            msg = "⚠️  minimap: falta seed (COORDS_SEED_X/COORDS_SEED_Y o COORDS_SEED_FILE)"
+                            msg = (
+                                "⚠️  minimap (experimental): falta seed (COORDS_SEED_X/COORDS_SEED_Y o COORDS_SEED_FILE). "
+                                "Si no tienes coords visibles: COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps"
+                            )
                         if msg:
                             try:
                                 print(msg)
@@ -1202,9 +1208,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         if coords_status == "DISABLED":
                             extra = "coords provider disabled (COORDS_PROVIDER=disabled)"
                         elif coords_status == "NO_SEED":
-                            extra = "minimap sin seed (COORDS_SEED_X/Y o COORDS_SEED_FILE)"
+                            extra = "minimap (experimental) sin seed (COORDS_SEED_X/Y o COORDS_SEED_FILE)"
                         elif coords_status == "NO_MINIMAP_ROI":
-                            extra = "minimap sin ROI minimap_content (ROIS_CONFIG)"
+                            extra = "minimap (experimental) sin ROI minimap_content (ROIS_CONFIG)"
                         else:
                             extra = (
                                 "ajusta provider/seed o usa CAVEBOT_MODE=steps"
@@ -1328,8 +1334,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         pos_x=getattr(gamestate, "pos_x", None),
                         pos_y=getattr(gamestate, "pos_y", None),
                         pos_z=getattr(gamestate, "pos_z", None),
+                        coords_provider=str(getattr(gamestate, "coords_provider", "") or ""),
                         coords_status=coords_status,
                         coords_jump=coords_jump,
+                        minimap_mode_used=str(getattr(gamestate, "minimap_mode_used", "") or ""),
+                        minimap_response=getattr(gamestate, "minimap_response", None),
+                        minimap_delta_dx=getattr(gamestate, "minimap_delta_dx", None),
+                        minimap_delta_dy=getattr(gamestate, "minimap_delta_dy", None),
+                        minimap_acc_dx=getattr(gamestate, "minimap_acc_dx", None),
+                        minimap_acc_dy=getattr(gamestate, "minimap_acc_dy", None),
+                        minimap_marker_dpx_dx=getattr(gamestate, "minimap_marker_dpx_dx", None),
+                        minimap_marker_dpx_dy=getattr(gamestate, "minimap_marker_dpx_dy", None),
                         ring_equipped=ring_equipped,
                         amulet_equipped=amulet_equipped,
                         low_hp=sig.low_hp,
@@ -1463,8 +1478,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "pos_x": getattr(tel, "pos_x", None),
                         "pos_y": getattr(tel, "pos_y", None),
                         "pos_z": getattr(tel, "pos_z", None),
+                        "coords_provider": getattr(tel, "coords_provider", ""),
                         "coords_status": getattr(tel, "coords_status", ""),
                         "coords_jump": getattr(tel, "coords_jump", None),
+                        "minimap_mode_used": getattr(tel, "minimap_mode_used", ""),
+                        "minimap_response": getattr(tel, "minimap_response", None),
+                        "minimap_delta_dx": getattr(tel, "minimap_delta_dx", None),
+                        "minimap_delta_dy": getattr(tel, "minimap_delta_dy", None),
+                        "minimap_acc_dx": getattr(tel, "minimap_acc_dx", None),
+                        "minimap_acc_dy": getattr(tel, "minimap_acc_dy", None),
+                        "minimap_marker_dpx_dx": getattr(tel, "minimap_marker_dpx_dx", None),
+                        "minimap_marker_dpx_dy": getattr(tel, "minimap_marker_dpx_dy", None),
                         "ring_equipped": getattr(tel, "ring_equipped", None),
                         "amulet_equipped": getattr(tel, "amulet_equipped", None),
                         "low_hp": tel.low_hp,
@@ -1506,8 +1530,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "pos_x": getattr(gamestate, "pos_x", None),
                         "pos_y": getattr(gamestate, "pos_y", None),
                         "pos_z": getattr(gamestate, "pos_z", None),
+                        "coords_provider": getattr(gamestate, "coords_provider", ""),
                         "coords_status": coords_status,
                         "coords_jump": coords_jump,
+                        "minimap_mode_used": getattr(gamestate, "minimap_mode_used", ""),
+                        "minimap_response": getattr(gamestate, "minimap_response", None),
+                        "minimap_delta_dx": getattr(gamestate, "minimap_delta_dx", None),
+                        "minimap_delta_dy": getattr(gamestate, "minimap_delta_dy", None),
+                        "minimap_acc_dx": getattr(gamestate, "minimap_acc_dx", None),
+                        "minimap_acc_dy": getattr(gamestate, "minimap_acc_dy", None),
+                        "minimap_marker_dpx_dx": getattr(gamestate, "minimap_marker_dpx_dx", None),
+                        "minimap_marker_dpx_dy": getattr(gamestate, "minimap_marker_dpx_dy", None),
                         "ring_equipped": ring_equipped,
                         "amulet_equipped": amulet_equipped,
                         "low_hp": bool(getattr(sig, "low_hp", False)) if sig is not None else None,

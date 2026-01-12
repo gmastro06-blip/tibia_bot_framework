@@ -22,7 +22,7 @@ class CoordsRecorder:
     """Records player coordinates over time and exports cavebot routes.
 
     This is intentionally simple and safe: it only records coordinates that are
-    provided to it (e.g. from env vars or future minimap OCR), and writes a route
+    provided to it (e.g. from env vars or experimental minimap-motion), and writes a route
     JSON compatible with `navigation.route.load_route()`.
 
     Features:

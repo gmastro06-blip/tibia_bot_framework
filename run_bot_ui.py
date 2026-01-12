@@ -640,7 +640,7 @@ class BotUI:
             row=17, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Button(tab_control, text="Coords test", width=12, command=run_coords_sanity_ui).grid(
+        tk.Button(tab_control, text="Coords OCR test", width=14, command=run_coords_sanity_ui).grid(
             row=17, column=0, sticky="w", pady=(6, 0)
         )
 
@@ -670,10 +670,10 @@ class BotUI:
             row=19, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Button(tab_control, text="Coords overlay", width=12, command=lambda: _open_last_artifact("overlay", "coords")).grid(
+        tk.Button(tab_control, text="Coords OCR overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
             row=18, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(tab_control, text="Coords report", width=12, command=lambda: _open_last_artifact("report", "coords")).grid(
+        tk.Button(tab_control, text="Coords OCR report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
             row=19, column=0, sticky="w", pady=(6, 0)
         )
 
@@ -903,31 +903,41 @@ class BotUI:
             text="(Se aplica al iniciar el bot; requiere reinicio)",
         ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        tk.Label(tab_config, text="").grid(row=8, column=0)  # separador simple
+        tk.Label(
+            tab_config,
+            text=(
+                "Tip estable (sin coords visibles): usa COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps "
+                "(ver ./scripts/profile_no_coords_steps.ps1). Minimap es experimental; ver README."
+            ),
+            wraplength=520,
+            justify="left",
+        ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+        tk.Label(tab_config, text="").grid(row=9, column=0)  # separador simple
 
         tk.Checkbutton(tab_config, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
-            row=9, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=10, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
         tk.Checkbutton(tab_config, text="Confirmación humana (cavebot)", variable=self.asst_confirm).grid(
-            row=10, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
-        tk.Checkbutton(tab_config, text="Alertas sonoras", variable=self.asst_sound).grid(
             row=11, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
+        tk.Checkbutton(tab_config, text="Alertas sonoras", variable=self.asst_sound).grid(
+            row=12, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
 
-        tk.Label(tab_config, text="").grid(row=12, column=0)  # separador simple
+        tk.Label(tab_config, text="").grid(row=13, column=0)  # separador simple
 
         tk.Checkbutton(tab_config, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=13, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=14, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
-        tk.Label(tab_config, text="Replay interval (ms)").grid(row=14, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Replay interval (ms)").grid(row=15, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_config, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
-            row=14, column=1, sticky="w", pady=(6, 0)
+            row=15, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Replay out_dir").grid(row=15, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Replay out_dir").grid(row=16, column=0, sticky="w", pady=(6, 0))
         tk.Entry(tab_config, textvariable=self.replay_out_dir, width=34).grid(
-            row=15, column=1, sticky="w", pady=(6, 0)
+            row=16, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_replay_dir() -> None:
@@ -945,25 +955,25 @@ class BotUI:
                 pass
 
         tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
-            row=15, column=2, sticky="w", padx=(8, 0)
+            row=16, column=2, sticky="w", padx=(8, 0)
         )
         tk.Button(tab_config, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
-            row=13, column=2, sticky="w", padx=(8, 0)
+            row=14, column=2, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_config, text="").grid(row=16, column=0)  # separador simple
+        tk.Label(tab_config, text="").grid(row=17, column=0)  # separador simple
 
         tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
-            row=17, column=0, columnspan=2, sticky="w", pady=(10, 0)
+            row=18, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
-        tk.Label(tab_config, text="Log interval (ms)").grid(row=18, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Log interval (ms)").grid(row=19, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_config, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
-            row=18, column=1, sticky="w", pady=(6, 0)
+            row=19, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Log out_file").grid(row=19, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="Log out_file").grid(row=20, column=0, sticky="w", pady=(6, 0))
         tk.Entry(tab_config, textvariable=self.log_out_file, width=34).grid(
-            row=19, column=1, sticky="w", pady=(6, 0)
+            row=20, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_log_parent() -> None:
@@ -989,35 +999,35 @@ class BotUI:
                 pass
 
         tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_log_parent).grid(
-            row=19, column=2, sticky="w", padx=(8, 0)
+            row=20, column=2, sticky="w", padx=(8, 0)
         )
         tk.Button(tab_config, text="Abrir archivo", width=12, command=open_log_file).grid(
-            row=18, column=2, sticky="w", padx=(8, 0)
+            row=19, column=2, sticky="w", padx=(8, 0)
         )
 
         # --- Idle alert (UI + core) ---
-        tk.Label(tab_config, text="").grid(row=20, column=0)  # separador simple
+        tk.Label(tab_config, text="").grid(row=21, column=0)  # separador simple
         tk.Label(tab_config, text="Idle (alerta / anti-stuck, sin inputs)").grid(
-            row=21, column=0, columnspan=3, sticky="w", pady=(10, 0)
+            row=22, column=0, columnspan=3, sticky="w", pady=(10, 0)
         )
-        tk.Label(tab_config, text="WARN si idle ≥ (s)").grid(row=22, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, text="WARN si idle ≥ (s)").grid(row=23, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_config, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
-            row=22, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(tab_config, text="FAIL si idle ≥ (s)").grid(row=23, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
             row=23, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Repetir alerta cada (s)").grid(row=24, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+        tk.Label(tab_config, text="FAIL si idle ≥ (s)").grid(row=24, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
             row=24, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Repetir alerta cada (s)").grid(row=25, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+            row=25, column=1, sticky="w", pady=(6, 0)
         )
         tk.Label(
             tab_config,
             text="(0 desactiva. Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=25, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=26, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):

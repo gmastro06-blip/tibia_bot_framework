@@ -288,6 +288,14 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Imprimir steps aceptados por consola.",
     )
+    p.add_argument(
+        "--log-all",
+        action="store_true",
+        help=(
+            "Loggea cada muestra al JSONL (incluye diag + estado interno del tracker), "
+            "incluso si no se acepta ningún step. Útil para tunear umbrales."
+        ),
+    )
     return p.parse_args()
 
 
@@ -303,7 +311,7 @@ def main() -> int:
     import cv2
     import numpy as np
 
-    cap = DXGICapture(force_monitor=int(args.monitor))
+    cap = DXGICapture(force_monitor=int(args.monitor), strict_force_monitor=True)
     tracker = MinimapMotionTracker()
 
     # Grab one real frame to select config.
@@ -484,12 +492,19 @@ def main() -> int:
         "source_resolution": source_resolution,
         "minimap_content_px": [int(rect_px[0]), int(rect_px[1]), int(rect_px[2]), int(rect_px[3])],
         "minimap_cfg": {
+            "mode": str(getattr(tracker.cfg, "mode", "auto")),
             "tile_px": int(tracker.cfg.tile_px),
             "min_response": float(tracker.cfg.min_response),
             "max_shift_px": float(tracker.cfg.max_shift_px),
             "max_step_per_frame": int(tracker.cfg.max_step_per_frame),
+            "emit_threshold_tiles": float(getattr(tracker.cfg, "emit_threshold_tiles", 0.5) or 0.5),
+            "deadband_tiles": float(getattr(tracker.cfg, "deadband_tiles", 0.0) or 0.0),
             "invert_x": bool(tracker.cfg.invert_x),
             "invert_y": bool(tracker.cfg.invert_y),
+            "marker_v_min": int(getattr(tracker.cfg, "marker_v_min", 0) or 0),
+            "marker_s_max": int(getattr(tracker.cfg, "marker_s_max", 0) or 0),
+            "marker_area_min": int(getattr(tracker.cfg, "marker_area_min", 0) or 0),
+            "marker_area_max": int(getattr(tracker.cfg, "marker_area_max", 0) or 0),
         },
         "abs_seed": {
             "x": (int(seed[0]) if seed is not None else None),
@@ -504,9 +519,12 @@ def main() -> int:
     accepted = 0
     last_acc = time.time()
 
+    last_crop_for_diag: Any | None = None
+
     print(
         f"monitor={args.monitor} resolution={resolution[0]}x{resolution[1]} config={rois_path} "
-        f"tile_px={tracker.cfg.tile_px} min_response={tracker.cfg.min_response}"
+        f"mode={getattr(tracker.cfg, 'mode', 'auto')} tile_px={tracker.cfg.tile_px} min_response={tracker.cfg.min_response} "
+        f"emit_thr={float(getattr(tracker.cfg, 'emit_threshold_tiles', 0.5) or 0.5):.2f} deadband={float(getattr(tracker.cfg, 'deadband_tiles', 0.0) or 0.0):.2f}"
     )
 
     # Quality stats + initial crop (helps calibrate ROI when accepted==0).
@@ -542,7 +560,7 @@ def main() -> int:
 
     # Diagnostics window.
     diag_resp_max = 0.0
-    diag_last: tuple[float | None, int | None, int | None] = (None, None, None)
+    diag_last: tuple[float | None, float | None, float | None, int | None, int | None] = (None, None, None, None, None)
     diag_last_ts = time.time()
 
     try:
@@ -561,14 +579,16 @@ def main() -> int:
                 time.sleep(interval_s)
                 continue
 
+            last_crop_for_diag = crop
+
             # Compute raw diagnostics even if the tracker rejects.
-            resp, shift_x_px, shift_y_px, dx_tiles_raw, dy_tiles_raw = _phase_diag(crop)
-            if resp is not None:
+            diag_resp, shift_x_px, shift_y_px, dx_tiles_raw, dy_tiles_raw = _phase_diag(crop)
+            if diag_resp is not None:
                 try:
-                    diag_resp_max = max(float(diag_resp_max), float(resp))
+                    diag_resp_max = max(float(diag_resp_max), float(diag_resp))
                 except Exception:
                     pass
-            diag_last = (resp, dx_tiles_raw, dy_tiles_raw)
+            diag_last = (diag_resp, shift_x_px, shift_y_px, dx_tiles_raw, dy_tiles_raw)
 
             step = None
             try:
@@ -576,8 +596,73 @@ def main() -> int:
             except Exception:
                 step = None
 
+            if args.log_all:
+                try:
+                    def _pair_f(v: Any, default: tuple[float, float] = (0.0, 0.0)) -> list[float]:
+                        try:
+                            if v is None:
+                                return [float(default[0]), float(default[1])]
+                            return [float(v[0]), float(v[1])]
+                        except Exception:
+                            return [float(default[0]), float(default[1])]
+
+                    ev_ts = time.time()
+                    ev_sample: dict[str, Any] = {
+                        "kind": "minimap_sample",
+                        "ts": float(ev_ts),
+                        "accepted": bool(step is not None),
+                        "diag": {
+                            "resp": (float(diag_resp) if diag_resp is not None else None),
+                            "shift_x_px": (float(shift_x_px) if shift_x_px is not None else None),
+                            "shift_y_px": (float(shift_y_px) if shift_y_px is not None else None),
+                            "dx_tiles_raw": (int(dx_tiles_raw) if dx_tiles_raw is not None else None),
+                            "dy_tiles_raw": (int(dy_tiles_raw) if dy_tiles_raw is not None else None),
+                        },
+                        "tracker": {
+                            "mode_used": str(getattr(tracker, "last_mode_used", "") or ""),
+                            "response": float(getattr(tracker, "last_response", 0.0) or 0.0),
+                            "shift_px": _pair_f(getattr(tracker, "last_shift_px", None), (0.0, 0.0)),
+                            "marker_px": None,
+                            "marker_dpx": _pair_f(getattr(tracker, "last_marker_dpx", None), (0.0, 0.0)),
+                            "delta_tiles_f": _pair_f(getattr(tracker, "last_delta_tiles_f", None), (0.0, 0.0)),
+                            "acc_tiles_f": _pair_f(getattr(tracker, "last_acc_tiles_f", None), (0.0, 0.0)),
+                        },
+                    }
+
+                    try:
+                        m = getattr(tracker, "last_marker_px", None)
+                        if m is not None:
+                            ev_sample["tracker"]["marker_px"] = [float(m[0]), float(m[1])]
+                    except Exception:
+                        pass
+
+                    if step is not None:
+                        try:
+                            dx, dy, step_resp = step
+                            ev_sample["step"] = {
+                                "dx_tiles": int(dx),
+                                "dy_tiles": int(dy),
+                                "response": float(step_resp),
+                            }
+                        except Exception:
+                            pass
+
+                    if abs_enabled and abs_coords is not None:
+                        try:
+                            ev_sample["abs"] = {
+                                "x": int(abs_coords[0]),
+                                "y": int(abs_coords[1]),
+                                "z": (int(abs_coords[2]) if abs_coords[2] is not None else None),
+                            }
+                        except Exception:
+                            pass
+
+                    _jsonl_append(out_jsonl, ev_sample)
+                except Exception:
+                    pass
+
             if step is not None:
-                dx, dy, resp = step
+                dx, dy, step_resp = step
                 accepted += 1
                 last_acc = time.time()
                 diag_resp_max = 0.0
@@ -603,7 +688,7 @@ def main() -> int:
                     "ts": ts_ev,
                     "dx_tiles": int(dx),
                     "dy_tiles": int(dy),
-                    "response": float(resp),
+                    "response": float(step_resp),
                 }
                 if ev_abs is not None:
                     ev["abs"] = ev_abs
@@ -618,14 +703,14 @@ def main() -> int:
 
                 if args.print:
                     if ev_abs is not None:
-                        print(f"step dx={dx} dy={dy} resp={resp:.3f} -> x={ev_abs['x']} y={ev_abs['y']}")
+                        print(f"step dx={dx} dy={dy} resp={step_resp:.3f} -> x={ev_abs['x']} y={ev_abs['y']}")
                     else:
-                        print(f"step dx={dx} dy={dy} resp={resp:.3f}")
+                        print(f"step dx={dx} dy={dy} resp={step_resp:.3f}")
 
                 if args.save_crops and crops_saved < int(args.max_crops):
                     try:
                         crops_dir.mkdir(parents=True, exist_ok=True)
-                        p = crops_dir / f"{time.time():.6f}_dx{dx}_dy{dy}_r{resp:.3f}.png"
+                        p = crops_dir / f"{time.time():.6f}_dx{dx}_dy{dy}_r{step_resp:.3f}.png"
                         cv2.imwrite(str(p), crop)
                         crops_saved += 1
                     except Exception:
@@ -636,14 +721,48 @@ def main() -> int:
                 last_acc = time.time()
                 msg = "(sin movimiento aceptado ~5s)"
                 try:
-                    lr, ldx, ldy = diag_last
+                    lr, sx, sy, ldx, ldy = diag_last
                     if lr is not None:
-                        msg = f"{msg} resp_max={diag_resp_max:.3f} last_resp={float(lr):.3f} last_dxdy={ldx},{ldy}"
+                        sx_s = f"{float(sx):.2f}" if sx is not None else "?"
+                        sy_s = f"{float(sy):.2f}" if sy is not None else "?"
+                        msg = (
+                            f"{msg} resp_max={diag_resp_max:.3f} last_resp={float(lr):.3f} "
+                            f"shift_px=({sx_s},{sy_s}) last_dxdy={ldx},{ldy}"
+                        )
                     else:
                         msg = f"{msg} (sin resp)"
                 except Exception:
                     pass
+
+                # Debug extra del tracker (modo/marker)
+                try:
+                    mode_used = str(getattr(tracker, "last_mode_used", "") or "")
+                    m = getattr(tracker, "last_marker_px", None)
+                    md = getattr(tracker, "last_marker_dpx", (0.0, 0.0))
+                    if m is not None:
+                        msg = (
+                            f"{msg} | mode_used={mode_used or '?'} marker=({float(m[0]):.1f},{float(m[1]):.1f}) "
+                            f"dpx=({float(md[0]):.2f},{float(md[1]):.2f})"
+                        )
+                    else:
+                        msg = f"{msg} | mode_used={mode_used or '?'} marker=none"
+                except Exception:
+                    pass
                 print(msg)
+
+                # Guardar un crop de diagnóstico (aunque no haya step aceptado).
+                if args.save_crops and crops_saved < int(args.max_crops):
+                    try:
+                        if last_crop_for_diag is not None and getattr(last_crop_for_diag, "size", 0) != 0:
+                            crops_dir.mkdir(parents=True, exist_ok=True)
+                            ts = time.time()
+                            lr, sx, sy, ldx, ldy = diag_last
+                            lr_s = f"{float(lr):.3f}" if lr is not None else "na"
+                            p = crops_dir / f"{ts:.6f}_hb_r{lr_s}_sx{sx if sx is not None else 'na'}_sy{sy if sy is not None else 'na'}.png"
+                            cv2.imwrite(str(p), last_crop_for_diag)
+                            crops_saved += 1
+                    except Exception:
+                        pass
 
             elapsed = time.time() - t0
             to_sleep = max(0.0, interval_s - elapsed)

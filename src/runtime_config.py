@@ -72,9 +72,19 @@ class TelemetrySnapshot:
     pos_x: int | None = None
     pos_y: int | None = None
     pos_z: int | None = None
+    coords_provider: str = ""  # "ocr"|"minimap"|"file"|"env"|"disabled"|...
     # Coords quality
     coords_status: str = ""  # "OK"|"NO_COORDS"|"BAD_JUMP"|"UNSTABLE"|""
     coords_jump: int | None = None  # manhattan jump vs last coords
+    # Minimap-motion (EXPERIMENTAL) debug
+    minimap_mode_used: str = ""  # "scroll"|"marker"|""
+    minimap_response: float | None = None
+    minimap_delta_dx: float | None = None
+    minimap_delta_dy: float | None = None
+    minimap_acc_dx: float | None = None
+    minimap_acc_dy: float | None = None
+    minimap_marker_dpx_dx: float | None = None
+    minimap_marker_dpx_dy: float | None = None
     ring_equipped: bool | None = None
     amulet_equipped: bool | None = None
     # Señales/estados
@@ -194,8 +204,17 @@ class RuntimeConfig:
                 pos_x=self.telemetry.pos_x,
                 pos_y=self.telemetry.pos_y,
                 pos_z=self.telemetry.pos_z,
+                coords_provider=str(getattr(self.telemetry, "coords_provider", "")),
                 coords_status=str(getattr(self.telemetry, "coords_status", "")),
                 coords_jump=getattr(self.telemetry, "coords_jump", None),
+                minimap_mode_used=str(getattr(self.telemetry, "minimap_mode_used", "")),
+                minimap_response=getattr(self.telemetry, "minimap_response", None),
+                minimap_delta_dx=getattr(self.telemetry, "minimap_delta_dx", None),
+                minimap_delta_dy=getattr(self.telemetry, "minimap_delta_dy", None),
+                minimap_acc_dx=getattr(self.telemetry, "minimap_acc_dx", None),
+                minimap_acc_dy=getattr(self.telemetry, "minimap_acc_dy", None),
+                minimap_marker_dpx_dx=getattr(self.telemetry, "minimap_marker_dpx_dx", None),
+                minimap_marker_dpx_dy=getattr(self.telemetry, "minimap_marker_dpx_dy", None),
                 ring_equipped=self.telemetry.ring_equipped,
                 amulet_equipped=self.telemetry.amulet_equipped,
                 low_hp=self.telemetry.low_hp,
@@ -397,8 +416,17 @@ class RuntimeConfig:
         pos_x: int | None = None,
         pos_y: int | None = None,
         pos_z: int | None = None,
+        coords_provider: str | None = None,
         coords_status: str | None = None,
         coords_jump: int | None = None,
+        minimap_mode_used: str | None = None,
+        minimap_response: float | None = None,
+        minimap_delta_dx: float | None = None,
+        minimap_delta_dy: float | None = None,
+        minimap_acc_dx: float | None = None,
+        minimap_acc_dy: float | None = None,
+        minimap_marker_dpx_dx: float | None = None,
+        minimap_marker_dpx_dy: float | None = None,
         ring_equipped: bool | None = None,
         amulet_equipped: bool | None = None,
         low_hp: bool | None = None,
@@ -446,6 +474,8 @@ class RuntimeConfig:
                 self.telemetry.pos_y = int(pos_y)
             if pos_z is not None:
                 self.telemetry.pos_z = int(pos_z)
+            if coords_provider is not None:
+                self.telemetry.coords_provider = str(coords_provider)
             if coords_status is not None:
                 self.telemetry.coords_status = str(coords_status)
             if coords_jump is not None:
@@ -453,6 +483,43 @@ class RuntimeConfig:
                     self.telemetry.coords_jump = int(coords_jump)
                 except Exception:
                     self.telemetry.coords_jump = None
+            if minimap_mode_used is not None:
+                self.telemetry.minimap_mode_used = str(minimap_mode_used)
+            if minimap_response is not None:
+                try:
+                    self.telemetry.minimap_response = float(minimap_response)
+                except Exception:
+                    self.telemetry.minimap_response = None
+            if minimap_delta_dx is not None:
+                try:
+                    self.telemetry.minimap_delta_dx = float(minimap_delta_dx)
+                except Exception:
+                    self.telemetry.minimap_delta_dx = None
+            if minimap_delta_dy is not None:
+                try:
+                    self.telemetry.minimap_delta_dy = float(minimap_delta_dy)
+                except Exception:
+                    self.telemetry.minimap_delta_dy = None
+            if minimap_acc_dx is not None:
+                try:
+                    self.telemetry.minimap_acc_dx = float(minimap_acc_dx)
+                except Exception:
+                    self.telemetry.minimap_acc_dx = None
+            if minimap_acc_dy is not None:
+                try:
+                    self.telemetry.minimap_acc_dy = float(minimap_acc_dy)
+                except Exception:
+                    self.telemetry.minimap_acc_dy = None
+            if minimap_marker_dpx_dx is not None:
+                try:
+                    self.telemetry.minimap_marker_dpx_dx = float(minimap_marker_dpx_dx)
+                except Exception:
+                    self.telemetry.minimap_marker_dpx_dx = None
+            if minimap_marker_dpx_dy is not None:
+                try:
+                    self.telemetry.minimap_marker_dpx_dy = float(minimap_marker_dpx_dy)
+                except Exception:
+                    self.telemetry.minimap_marker_dpx_dy = None
             if ring_equipped is not None:
                 self.telemetry.ring_equipped = bool(ring_equipped)
             if amulet_equipped is not None:

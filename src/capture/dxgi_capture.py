@@ -9,7 +9,13 @@ import os
 from mss import mss
 
 class DXGICapture:
-    def __init__(self, title_partial: Union[str, Sequence[str]] = "Tibia", force_monitor: Optional[int] = None):
+    def __init__(
+        self,
+        title_partial: Union[str, Sequence[str]] = "Tibia",
+        force_monitor: Optional[int] = None,
+        *,
+        strict_force_monitor: bool = False,
+    ):
         # Acepta un string o una lista de strings para matchear títulos de ventanas.
         if isinstance(title_partial, str):
             self.title_partials = [title_partial]
@@ -17,6 +23,11 @@ class DXGICapture:
             self.title_partials = [p for p in title_partial if p]
         self.hwnd = self.find_window()
         self.force_monitor = force_monitor
+        # Si el caller fuerza un monitor, por defecto permitimos fallback (útil para el bot).
+        # Herramientas de calibración suelen preferir "estricto" para no cambiar de monitor
+        # y producir ROIs incorrectas.
+        env_strict = os.getenv("CAPTURE_STRICT_FORCE_MONITOR", "").strip().lower() in {"1", "true", "yes"}
+        self.strict_force_monitor = bool(strict_force_monitor or env_strict)
         self.fps = 0.0
         self.latency_ms = 0.0
         self.dropped = 0
@@ -223,6 +234,11 @@ class DXGICapture:
             frame = self.capture_specific_monitor(self.force_monitor)
             if frame is not None:
                 return frame
+            if self.strict_force_monitor:
+                # No hacer fallback a otros monitores: evita que tools (ROI/minimap) capturen otra pantalla.
+                if self._verbose:
+                    print("Monitor forzado falló (modo estricto); devolviendo None")
+                return None
             if self._verbose:
                 print("Monitor forzado falló; usando búsqueda en todos los monitores")
 

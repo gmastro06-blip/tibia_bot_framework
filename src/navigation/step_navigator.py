@@ -21,7 +21,7 @@ class StepNavigator:
     requerir (x,y) actual, asume que el personaje está en el waypoint 0 al iniciar
     y avanza ejecutando exactamente |dx| + |dy| pasos hacia el siguiente.
 
-    Útil cuando aún no tenemos OCR/minimap para leer coordenadas.
+    Útil cuando aún no tenemos coords (OCR o minimap experimental) para navegar por posición.
 
     Env vars:
     - CAVEBOT_LOOP (default 1): si llega al final, vuelve al inicio.

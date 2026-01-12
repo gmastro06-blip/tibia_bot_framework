@@ -23,6 +23,16 @@ class GameState:
     pos_x: Optional[int] = None
     pos_y: Optional[int] = None
     pos_z: Optional[int] = None
+    coords_provider: Optional[str] = None
+    # Minimap-motion debug (EXPERIMENTAL)
+    minimap_mode_used: Optional[str] = None
+    minimap_response: Optional[float] = None
+    minimap_delta_dx: Optional[float] = None
+    minimap_delta_dy: Optional[float] = None
+    minimap_acc_dx: Optional[float] = None
+    minimap_acc_dy: Optional[float] = None
+    minimap_marker_dpx_dx: Optional[float] = None
+    minimap_marker_dpx_dy: Optional[float] = None
     ring_equipped: Optional[bool] = None
     amulet_equipped: Optional[bool] = None
     hungry: Optional[bool] = None
@@ -73,7 +83,9 @@ class GameStateBuilder:
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
 
-        # Coords por minimapa (requiere seed, NO hace OCR de coords).
+        # Coords por minimapa (EXPERIMENTAL): requiere seed y ROI minimap_content.
+        # No hace OCR de coords; infiere movimiento y lo acumula.
+        # Si NO hay coords visibles, el camino estable recomendado es COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps.
         self._minimap_tracker = MinimapMotionTracker()
         self._minimap_seed: tuple[int, int, int | None] | None = None
         self._minimap_coords: tuple[int, int, int | None] | None = None
@@ -108,7 +120,7 @@ class GameStateBuilder:
 
     @staticmethod
     def _coords_seed_from_env() -> tuple[int, int, int | None] | None:
-        """Seed de coords para COORDS_PROVIDER=minimap.
+        """Seed de coords para COORDS_PROVIDER=minimap (EXPERIMENTAL).
 
         Usa COORDS_SEED_X / COORDS_SEED_Y / opcional COORDS_SEED_Z.
         Fallback a PLAYER_X/PLAYER_Y/PLAYER_Z por conveniencia.
@@ -179,11 +191,14 @@ class GameStateBuilder:
         rois: Dict[str, Dict[str, float]],
         resolution: Tuple[int, int],
     ) -> tuple[int, int, int | None] | None:
-        """Infiera coords absolutas trackeando la traslación del minimapa.
+        """Infiera coords absolutas trackeando la traslación del minimapa (EXPERIMENTAL).
 
         Requisitos:
         - Debe existir la ROI `minimap_content`.
         - Debe haber seed vía COORDS_SEED_X/Y[/Z] o COORDS_SEED_FILE.
+
+        Nota:
+        - Si no tienes coords visibles y quieres estabilidad, usa COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps.
         """
 
         if not (isinstance(rois, dict) and rois.get("minimap_content") is not None):
@@ -380,6 +395,7 @@ class GameStateBuilder:
             pos_z = self._last_pos_z
 
         # Coords provider: permite deshabilitar OCR coords (o usar fuente externa) cuando no hay coords visibles.
+        coords_provider_kind = self._coords_provider_kind()
         try:
             coords, disabled = self._coords_from_provider(frame, rois, resolution, allow_ocr=bool(do_ocr))
             if disabled:
@@ -460,11 +476,47 @@ class GameStateBuilder:
             pos_x=pos_x,
             pos_y=pos_y,
             pos_z=pos_z,
+            coords_provider=coords_provider_kind,
             hp_pct=hp_pct,
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
             viewport_tile_offsets=None,
         )
+
+        # Expose minimap tracker debug when minimap provider is selected (even if no step was accepted).
+        try:
+            if coords_provider_kind in {"minimap", "map", "minimap_motion"}:
+                gamestate.minimap_mode_used = str(getattr(self._minimap_tracker, "last_mode_used", "") or "")
+                try:
+                    gamestate.minimap_response = float(getattr(self._minimap_tracker, "last_response", 0.0) or 0.0)
+                except Exception:
+                    gamestate.minimap_response = None
+
+                try:
+                    dx_f, dy_f = getattr(self._minimap_tracker, "last_delta_tiles_f", (0.0, 0.0)) or (0.0, 0.0)
+                    gamestate.minimap_delta_dx = float(dx_f)
+                    gamestate.minimap_delta_dy = float(dy_f)
+                except Exception:
+                    gamestate.minimap_delta_dx = None
+                    gamestate.minimap_delta_dy = None
+
+                try:
+                    ax_f, ay_f = getattr(self._minimap_tracker, "last_acc_tiles_f", (0.0, 0.0)) or (0.0, 0.0)
+                    gamestate.minimap_acc_dx = float(ax_f)
+                    gamestate.minimap_acc_dy = float(ay_f)
+                except Exception:
+                    gamestate.minimap_acc_dx = None
+                    gamestate.minimap_acc_dy = None
+
+                try:
+                    mdx, mdy = getattr(self._minimap_tracker, "last_marker_dpx", (0.0, 0.0)) or (0.0, 0.0)
+                    gamestate.minimap_marker_dpx_dx = float(mdx)
+                    gamestate.minimap_marker_dpx_dy = float(mdy)
+                except Exception:
+                    gamestate.minimap_marker_dpx_dx = None
+                    gamestate.minimap_marker_dpx_dy = None
+        except Exception:
+            pass
 
         # (C) Equipment + status icons (best-effort, depends on calibrated ROIs)
         try:
