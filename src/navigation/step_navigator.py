@@ -47,6 +47,29 @@ class StepNavigator:
         self._segment_dy = 0
         self._segment_initialized = False
 
+    def jump_to(self, idx: int) -> bool:
+        """Jump to a specific route index.
+
+        This is UI/operator driven. It does not execute any inputs; it only
+        rewinds/advances the internal pointer used by `preview()` / `decide()`.
+        """
+
+        try:
+            if not self.route:
+                return False
+            j = int(idx)
+            if j < 0:
+                j = 0
+            if j >= len(self.route):
+                j = len(self.route) - 1
+            self.idx = j
+            self._segment_dx = 0
+            self._segment_dy = 0
+            self._segment_initialized = False
+            return True
+        except Exception:
+            return False
+
     def _current(self) -> Optional[Waypoint]:
         if not self.route:
             return None

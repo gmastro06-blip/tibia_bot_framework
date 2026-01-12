@@ -7,6 +7,7 @@ import threading
 import time
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 
 def _add_src_to_syspath() -> None:
@@ -79,6 +80,8 @@ class BotUI:
         self._last_event_reco: str = ""
         self._last_event_action_req: str = ""
         self._last_event_action_committed: bool | None = None
+        self._last_event_input_plan: str = ""
+        self._latest_input_plan: str = ""
         self._last_event_wp: str = ""
         self._last_event_wp_action: str = ""
         self._last_event_health_status: str = ""
@@ -112,6 +115,66 @@ class BotUI:
 
         self.cavebot_enabled = tk.BooleanVar(value=False)
         self.cavebot_route_path = tk.StringVar(value="configs/route.json")
+        # Cavebot execution mode (applied via env vars at bot start)
+        try:
+            _cb_mode_default = (os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
+        except Exception:
+            _cb_mode_default = ""
+        if _cb_mode_default not in {"steps", "pos"}:
+            # Default to steps: works without visible coords.
+            _cb_mode_default = "steps"
+        self.cavebot_mode = tk.StringVar(value=_cb_mode_default)
+
+        # Loop route in step mode (applied via env var CAVEBOT_LOOP).
+        try:
+            _cb_loop_default = (os.getenv("CAVEBOT_LOOP", "1") or "1").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            _cb_loop_default = True
+        self.cavebot_loop = tk.BooleanVar(value=bool(_cb_loop_default))
+
+        # Coords provider (applied via env vars at bot start). "auto" = don't touch env.
+        try:
+            _cp_default = (os.getenv("COORDS_PROVIDER", "") or "").strip().lower()
+        except Exception:
+            _cp_default = ""
+        if not _cp_default:
+            _cp_default = "disabled" if _cb_mode_default == "steps" else "ocr"
+        if _cp_default not in {"auto", "ocr", "minimap", "disabled"}:
+            _cp_default = "ocr"
+        self.coords_provider = tk.StringVar(value=_cp_default)
+
+        # Cavebot stop conditions (assistant-only): low cap / low potions.
+        try:
+            _cap_leave_enabled = os.getenv("CAP_LEAVE_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+        except Exception:
+            _cap_leave_enabled = True
+        try:
+            _cap_leave_threshold = int(float(os.getenv("CAP_LEAVE_THRESHOLD", "50").strip() or "50"))
+        except Exception:
+            _cap_leave_threshold = 50
+        self.cavebot_stop_on_low_cap = tk.BooleanVar(value=bool(_cap_leave_enabled))
+        self.cavebot_cap_threshold = tk.IntVar(value=max(0, int(_cap_leave_threshold)))
+
+        try:
+            _pot_stop_enabled = os.getenv("POTIONS_STOP_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            _pot_stop_enabled = False
+        try:
+            _pot_min = int(float(os.getenv("POTIONS_MIN", "0").strip() or "0"))
+        except Exception:
+            _pot_min = 0
+        try:
+            _pot_rem_raw = (os.getenv("POTIONS_REMAINING", "") or "").strip()
+            _pot_rem = int(float(_pot_rem_raw)) if _pot_rem_raw else 0
+        except Exception:
+            _pot_rem = 0
+        self.cavebot_stop_on_low_potions = tk.BooleanVar(value=bool(_pot_stop_enabled))
+        self.cavebot_potions_remaining = tk.IntVar(value=max(0, int(_pot_rem)))
+        self.cavebot_potions_min = tk.IntVar(value=max(0, int(_pot_min)))
+
+        self.cavebot_finish_text = tk.StringVar(value="-")
+
+        self.cavebot_step_text = tk.StringVar(value="-")
 
         # Simulación/overrides de señales (para cuando aún no hay detección real)
         self.sim_enabled = tk.BooleanVar(value=True)
@@ -201,6 +264,7 @@ class BotUI:
         self.cavebot_next_text = tk.StringVar(value="-")
         self.cavebot_wp_text = tk.StringVar(value="-")
         self.cavebot_action_text = tk.StringVar(value="-")
+        self.input_plan_text = tk.StringVar(value="-")
 
         container = tk.Frame(self.root, padx=14, pady=14)
         container.pack(fill="both", expand=True)
@@ -278,6 +342,38 @@ class BotUI:
 
         # Panel operador: últimos eventos
         tk.Label(tab_control, text="Eventos (últimos):").grid(row=14, column=0, sticky="w", pady=(6, 0))
+
+        def _copy_inputs_to_clipboard() -> None:
+            # Prefer planned inputs; fall back to action_request.
+            txt = str(getattr(self, "_latest_input_plan", "") or "").strip()
+            if not txt:
+                txt = str(getattr(self, "_last_event_action_req", "") or "").strip()
+            if not txt:
+                try:
+                    self._messagebox.showinfo("Copiar", "No hay inputs planeados para copiar.")
+                except Exception:
+                    pass
+                return
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(txt)
+                self.root.update()
+                self._messagebox.showinfo("Copiar", "Copiado al portapapeles.")
+            except Exception:
+                try:
+                    self._messagebox.showinfo("Copiar", "No se pudo copiar al portapapeles.")
+                except Exception:
+                    pass
+
+        tk.Button(tab_control, text="Copiar inputs", width=14, command=_copy_inputs_to_clipboard).grid(
+            row=14, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_control, text="Inputs:").grid(row=14, column=2, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.input_plan_text, width=52, anchor="w").grid(
+            row=14, column=3, sticky="w", pady=(6, 0)
+        )
+
         self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none")
         try:
             self._events_text.configure(state="disabled")
@@ -787,27 +883,119 @@ class BotUI:
             row=1, column=1, sticky="w", pady=(10, 0)
         )
 
-        tk.Label(
-            tab_cavebot,
-            text="(Solo UI por ahora: no ejecuta navegación aún)",
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        def browse_route() -> None:
+            try:
+                from tkinter import filedialog
 
-        # Checklist de ruta (UI-only)
-        tk.Label(tab_cavebot, text="").grid(row=7, column=0)
-        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=8, column=0, sticky="w", pady=(10, 0))
+                path = filedialog.askopenfilename(
+                    title="Selecciona ruta/script JSON",
+                    initialdir=str((Path(__file__).resolve().parent / "configs")),
+                    filetypes=[("JSON", "*.json"), ("All files", "*")],
+                )
+                if path:
+                    self.cavebot_route_path.set(path)
+            except Exception:
+                pass
+
+        tk.Button(tab_cavebot, text="Browse", width=8, command=browse_route).grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Modo:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Radiobutton(tab_cavebot, text="Steps (sin coords)", variable=self.cavebot_mode, value="steps").grid(
+            row=2, column=1, sticky="w", pady=(8, 0)
+        )
+        tk.Radiobutton(tab_cavebot, text="Pos (con coords)", variable=self.cavebot_mode, value="pos").grid(
+            row=2, column=2, sticky="w", pady=(8, 0)
+        )
+
+        tk.Checkbutton(tab_cavebot, text="Loop ruta", variable=self.cavebot_loop).grid(
+            row=2, column=3, sticky="w", pady=(8, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Coords provider:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Radiobutton(tab_cavebot, text="disabled", variable=self.coords_provider, value="disabled").grid(
+            row=3, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Radiobutton(tab_cavebot, text="ocr", variable=self.coords_provider, value="ocr").grid(
+            row=3, column=2, sticky="w", pady=(6, 0)
+        )
+        tk.Radiobutton(tab_cavebot, text="minimap (exp)", variable=self.coords_provider, value="minimap").grid(
+            row=3, column=3, sticky="w", pady=(6, 0)
+        )
+
+        cb_block = tk.Frame(tab_cavebot)
+        cb_block.grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+
+        tk.Label(
+            cb_block,
+            text="(Only logs: genera ActionRequest + input_plan; no inyecta inputs)",
+        ).grid(row=0, column=0, columnspan=8, sticky="w")
+
+        # Stop conditions
+        tk.Checkbutton(cb_block, text="Stop por cap baja", variable=self.cavebot_stop_on_low_cap).grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cb_block, text="Cap <=").grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_cap_threshold, width=6).grid(
+            row=1, column=2, sticky="w", pady=(4, 0)
+        )
+
+        tk.Checkbutton(cb_block, text="Stop por pociones", variable=self.cavebot_stop_on_low_potions).grid(
+            row=1, column=3, sticky="w", padx=(14, 0), pady=(4, 0)
+        )
+        tk.Label(cb_block, text="Rem=").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(4, 0))
+        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_potions_remaining, width=6).grid(
+            row=1, column=5, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cb_block, text="Min=").grid(row=1, column=6, sticky="w", padx=(8, 0), pady=(4, 0))
+        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_potions_min, width=6).grid(
+            row=1, column=7, sticky="w", pady=(4, 0)
+        )
+
+        tk.Label(cb_block, text="Fin:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cb_block, textvariable=self.cavebot_finish_text, width=60, anchor="w").grid(
+            row=2, column=1, columnspan=7, sticky="w", pady=(4, 0)
+        )
+
+        # Checklist de ruta
+        tk.Label(tab_cavebot, text="").grid(row=8, column=0)
+        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=9, column=0, sticky="w", pady=(10, 0))
 
         self._route_status_var = tk.StringVar(value="(ruta no cargada)")
         tk.Label(tab_cavebot, textvariable=self._route_status_var, width=60, anchor="w").grid(
-            row=8, column=1, columnspan=2, sticky="w", pady=(10, 0)
+            row=9, column=1, columnspan=3, sticky="w", pady=(10, 0)
         )
 
         self._route_listbox = tk.Listbox(tab_cavebot, height=10, width=60)
-        self._route_listbox.grid(row=9, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._route_listbox.grid(row=10, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+        def request_step_jump_selected() -> None:
+            try:
+                sel = self._route_listbox.curselection()
+                if not sel:
+                    return
+                idx = int(sel[0])
+                self._config.request_step_jump(idx)
+            except Exception:
+                pass
+
+        def request_step_reset() -> None:
+            try:
+                self._config.request_step_jump(0)
+            except Exception:
+                pass
+
+        # UX: doble click en la checklist para saltar el puntero del cavebot a ese step.
+        try:
+            self._route_listbox.bind("<Double-Button-1>", lambda _e: request_step_jump_selected())
+        except Exception:
+            pass
 
         self._route_next_var = tk.StringVar(value="-")
-        tk.Label(tab_cavebot, text="Próximos:").grid(row=10, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, text="Próximos:").grid(row=11, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_cavebot, textvariable=self._route_next_var, width=60, anchor="w").grid(
-            row=10, column=1, sticky="w", pady=(6, 0)
+            row=11, column=1, columnspan=2, sticky="w", pady=(6, 0)
         )
 
         def _route_format_item(idx: int, wp: object) -> str:
@@ -862,22 +1050,35 @@ class BotUI:
             _load_route_for_ui()
 
         tk.Button(tab_cavebot, text="Recargar ruta", width=14, command=reload_route_ui).grid(
-            row=9, column=2, sticky="w", padx=(8, 0)
+            row=10, column=3, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_cavebot, text="Próxima acción:").grid(row=3, column=0, sticky="w", pady=(12, 0))
+        tk.Button(tab_cavebot, text="Saltar a paso", width=14, command=request_step_jump_selected).grid(
+            row=11, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Button(tab_cavebot, text="Reset (inicio)", width=14, command=request_step_reset).grid(
+            row=12, column=3, sticky="w", padx=(8, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Paso:").grid(row=5, column=0, sticky="w", pady=(12, 0))
+        tk.Label(tab_cavebot, textvariable=self.cavebot_step_text, width=40, anchor="w").grid(
+            row=5, column=1, sticky="w", pady=(12, 0)
+        )
+
+        tk.Label(tab_cavebot, text="Próxima acción:").grid(row=6, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_cavebot, textvariable=self.cavebot_next_text, width=40, anchor="w").grid(
-            row=3, column=1, sticky="w", pady=(12, 0)
+            row=6, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_cavebot, text="Waypoint:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, text="Waypoint:").grid(row=7, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_cavebot, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(
-            row=4, column=1, sticky="w", pady=(6, 0)
+            row=7, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_cavebot, text="Action:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, text="Action:").grid(row=8, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_cavebot, textvariable=self.cavebot_action_text, width=40, anchor="w").grid(
-            row=5, column=1, sticky="w", pady=(6, 0)
+            row=8, column=1, sticky="w", pady=(6, 0)
         )
 
         def request_advance() -> None:
@@ -886,11 +1087,13 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_cavebot, text="Marcar como ejecutado", width=18, command=request_advance).grid(
-            row=6, column=0, sticky="w", pady=(10, 0)
+        self._cavebot_mark_btn = tk.Button(tab_cavebot, text="Marcar como ejecutado", width=18, command=request_advance)
+        self._cavebot_mark_btn.grid(
+            row=12, column=0, sticky="w", pady=(10, 0)
         )
-        tk.Button(tab_cavebot, text="Siguiente acción", width=14, command=request_advance).grid(
-            row=6, column=1, sticky="w", pady=(10, 0)
+        self._cavebot_next_btn = tk.Button(tab_cavebot, text="Siguiente acción", width=14, command=request_advance)
+        self._cavebot_next_btn.grid(
+            row=12, column=1, sticky="w", pady=(10, 0)
         )
 
         # Mantener la ruta cargada para checklist cuando cambie el path.
@@ -1495,6 +1698,11 @@ class BotUI:
                     parts.append("low_mp")
                 if tel.low_cap:
                     parts.append("low_cap")
+                try:
+                    if getattr(tel, "low_potions", None):
+                        parts.append("low_potions")
+                except Exception:
+                    pass
                 if getattr(tel, "ring_equipped", None) is True:
                     parts.append("ring")
                 if getattr(tel, "amulet_equipped", None) is True:
@@ -1515,6 +1723,40 @@ class BotUI:
                 self.cavebot_next_text.set(tel.cavebot_next or "-")
                 self.cavebot_wp_text.set(tel.cavebot_waypoint or "-")
                 self.cavebot_action_text.set(tel.cavebot_action or "-")
+
+                # Cavebot finish state (end-of-route / low cap / low potions)
+                try:
+                    finished = bool(getattr(tel, "cavebot_finished", False))
+                except Exception:
+                    finished = False
+                try:
+                    reason = str(getattr(tel, "cavebot_finish_reason", "") or "").strip()
+                except Exception:
+                    reason = ""
+                try:
+                    self.cavebot_finish_text.set(reason if reason else "-")
+                except Exception:
+                    pass
+
+                # Disable/enable advance buttons based on finish state.
+                try:
+                    running = bool(self._is_running())
+                    state: Literal["disabled", "normal"] = "disabled" if (not running or finished) else "normal"
+                    if hasattr(self, "_cavebot_mark_btn") and self._cavebot_mark_btn is not None:
+                        self._cavebot_mark_btn.config(state=state)
+                    if hasattr(self, "_cavebot_next_btn") and self._cavebot_next_btn is not None:
+                        self._cavebot_next_btn.config(state=state)
+                except Exception:
+                    pass
+                try:
+                    st = int(getattr(tel, "cavebot_step_total", 0) or 0)
+                    si = int(getattr(tel, "cavebot_step_idx", 0) or 0)
+                    if st > 0:
+                        self.cavebot_step_text.set(f"{si + 1}/{st}")
+                    else:
+                        self.cavebot_step_text.set("-")
+                except Exception:
+                    self.cavebot_step_text.set("-")
 
                 now = time.time()
                 if tel.ts and tel.ts > 0:
@@ -1875,6 +2117,18 @@ class BotUI:
                         reco = str(getattr(tel, "recommendation", "") or "")
                         action_req = str(getattr(tel, "action_request", "") or "")
                         action_committed = getattr(tel, "action_committed", None)
+                        input_plan = str(getattr(tel, "input_plan", "") or "")
+                        self._latest_input_plan = input_plan
+                        try:
+                            s = (input_plan or "").strip()
+                            if not s:
+                                self.input_plan_text.set("-")
+                            else:
+                                if len(s) > 80:
+                                    s = s[:77] + "..."
+                                self.input_plan_text.set(s)
+                        except Exception:
+                            self.input_plan_text.set("-")
                         wp = str(getattr(tel, "cavebot_waypoint", "") or "")
                         wp_action = str(getattr(tel, "cavebot_action", "") or "")
 
@@ -1952,6 +2206,11 @@ class BotUI:
                             _push(f"{_ts()} action{star}: {action_req}")
                             self._last_event_action_req = action_req
                             self._last_event_action_committed = bool(action_committed) if action_committed is not None else None
+
+                        if input_plan != self._last_event_input_plan:
+                            if input_plan.strip():
+                                _push(f"{_ts()} inputs: {input_plan}")
+                            self._last_event_input_plan = input_plan
 
                         if wp != self._last_event_wp or wp_action != self._last_event_wp_action:
                             if wp or wp_action:
@@ -2073,6 +2332,35 @@ class BotUI:
         except Exception:
             pass
 
+    def _reset_cavebot_ui(self) -> None:
+        try:
+            self.cavebot_step_text.set("-")
+        except Exception:
+            pass
+        try:
+            self.cavebot_finish_text.set("-")
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_cavebot_mark_btn") and self._cavebot_mark_btn is not None:
+                self._cavebot_mark_btn.config(state="disabled")
+            if hasattr(self, "_cavebot_next_btn") and self._cavebot_next_btn is not None:
+                self._cavebot_next_btn.config(state="disabled")
+        except Exception:
+            pass
+        try:
+            self._route_current_index = None
+        except Exception:
+            pass
+        try:
+            self._route_next_var.set("-")
+        except Exception:
+            pass
+        try:
+            self._route_listbox.selection_clear(0, "end")
+        except Exception:
+            pass
+
     def _is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
@@ -2142,6 +2430,28 @@ class BotUI:
                     self.cavebot_enabled.set(bool(cb.get("enabled")))
                 if "route_path" in cb:
                     self.cavebot_route_path.set(str(cb.get("route_path") or "configs/route.json"))
+                if "mode" in cb:
+                    m = str(cb.get("mode") or "").strip().lower()
+                    if m in {"steps", "pos"}:
+                        self.cavebot_mode.set(m)
+                if "coords_provider" in cb:
+                    cp = str(cb.get("coords_provider") or "").strip().lower()
+                    if cp in {"auto", "ocr", "minimap", "disabled"}:
+                        self.coords_provider.set(cp)
+                if "loop" in cb:
+                    self.cavebot_loop.set(bool(cb.get("loop")))
+
+                # Stop conditions (assistant-only)
+                if "stop_on_low_cap" in cb:
+                    self.cavebot_stop_on_low_cap.set(bool(cb.get("stop_on_low_cap")))
+                if "cap_threshold" in cb:
+                    self.cavebot_cap_threshold.set(max(0, int(float(cb.get("cap_threshold") or 0))))
+                if "stop_on_low_potions" in cb:
+                    self.cavebot_stop_on_low_potions.set(bool(cb.get("stop_on_low_potions")))
+                if "potions_remaining" in cb:
+                    self.cavebot_potions_remaining.set(max(0, int(float(cb.get("potions_remaining") or 0))))
+                if "potions_min" in cb:
+                    self.cavebot_potions_min.set(max(0, int(float(cb.get("potions_min") or 0))))
         except Exception:
             pass
 
@@ -2261,6 +2571,14 @@ class BotUI:
                 "cavebot": {
                     "enabled": bool(self.cavebot_enabled.get()),
                     "route_path": str(self.cavebot_route_path.get()),
+                    "mode": str(self.cavebot_mode.get()),
+                    "coords_provider": str(self.coords_provider.get()),
+                    "loop": bool(self.cavebot_loop.get()),
+                    "stop_on_low_cap": bool(self.cavebot_stop_on_low_cap.get()),
+                    "cap_threshold": int(self.cavebot_cap_threshold.get()),
+                    "stop_on_low_potions": bool(self.cavebot_stop_on_low_potions.get()),
+                    "potions_remaining": int(self.cavebot_potions_remaining.get()),
+                    "potions_min": int(self.cavebot_potions_min.get()),
                 },
                 "simulation": {
                     "enabled": bool(self.sim_enabled.get()),
@@ -2551,6 +2869,39 @@ class BotUI:
 
         # Reset UI idle tracking for this run.
         self._reset_idle_ui()
+        self._reset_cavebot_ui()
+
+        # Apply cavebot mode + coords provider for this run.
+        try:
+            os.environ["CAVEBOT_MODE"] = str(self.cavebot_mode.get() or "").strip() or "steps"
+        except Exception:
+            pass
+        try:
+            os.environ["CAVEBOT_LOOP"] = "1" if bool(self.cavebot_loop.get()) else "0"
+        except Exception:
+            pass
+        try:
+            cp = str(self.coords_provider.get() or "").strip().lower()
+            if not cp or cp == "auto":
+                os.environ.pop("COORDS_PROVIDER", None)
+            else:
+                os.environ["COORDS_PROVIDER"] = cp
+        except Exception:
+            pass
+
+        # Apply cavebot stop conditions (assistant-only).
+        # CAP_LEAVE_* already exists in core; POTIONS_* is a manual operator input.
+        try:
+            os.environ["CAP_LEAVE_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_cap.get()) else "0"
+            os.environ["CAP_LEAVE_THRESHOLD"] = str(max(0, int(self.cavebot_cap_threshold.get())))
+        except Exception:
+            pass
+        try:
+            os.environ["POTIONS_STOP_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_potions.get()) else "0"
+            os.environ["POTIONS_MIN"] = str(max(0, int(self.cavebot_potions_min.get())))
+            os.environ["POTIONS_REMAINING"] = str(max(0, int(self.cavebot_potions_remaining.get())))
+        except Exception:
+            pass
 
         # Apply ROIs override for this bot run (used by src/main.py:load_roi_config).
         try:
@@ -2674,6 +3025,7 @@ class BotUI:
             self.start_btn.config(state="normal")
             self.stop_btn.config(state="disabled")
             self._reset_idle_ui()
+            self._reset_cavebot_ui()
             return
 
         if self._stop_event is not None:
@@ -2691,6 +3043,7 @@ class BotUI:
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
         self._reset_idle_ui()
+        self._reset_cavebot_ui()
 
     def on_close(self) -> None:
         if self._is_running():

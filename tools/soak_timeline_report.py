@@ -262,6 +262,7 @@ def main() -> int:
 
     committed_n = 0
     action_event_n = 0
+    has_inputs_n = 0
     action_req_counter: Counter[str] = Counter()
     committed_action_req_counter: Counter[str] = Counter()
     for ev in rows:
@@ -281,6 +282,11 @@ def main() -> int:
                 action_req_counter[ar] += 1
                 if bool(ev.get("action_committed", False)):
                     committed_action_req_counter[ar] += 1
+        except Exception:
+            pass
+        try:
+            if str(ev.get("input_plan", "") or "").strip():
+                has_inputs_n += 1
         except Exception:
             pass
 
@@ -303,6 +309,7 @@ def main() -> int:
         ".mono{font-family:Consolas,Menlo,monospace;}"
         ".danger{background:#ffdddd;}"
         ".committed{background:#eaffea;}"
+        ".has_inputs:not(.danger):not(.committed){background:#e8f4ff;}"
         ".chip{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:999px;background:#f2f2f2;}"
         "details{margin:10px 0;}"
         "</style></head><body>"
@@ -320,6 +327,7 @@ def main() -> int:
   <span class='chip mono'>committed={committed_n}</span>
   <span class='chip mono'>event.action_request={action_event_n}</span>
   <span class='chip mono'>unique_actions={len(action_req_counter)}</span>
+    <span class='chip mono'>with_input_plan={has_inputs_n}</span>
 </div>
 
 <div style='margin:10px 0'>
@@ -348,6 +356,7 @@ def main() -> int:
         "action_request",
         "action_committed",
         "action_ts",
+        "input_plan",
         "hp_pct",
         "mp_pct",
         "target",
@@ -394,6 +403,11 @@ def main() -> int:
             tr_classes.append("danger")
         if committed:
             tr_classes.append("committed")
+            try:
+                if str(ev.get("input_plan", "") or "").strip():
+                    tr_classes.append("has_inputs")
+            except Exception:
+                pass
         tr_cls = " ".join(tr_classes)
 
         def cell(key: str) -> str:

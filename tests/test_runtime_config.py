@@ -54,8 +54,14 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
         cap_current=55,
         low_hp=True,
         low_cap=True,
+        potions_remaining=12,
+        potions_min=20,
+        low_potions=True,
+        cavebot_finished=True,
+        cavebot_finish_reason="LOW_CAP|LOW_POTIONS",
         action_request="move:north",
         action_committed=True,
+        input_plan="key:Up",
         note="ok",
     )
 
@@ -70,8 +76,14 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     assert t2.cap_current == 55
     assert t2.low_hp is True
     assert t2.low_cap is True
+    assert t2.potions_remaining == 12
+    assert t2.potions_min == 20
+    assert t2.low_potions is True
+    assert t2.cavebot_finished is True
+    assert t2.cavebot_finish_reason == "LOW_CAP|LOW_POTIONS"
     assert t2.action_request == "move:north"
     assert t2.action_committed is True
+    assert t2.input_plan == "key:Up"
     assert t2.note == "ok"
 
 
@@ -101,6 +113,25 @@ def test_runtime_config_replay_force_counter() -> None:
     assert rc.replay_force_counter_snapshot() == 1
     assert rc.request_replay_snapshot() == 2
     assert rc.replay_force_counter_snapshot() == 2
+
+
+def test_runtime_config_step_jump_counter_and_snapshot() -> None:
+    cfg = RuntimeConfig()
+
+    c0, idx0 = cfg.step_jump_snapshot()
+    assert c0 == 0
+    assert isinstance(idx0, int)
+
+    assert cfg.request_step_jump(7) == 1
+    c1, idx1 = cfg.step_jump_snapshot()
+    assert c1 == 1
+    assert idx1 == 7
+
+    # Negative indices are clamped to 0.
+    assert cfg.request_step_jump(-5) == 2
+    c2, idx2 = cfg.step_jump_snapshot()
+    assert c2 == 2
+    assert idx2 == 0
 
 
 def test_runtime_config_thread_safety_smoke() -> None:

@@ -230,27 +230,30 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         "ts": 0.0,
         "action_request": "",
         "action_committed": False,
+        "input_plan": "",
     }
 
-    def _a_set(action_request: str, action_committed: bool) -> None:
+    def _a_set(action_request: str, action_committed: bool, input_plan: str = "") -> None:
         try:
             with action_lock:
                 action_state["ts"] = float(time.time())
                 action_state["action_request"] = str(action_request or "")
                 action_state["action_committed"] = bool(action_committed)
+                action_state["input_plan"] = str(input_plan or "")
         except Exception:
             pass
 
-    def _a_snapshot() -> tuple[str, bool, float]:
+    def _a_snapshot() -> tuple[str, bool, float, str]:
         try:
             with action_lock:
                 return (
                     str(action_state.get("action_request", "") or ""),
                     bool(action_state.get("action_committed", False)),
                     float(action_state.get("ts", 0.0) or 0.0),
+                    str(action_state.get("input_plan", "") or ""),
                 )
         except Exception:
-            return "", False, 0.0
+            return "", False, 0.0, ""
 
     # Inicializar componentes
     # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
@@ -491,11 +494,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         # Always attach latest action request for end-to-end correlation.
                         try:
-                            ar, ac, ats = _a_snapshot()
+                            ar, ac, ats, ip = _a_snapshot()
                             if ar:
                                 tel_payload["action_request"] = ar
                                 tel_payload["action_committed"] = bool(ac)
                                 tel_payload["action_ts"] = float(ats)
+                                if ip:
+                                    tel_payload["input_plan"] = str(ip)
                         except Exception:
                             pass
 
@@ -648,12 +653,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                     # Action correlation (planned vs committed), from decision thread.
                     try:
-                        ar, ac, _ats = _a_snapshot()
+                        ar, ac, _ats, ip = _a_snapshot()
                         if ar:
                             s = str(ar)
                             if len(s) > 160:
                                 s = s[:157] + "..."
                             info_lines.append(f"action={'*' if bool(ac) else ''}{s}")
+                        if ip:
+                            s2 = str(ip)
+                            if len(s2) > 160:
+                                s2 = s2[:157] + "..."
+                            info_lines.append(f"inputs={s2}")
                     except Exception:
                         pass
 
@@ -735,10 +745,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             cap_leave_threshold = 50
 
+        # Supplies (assistant-only, manual operator inputs via UI/env).
+        potions_stop_enabled = os.getenv("POTIONS_STOP_ENABLED", "0").strip().lower() in {"1", "true", "yes"}
+        try:
+            potions_min_threshold = int(float(os.getenv("POTIONS_MIN", "0").strip() or "0"))
+        except Exception:
+            potions_min_threshold = 0
+
         navigator: Navigator | None = None
         step_navigator: StepNavigator | None = None
         navigator_route_path: str | None = None
         last_advance_seen = 0
+        last_step_jump_seen = 0
         last_beep_ts = 0.0
         last_pos_warn_ts = 0.0
         # Idle detection (safe): warn/beep when position doesn't change for a while.
@@ -1001,6 +1019,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 low_cap = None
 
+            # Manual potions remaining (operator-provided). If unset, stays None.
+            potions_remaining: int | None = None
+            low_potions: bool | None = None
+            try:
+                raw = (os.getenv("POTIONS_REMAINING", "") or "").strip()
+                if raw:
+                    potions_remaining = int(float(raw))
+            except Exception:
+                potions_remaining = None
+            try:
+                if potions_stop_enabled and potions_remaining is not None:
+                    low_potions = bool(int(potions_remaining) <= int(potions_min_threshold))
+                else:
+                    low_potions = None
+            except Exception:
+                low_potions = None
+
             # Targeting de criaturas (si hay detecciones Roboflow).
             # Por defecto solo loggea cuando cambia el target.
             target_str = ""
@@ -1078,6 +1113,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             cavebot_step_next_idx = 0
             cavebot_step_total = 0
 
+            cavebot_finished = False
+            cavebot_finish_reason = ""
+
             if cavebot_cfg is not None and cavebot_cfg.enabled:
                 cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
                 # Reload route if needed
@@ -1100,10 +1138,66 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 if step_navigator is not None:
                     try:
-                        # Modo asistente: preview constante, pero solo consume/avanza con confirmación.
-                        decision = step_navigator.preview()
+                        # Keep loop behavior in sync with env (UI applies per-run, but this allows live toggles too).
+                        try:
+                            step_navigator.loop = (
+                                os.getenv("CAVEBOT_LOOP", "1").strip().lower() in {"1", "true", "yes"}
+                            )
+                        except Exception:
+                            pass
 
-                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                        # Determine end/stop reasons (assistant-only).
+                        reasons: list[str] = []
+                        try:
+                            if not bool(getattr(step_navigator, "loop", False)):
+                                # When not looping, _current() becomes None once idx is out of range.
+                                try:
+                                    if step_navigator._current() is None:  # noqa: SLF001
+                                        reasons.append("ROUTE_END")
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        try:
+                            if low_cap is True:
+                                reasons.append("LOW_CAP")
+                        except Exception:
+                            pass
+                        try:
+                            if low_potions is True:
+                                reasons.append("LOW_POTIONS")
+                        except Exception:
+                            pass
+
+                        if reasons:
+                            cavebot_finished = True
+                            cavebot_finish_reason = "|".join(reasons)
+
+                        # UI-driven "jump to step" (only affects pointer/preview).
+                        try:
+                            if runtime_config is not None:
+                                jc, jidx = runtime_config.step_jump_snapshot()
+                                if jc != last_step_jump_seen:
+                                    last_step_jump_seen = int(jc)
+                                    ok = bool(step_navigator.jump_to(int(jidx)))
+                                    if ok:
+                                        print(f"🧭 Step jump -> {int(jidx):03d}")
+                                    else:
+                                        print(f"🧭 Step jump inválido: {int(jidx)}")
+                        except Exception:
+                            pass
+
+                        if cavebot_finished:
+                            # Stop emitting actions when finished; keep UI updated.
+                            decision = step_navigator.preview()
+                            cavebot_next = "stop"
+                        else:
+                            # Modo asistente: preview constante, pero solo consume/avanza con confirmación.
+                            decision = step_navigator.preview()
+
+                        if cavebot_finished:
+                            should_advance = False
+                        elif assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
                             cur_adv = runtime_config.advance_counter_snapshot() if runtime_config is not None else 0
                             should_advance = cur_adv != last_advance_seen
                             if should_advance:
@@ -1111,7 +1205,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         else:
                             should_advance = True
 
-                        if should_advance:
+                        if (not cavebot_finished) and should_advance:
                             decision = step_navigator.decide()
 
                         # Only mark as "committed" when assistant confirm mode is on and the user advanced.
@@ -1133,7 +1227,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             cavebot_waypoint = wp.name or f"({wp.x},{wp.y})"
                             cavebot_action = wp.action or ""
 
-                        if decision.direction:
+                        if not cavebot_finished and decision.direction:
                             cavebot_next = f"{decision.direction}"
                         elif decision.reached_waypoint and decision.waypoint is not None:
                             wp = decision.waypoint
@@ -1149,6 +1243,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             cavebot_step_idx = int(getattr(step_navigator, "idx", 0) or 0)
                         except Exception:
                             cavebot_step_idx = 0
+                        try:
+                            if cavebot_step_total > 0:
+                                cavebot_step_idx = min(max(0, int(cavebot_step_idx)), cavebot_step_total - 1)
+                        except Exception:
+                            pass
                         try:
                             if cavebot_step_total > 0:
                                 j = cavebot_step_idx + 1
@@ -1299,6 +1398,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Build mock action requests (for logging/replay) without doing real inputs.
             action_req_str = ""
             action_committed = False
+            input_plan_str = ""
             try:
                 reqs = []
 
@@ -1349,6 +1449,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     action_req_str = ";".join(
                         f"{r.kind}:{r.value}{'*' if getattr(r, 'note', '') == 'committed' else ''}" for r in reqs
                     )
+
+                    # LOG-ONLY planned input sequence (no injection).
+                    try:
+                        from action.input_planner import InputPlanner, format_plan
+
+                        planner = InputPlanner()
+                        input_plan_str = format_plan(planner.plan_many(reqs))
+                    except Exception:
+                        input_plan_str = ""
+
                     if mock_driver is not None:
                         for r in reqs:
                             try:
@@ -1358,10 +1468,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 action_req_str = ""
                 action_committed = False
+                input_plan_str = ""
 
             # Publish latest action snapshot for overlay/replay correlation.
             try:
-                _a_set(action_req_str, bool(action_committed))
+                _a_set(action_req_str, bool(action_committed), input_plan_str)
             except Exception:
                 pass
 
@@ -1534,6 +1645,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         low_hp=sig.low_hp,
                         low_mp=sig.low_mp,
                         low_cap=low_cap,
+                        potions_remaining=potions_remaining,
+                        potions_min=int(potions_min_threshold) if potions_stop_enabled else None,
+                        low_potions=low_potions,
                         paralyzed=sig.paralyzed,
                         haste_active=sig.haste_active,
                         utamo_active=sig.utamo_active,
@@ -1546,8 +1660,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cavebot_step_idx=cavebot_step_idx,
                         cavebot_step_next_idx=cavebot_step_next_idx,
                         cavebot_step_total=cavebot_step_total,
+                        cavebot_finished=cavebot_finished,
+                        cavebot_finish_reason=cavebot_finish_reason,
                         action_request=action_req_str,
                         action_committed=action_committed,
+                        input_plan=input_plan_str,
                         note=note_out if note_out else None,
                         stuck_reason=stuck_reason_tick,
                         stuck_idle_s=stuck_idle_s_tick,
@@ -1601,7 +1718,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         ):
                             ats = None
                             try:
-                                _ar, _ac, _ats = _a_snapshot()
+                                _ar, _ac, _ats, _ip = _a_snapshot()
                                 if _ats:
                                     ats = float(_ats)
                             except Exception:
@@ -1612,6 +1729,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     "action_request": action_req_str,
                                     "action_committed": bool(action_committed),
                                     "action_ts": ats,
+                                    "input_plan": input_plan_str,
                                 },
                             )
                             last_event_action_req = action_req_str
@@ -1711,9 +1829,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "stuck_extra": getattr(tel, "stuck_extra", ""),
                     }
                     try:
-                        ar, _ac, ats = _a_snapshot()
+                        ar, _ac, ats, ip = _a_snapshot()
                         if ar and ats:
                             tel_event["action_ts"] = float(ats)
+                        if ip:
+                            tel_event["input_plan"] = str(ip)
                     except Exception:
                         pass
                 else:
@@ -1770,9 +1890,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "stuck_extra": stuck_extra_tick,
                     }
                     try:
-                        ar, _ac, ats = _a_snapshot()
+                        ar, _ac, ats, ip = _a_snapshot()
                         if ar and ats:
                             tel_event["action_ts"] = float(ats)
+                        if ip:
+                            tel_event["input_plan"] = str(ip)
                     except Exception:
                         pass
 

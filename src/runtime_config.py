@@ -91,6 +91,10 @@ class TelemetrySnapshot:
     low_hp: bool | None = None
     low_mp: bool | None = None
     low_cap: bool | None = None
+    # Supplies (manual/operator-fed, assistant-only)
+    potions_remaining: int | None = None
+    potions_min: int | None = None
+    low_potions: bool | None = None
     paralyzed: bool | None = None
     haste_active: bool | None = None
     utamo_active: bool | None = None
@@ -103,9 +107,14 @@ class TelemetrySnapshot:
     cavebot_step_idx: int | None = None
     cavebot_step_next_idx: int | None = None
     cavebot_step_total: int | None = None
+    # Cavebot termination / stop state (assistant-only)
+    cavebot_finished: bool | None = None
+    cavebot_finish_reason: str = ""  # e.g. "ROUTE_END|LOW_CAP|LOW_POTIONS"
     # What the bot would do (assistant mode): serialized mock action(s)
     action_request: str = ""
     action_committed: bool = False
+    # Log-only: planned inputs (keys/hotkeys/macros) derived from ActionRequest(s)
+    input_plan: str = ""
     # Texto amigable opcional
     note: str = ""
     # Diagnóstico estructurado (sin inputs)
@@ -163,6 +172,8 @@ class RuntimeConfig:
     health: HealthSnapshot = field(default_factory=HealthSnapshot)
     _advance_counter: int = field(default=0, init=False, repr=False)
     _replay_force_counter: int = field(default=0, init=False, repr=False)
+    _step_jump_counter: int = field(default=0, init=False, repr=False)
+    _step_jump_index: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def snapshot(self) -> tuple[HealingConfig, CavebotConfig]:
@@ -220,6 +231,9 @@ class RuntimeConfig:
                 low_hp=self.telemetry.low_hp,
                 low_mp=self.telemetry.low_mp,
                 low_cap=self.telemetry.low_cap,
+                potions_remaining=getattr(self.telemetry, "potions_remaining", None),
+                potions_min=getattr(self.telemetry, "potions_min", None),
+                low_potions=getattr(self.telemetry, "low_potions", None),
                 paralyzed=self.telemetry.paralyzed,
                 haste_active=self.telemetry.haste_active,
                 utamo_active=self.telemetry.utamo_active,
@@ -232,8 +246,11 @@ class RuntimeConfig:
                 cavebot_step_idx=getattr(self.telemetry, "cavebot_step_idx", None),
                 cavebot_step_next_idx=getattr(self.telemetry, "cavebot_step_next_idx", None),
                 cavebot_step_total=getattr(self.telemetry, "cavebot_step_total", None),
+                cavebot_finished=getattr(self.telemetry, "cavebot_finished", None),
+                cavebot_finish_reason=str(getattr(self.telemetry, "cavebot_finish_reason", "")),
                 action_request=str(self.telemetry.action_request),
                 action_committed=bool(self.telemetry.action_committed),
+                input_plan=str(getattr(self.telemetry, "input_plan", "")),
                 note=str(self.telemetry.note),
                 stuck_reason=str(getattr(self.telemetry, "stuck_reason", "")),
                 stuck_idle_s=getattr(self.telemetry, "stuck_idle_s", None),
@@ -378,6 +395,24 @@ class RuntimeConfig:
         with self._lock:
             return int(self._advance_counter)
 
+    def request_step_jump(self, idx: int) -> int:
+        """Solicita saltar el StepNavigator a un índice específico.
+
+        Nota: esto solo mueve el puntero/preview del cavebot (only-logs). No ejecuta inputs.
+        """
+        with self._lock:
+            try:
+                self._step_jump_index = max(0, int(idx))
+            except Exception:
+                self._step_jump_index = 0
+            self._step_jump_counter += 1
+            return int(self._step_jump_counter)
+
+    def step_jump_snapshot(self) -> tuple[int, int]:
+        """Devuelve (counter, index) para detectar cambios cross-thread."""
+        with self._lock:
+            return (int(self._step_jump_counter), int(self._step_jump_index))
+
     def request_replay_snapshot(self) -> int:
         """Solicita forzar un snapshot de replay en el próximo frame disponible."""
         with self._lock:
@@ -432,6 +467,9 @@ class RuntimeConfig:
         low_hp: bool | None = None,
         low_mp: bool | None = None,
         low_cap: bool | None = None,
+        potions_remaining: int | None = None,
+        potions_min: int | None = None,
+        low_potions: bool | None = None,
         paralyzed: bool | None = None,
         haste_active: bool | None = None,
         utamo_active: bool | None = None,
@@ -444,8 +482,11 @@ class RuntimeConfig:
         cavebot_step_idx: int | None = None,
         cavebot_step_next_idx: int | None = None,
         cavebot_step_total: int | None = None,
+        cavebot_finished: bool | None = None,
+        cavebot_finish_reason: str | None = None,
         action_request: str | None = None,
         action_committed: bool | None = None,
+        input_plan: str | None = None,
         note: str | None = None,
         stuck_reason: str | None = None,
         stuck_idle_s: float | None = None,
@@ -530,6 +571,18 @@ class RuntimeConfig:
                 self.telemetry.low_mp = bool(low_mp)
             if low_cap is not None:
                 self.telemetry.low_cap = bool(low_cap)
+            if potions_remaining is not None:
+                try:
+                    self.telemetry.potions_remaining = int(potions_remaining)
+                except Exception:
+                    self.telemetry.potions_remaining = None
+            if potions_min is not None:
+                try:
+                    self.telemetry.potions_min = int(potions_min)
+                except Exception:
+                    self.telemetry.potions_min = None
+            if low_potions is not None:
+                self.telemetry.low_potions = bool(low_potions)
             if paralyzed is not None:
                 self.telemetry.paralyzed = bool(paralyzed)
             if haste_active is not None:
@@ -563,10 +616,16 @@ class RuntimeConfig:
                     self.telemetry.cavebot_step_total = int(cavebot_step_total)
                 except Exception:
                     self.telemetry.cavebot_step_total = None
+            if cavebot_finished is not None:
+                self.telemetry.cavebot_finished = bool(cavebot_finished)
+            if cavebot_finish_reason is not None:
+                self.telemetry.cavebot_finish_reason = str(cavebot_finish_reason)
             if action_request is not None:
                 self.telemetry.action_request = str(action_request)
             if action_committed is not None:
                 self.telemetry.action_committed = bool(action_committed)
+            if input_plan is not None:
+                self.telemetry.input_plan = str(input_plan)
             if note is not None:
                 self.telemetry.note = str(note)
             if stuck_reason is not None:
