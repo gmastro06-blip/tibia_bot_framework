@@ -5,3 +5,13 @@ thresholds:
 indexing:
   len_tolerance: 3
   first_letter: true
+
+# Optional rules (used only when BESTIARY_ENABLED=1)
+rules:
+  # Map noisy labels -> canonical registry keys
+  # Example: "orc berserker": "orc_berserker"
+  aliases: {}
+  # Ignore these creatures entirely (canonical keys)
+  ignore: []
+  # If TARGET_PRIORITY_CLASSES is empty, these become the priority order
+  priority: []

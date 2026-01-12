@@ -32,6 +32,20 @@ En PowerShell:
 ./scripts/profile_no_coords_steps.ps1
 ```
 
+## Quick start (overlay debug) 🧪
+
+Para generar frames anotados en `logs/debug_overlay/` con ROIs y diagnósticos:
+
+```powershell
+./scripts/profile_overlay_debug.ps1 -Monitor 2
+```
+
+Opcional (cambiar lista de ROIs y frecuencia):
+
+```powershell
+./scripts/profile_overlay_debug.ps1 -Monitor 2 -Rois 'coords_ocr,minimap_content,hp_low_bar,mp_low_bar' -IntervalS 0.5 -TilePx 32
+```
+
 ## Tests (regresión)
 
 Ejecuta la suite de tests para validar que no se pierde funcionalidad clave (config runtime, selección de ROIs, etc.):
@@ -52,6 +66,70 @@ La UI incluye pestañas:
 - **Control**: iniciar/parar
 - **Healing**: configuración básica (se aplica en tiempo real)
 - **Cavebot**: configuración básica (se aplica en tiempo real)
+
+### UI settings (persistencia)
+
+La UI guarda/recupera tu configuración en `configs/ui_settings.json`.
+
+- Se guarda automáticamente al pulsar **Iniciar** (y también con **Guardar UI**).
+- Puedes cambiar la ubicación con `UI_SETTINGS_FILE` (ruta relativa al repo o absoluta).
+
+Ejemplos:
+
+```powershell
+$env:UI_SETTINGS_FILE = 'configs/ui_settings.my_profile.json'
+poetry run python run_bot_ui.py
+```
+
+La pestaña **Configuración** incluye presets rápidos:
+- **Preset (replay/log)**: `Off`, `Debug`, `Soak`, `Soak Full` (este último también habilita Overlay con `Full HUD`).
+- **Overlay Preset**: `Minimal`, `Debug HUD`, `Full HUD`.
+
+Nota: el preset **Soak Full** escribe por defecto en:
+- `logs/replay_soak/`
+- `logs/debug_overlay_soak/`
+
+Además, al pulsar **Iniciar** con preset `Soak`/`Soak Full`, la UI crea automáticamente un subdirectorio por sesión:
+- `logs/replay_soak/YYYYMMDD_HHMMSS/`
+- `logs/debug_overlay_soak/YYYYMMDD_HHMMSS/`
+- `logs/telemetry_soak_YYYYMMDD_HHMMSS.jsonl`
+
+La UI también incluye botones para abrir rápidamente el último soak:
+- **Abrir último soak** (carpetas replay + overlay)
+- **Abrir JSONL soak**
+- **Abrir TODO soak**
+- **Soak timeline (HTML)** (genera y abre el reporte)
+- **Abrir timeline**
+Y muestra el `Soak run_id` actual cuando aplica.
+
+### Soak timeline report (HTML)
+
+Si tienes outputs de soak (o `logs/telemetry.jsonl` + replay/overlay), puedes generar un HTML con una tabla timeline que enlaza cada fila del JSONL con el replay JSON y el overlay PNG más cercano en tiempo:
+
+```powershell
+poetry run python tools/soak_timeline_report.py
+```
+
+Por defecto auto-elige el último `logs/replay_soak/*`, `logs/debug_overlay_soak/*` y `logs/telemetry_soak_*.jsonl` (y si no, cae a `logs/replay/`, `logs/debug_overlay/`, `logs/telemetry.jsonl`). Output: `logs/soak_timeline.html`.
+
+Filtros útiles:
+
+```powershell
+# Solo commits (acciones confirmadas)
+poetry run python tools/soak_timeline_report.py --only-committed
+
+# Solo eventos relacionados con acciones
+poetry run python tools/soak_timeline_report.py --only-action-events
+
+# Buscar una acción por substring (case-insensitive)
+poetry run python tools/soak_timeline_report.py --grep-action "move:west"
+```
+
+Atajo PowerShell (genera + abre):
+
+```powershell
+scripts/open_soak_timeline.ps1 -OnlyActionEvents
+```
 
 ## Cavebot routes (record + validate)
 
@@ -190,6 +268,23 @@ $env:COORDS_FILE='logs/coords_minimap.json'
 
 Si quieres cavebot sin coords, usa `CAVEBOT_MODE=steps`.
 
+## Behavior Tree (assistant-only)
+
+La capa de decisión puede planificar acciones usando un Behavior Tree (lib `py-trees`).
+
+- No inyecta inputs: solo genera `ActionRequest` (preview/committed) para logging/UI.
+- Se puede desactivar si quieres volver al planner inline.
+
+Env vars:
+
+```powershell
+# Habilitar (default)
+$env:BT_ENABLED='1'
+
+# Deshabilitar
+$env:BT_ENABLED='0'
+```
+
 ### Fuente externa simple (clipboard -> `COORDS_FILE`)
 
 Si tu cliente no muestra coords en pantalla, una opción práctica es alimentar coords desde afuera y que el bot las lea con `COORDS_PROVIDER=file`.
@@ -291,6 +386,15 @@ poetry run python -u -m tools.smoke_run_bot_real --seconds 60 --enable-overlay -
 
 ### Run recomendado (detached + logs, 10 min)
 
+Alternativa rápida (script):
+
+```powershell
+./scripts/profile_soak_debug.ps1 -Monitor 2 -Seconds 600 -CaptureFps 10
+
+# Para habilitar Roboflow durante el soak:
+./scripts/profile_soak_debug.ps1 -Monitor 2 -Seconds 600 -CaptureFps 10 -Roboflow enabled
+```
+
 En PowerShell es más robusto lanzarlo como proceso separado (evita Ctrl+C accidental y problemas de encoding al pipear a archivo):
 
 ```powershell
@@ -333,6 +437,17 @@ Outputs esperados durante el soak:
 - `logs/debug_overlay/` (frames anotados si `--enable-overlay`)
 - `logs/replay/` (snapshots ROI+JSON si `--enable-replay`)
 - `logs/telemetry.jsonl` (telemetría + eventos si `--enable-jsonl`)
+
+Overlay (frames anotados) incluye:
+- Caja del `game_viewport` + grilla de tiles (si `OVERLAY_TILE_GRID=1`)
+- Boxes de Roboflow (si existen)
+- ROIs dibujadas (lista configurable con `OVERLAY_ROIS`)
+- Líneas de diagnóstico (ROI offset, viewport auto, minimap debug, coords_provider)
+
+Knobs útiles:
+- `OVERLAY_ROIS='coords_ocr,minimap_content,hp_low_bar,mp_low_bar'` (CSV)
+- `OVERLAY_TILE_PX='32'` (o `TIBIA_TILE_PX`)
+- `OVERLAY_INTERVAL_S='1.0'`
 
 ## Captura de pantalla (multi-monitor)
 

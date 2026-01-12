@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import importlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,6 +33,26 @@ def load_route(path: str) -> List[Waypoint]:
     """
     p = Path(path)
     data = json.loads(p.read_text(encoding="utf-8"))
+
+    # Optional schema validation (helps catch typos early).
+    # Opt-out: ROUTE_SCHEMA_VALIDATE=0
+    try:
+        validate_enabled = (os.getenv("ROUTE_SCHEMA_VALIDATE", "1") or "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        if validate_enabled:
+            js = importlib.import_module("jsonschema")
+            validate = getattr(js, "validate", None)
+            if callable(validate):
+                schema_path = Path(__file__).resolve().parents[2] / "configs" / "schemas" / "route.schema.json"
+                if schema_path.is_file():
+                    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+                    validate(instance=data, schema=schema)
+    except Exception:
+        pass
+
     if not isinstance(data, list):
         raise ValueError("route.json must be a list")
 

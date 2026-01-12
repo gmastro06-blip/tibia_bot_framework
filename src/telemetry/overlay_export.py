@@ -54,6 +54,8 @@ class OverlayExporter:
         boxes: Optional[Sequence[Dict[str, Any]]] = None,
         blocked_offsets: Optional[Sequence[Tuple[int, int]]] = None,
         target_label: str = "",
+        info_lines: Optional[Sequence[str]] = None,
+        roi_rects: Optional[Sequence[Tuple[str, Tuple[int, int, int, int]]]] = None,
     ) -> None:
         if not self.cfg.enabled:
             return
@@ -68,6 +70,18 @@ class OverlayExporter:
             return
 
         img = frame_bgr.copy()
+
+        def draw_label(text: str, *, x: int, y: int, fg=(255, 255, 255), bg=(0, 0, 0)) -> None:
+            try:
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                scale = 0.55
+                thickness = 2
+                (tw, th), _ = cv2.getTextSize(str(text), font, scale, thickness)
+                pad = 4
+                cv2.rectangle(img, (x - pad, y - th - pad), (x + tw + pad, y + pad), bg, -1)
+                cv2.putText(img, str(text), (x, y), font, scale, fg, thickness)
+            except Exception:
+                pass
 
         if viewport_rect is not None:
             x, y, w, h = viewport_rect
@@ -159,22 +173,60 @@ class OverlayExporter:
                 except Exception:
                     pass
 
-        # Draw blocked offsets sample
-        if blocked_offsets:
-            try:
-                sample = list(blocked_offsets)[:12]
-                cv2.putText(
-                    img,
-                    f"blocked={len(blocked_offsets)} sample={sample}",
-                    (10, 24),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 255),
-                    2,
-                )
-            except Exception:
-                pass
+        # Draw ROI rectangles (optional, provided by caller).
+        if roi_rects:
+            for name, rect in roi_rects:
+                try:
+                    x, y, w, h = rect
+                    x0 = int(x)
+                    y0 = int(y)
+                    x1 = int(x + w)
+                    y1 = int(y + h)
+                    cv2.rectangle(img, (x0, y0), (x1, y1), (255, 0, 255), 2)
+                    cv2.putText(
+                        img,
+                        str(name),
+                        (x0 + 3, max(0, y0 - 6)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55,
+                        (255, 0, 255),
+                        2,
+                    )
+                except Exception:
+                    continue
 
+        # Stacked info lines (keeps overlay readable and avoids overlap).
+        try:
+            lines: List[str] = []
+            if info_lines:
+                for s in info_lines:
+                    try:
+                        ss = str(s)
+                        if ss:
+                            lines.append(ss)
+                    except Exception:
+                        continue
+
+            if target_label:
+                lines.append(f"target: {target_label}")
+
+            if blocked_offsets:
+                sample = list(blocked_offsets)[:12]
+                lines.append(f"blocked={len(blocked_offsets)} sample={sample}")
+
+            if viewport_rect is not None and self.cfg.tile_px > 0:
+                x, y, w, h = viewport_rect
+                lines.append(f"tile_px={int(self.cfg.tile_px)} viewport=({int(x)},{int(y)},{int(w)},{int(h)})")
+
+            yy = 22
+            for s in lines[:12]:
+                draw_label(s, x=10, y=yy)
+                yy += 22
+        except Exception:
+            pass
+
+        # Draw blocked offsets in the viewport grid.
+        if blocked_offsets:
             # Draw blocked offsets in the viewport grid.
             try:
                 if viewport_rect is not None and self.cfg.tile_px > 0:
@@ -190,12 +242,6 @@ class OverlayExporter:
                         if px < x0 or px > x1 or py < y0 or py > y1:
                             continue
                         cv2.circle(img, (px, py), max(2, tile // 6), (0, 0, 255), -1)
-            except Exception:
-                pass
-
-        if target_label:
-            try:
-                cv2.putText(img, f"target: {target_label}", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
             except Exception:
                 pass
 

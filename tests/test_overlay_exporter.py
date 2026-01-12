@@ -35,6 +35,8 @@ def test_overlay_exporter_writes_png_when_enabled(tmp_path: Path) -> None:
         boxes=[{"x": 32, "y": 32, "width": 10, "height": 12, "class": "orc", "confidence": 0.9}],
         blocked_offsets=[(1, 0), (0, 1)],
         target_label="orc",
+        info_lines=["roi_offset_px=(0.0,0.0)", "coords_provider=disabled"],
+        roi_rects=[("coords_ocr", (1, 2, 10, 8)), ("minimap_content", (20, 2, 12, 12))],
     )
 
     pngs = list(out_dir.glob("*.png"))

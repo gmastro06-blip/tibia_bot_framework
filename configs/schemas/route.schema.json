@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tibia bot route",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "x": {"type": ["integer", "string", "null"]},
+      "y": {"type": ["integer", "string", "null"]},
+      "z": {"type": ["integer", "string", "null"]},
+      "name": {"type": ["string", "null"]},
+      "action": {"type": ["string", "null"]},
+      "label": {"type": ["string", "null"]},
+      "call": {"type": ["string", "null"]},
+      "load": {"type": ["string", "null"]},
+      "conditional_jump": {"type": ["object", "null"]},
+      "type": {"type": ["string", "null"]},
+      "comment": {"type": ["string", "null"]},
+      "raw_line": {"type": ["string", "null"]}
+    }
+  }
+}

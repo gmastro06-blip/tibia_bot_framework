@@ -211,6 +211,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             return
         except Exception:
             pass
+
         if drop_key:
             _h_inc(drop_key)
         try:
@@ -221,6 +222,35 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             q.put_nowait(item)
         except Exception:
             pass
+
+    # Cross-thread correlation: latest planned/committed ActionRequest summary.
+    # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
+    action_lock = threading.Lock()
+    action_state: dict[str, float | str | bool] = {
+        "ts": 0.0,
+        "action_request": "",
+        "action_committed": False,
+    }
+
+    def _a_set(action_request: str, action_committed: bool) -> None:
+        try:
+            with action_lock:
+                action_state["ts"] = float(time.time())
+                action_state["action_request"] = str(action_request or "")
+                action_state["action_committed"] = bool(action_committed)
+        except Exception:
+            pass
+
+    def _a_snapshot() -> tuple[str, bool, float]:
+        try:
+            with action_lock:
+                return (
+                    str(action_state.get("action_request", "") or ""),
+                    bool(action_state.get("action_committed", False)),
+                    float(action_state.get("ts", 0.0) or 0.0),
+                )
+        except Exception:
+            return "", False, 0.0
 
     # Inicializar componentes
     # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
@@ -459,6 +489,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         else:
                             tel_payload = {}
 
+                        # Always attach latest action request for end-to-end correlation.
+                        try:
+                            ar, ac, ats = _a_snapshot()
+                            if ar:
+                                tel_payload["action_request"] = ar
+                                tel_payload["action_committed"] = bool(ac)
+                                tel_payload["action_ts"] = float(ats)
+                        except Exception:
+                            pass
+
                         payload = {
                             "ts": time.time(),
                             "resolution": list(resolution),
@@ -509,12 +549,122 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         target_label = ""
 
+                    # Extra overlay diagnostics (optional, env-controlled).
+                    info_lines: list[str] = []
+                    roi_rects: list[tuple[str, tuple[int, int, int, int]]] = []
+                    try:
+                        # ROIs to draw (comma-separated). Defaults are safe + useful.
+                        raw = (os.getenv("OVERLAY_ROIS", "") or "").strip()
+                        if raw:
+                            roi_names = [s.strip() for s in raw.split(",") if s.strip()]
+                        else:
+                            roi_names = [
+                                "coords_ocr",
+                                "minimap_content",
+                                "hp_top_ocr",
+                                "mp_top_ocr",
+                                "hp_low_bar",
+                                "mp_low_bar",
+                                "states_icons",
+                                "equipment_slots",
+                                "battlelist_rows",
+                            ]
+
+                        if isinstance(rois, dict) and resolution is not None:
+                            for name in roi_names:
+                                if name not in rois:
+                                    continue
+                                try:
+                                    rx, ry, rw, rh = gamestate_builder.ocr_processor._roi_to_px(
+                                        frame, rois, resolution, rois[name]
+                                    )
+                                    roi_rects.append((str(name), (int(rx), int(ry), int(rw), int(rh))))
+                                except Exception:
+                                    continue
+                    except Exception:
+                        roi_rects = []
+
+                    try:
+                        if isinstance(rois, dict):
+                            off = rois.get("_roi_offset_px")
+                            score = rois.get("_roi_offset_score")
+                            if isinstance(off, (list, tuple)) and len(off) >= 2:
+                                try:
+                                    s_score = "" if score is None else f" score={float(score):.3f}"
+                                except Exception:
+                                    s_score = ""
+                                info_lines.append(
+                                    f"roi_offset_px=({float(off[0]):.1f},{float(off[1]):.1f}){s_score}"
+                                )
+
+                            vauto = rois.get("_viewport_auto")
+                            if isinstance(vauto, dict):
+                                method = str(vauto.get("method", ""))
+                                frozen = bool(vauto.get("frozen", False))
+                                conf = vauto.get("confidence", None)
+                                try:
+                                    conf_s = "" if conf is None else f" conf={float(conf):.2f}"
+                                except Exception:
+                                    conf_s = ""
+                                info_lines.append(f"viewport_auto={method}{conf_s} frozen={int(frozen)}")
+                    except Exception:
+                        pass
+
+                    # Minimap debug from GameState (if present).
+                    try:
+                        mm_mode = getattr(gamestate, "minimap_mode_used", None)
+                        mm_resp = getattr(gamestate, "minimap_response", None)
+                        mm_dx = getattr(gamestate, "minimap_delta_dx", None)
+                        mm_dy = getattr(gamestate, "minimap_delta_dy", None)
+                        mm_ax = getattr(gamestate, "minimap_acc_dx", None)
+                        mm_ay = getattr(gamestate, "minimap_acc_dy", None)
+                        if any(v is not None for v in [mm_mode, mm_resp, mm_dx, mm_dy, mm_ax, mm_ay]):
+                            try:
+                                info_lines.append(
+                                    "minimap "
+                                    f"mode={mm_mode or ''} "
+                                    f"resp={'' if mm_resp is None else f'{float(mm_resp):.2f}'} "
+                                    f"d=({'' if mm_dx is None else f'{float(mm_dx):.2f}'},{'' if mm_dy is None else f'{float(mm_dy):.2f}'}) "
+                                    f"acc=({'' if mm_ax is None else f'{float(mm_ax):.1f}'},{'' if mm_ay is None else f'{float(mm_ay):.1f}'})"
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    # Coords/provider snapshot.
+                    try:
+                        cp = getattr(gamestate, "coords_provider", None)
+                        gx = getattr(gamestate, "pos_x", None)
+                        gy = getattr(gamestate, "pos_y", None)
+                        gz = getattr(gamestate, "pos_z", None)
+                        pos_s = ""
+                        if gx is not None and gy is not None:
+                            pos_s = f" pos=({int(gx)},{int(gy)}" + (f",{int(gz)}" if gz is not None else "") + ")"
+                        if cp or pos_s:
+                            info_lines.append(f"coords_provider={cp or ''}{pos_s}")
+                    except Exception:
+                        pass
+
+                    # Action correlation (planned vs committed), from decision thread.
+                    try:
+                        ar, ac, _ats = _a_snapshot()
+                        if ar:
+                            s = str(ar)
+                            if len(s) > 160:
+                                s = s[:157] + "..."
+                            info_lines.append(f"action={'*' if bool(ac) else ''}{s}")
+                    except Exception:
+                        pass
+
                     overlay.maybe_export(
                         frame,
                         viewport_rect=viewport_rect,
                         boxes=boxes,
                         blocked_offsets=blocked,
                         target_label=target_label,
+                        info_lines=info_lines,
+                        roi_rects=roi_rects,
                     )
                 except Exception:
                     pass
@@ -654,6 +804,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             ActionRequest = None  # type: ignore[assignment]
             mock_driver = None
+
+        # Optional BehaviorTree planner (assistant-only). Defaults ON but is fail-safe.
+        bt_runner = None
+        try:
+            from decision.behavior_tree import BehaviorTreeRunner
+
+            if BehaviorTreeRunner.enabled_from_env():
+                bt_runner = BehaviorTreeRunner()
+        except Exception:
+            bt_runner = None
 
         # Periodic maintenance (assistant mode) e.g. eat food.
         try:
@@ -1141,30 +1301,48 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             action_committed = False
             try:
                 reqs = []
-                if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
-                    act = (healing_cfg.action or "").strip() or "heal"
-                    if ActionRequest is not None:
-                        reqs.append(ActionRequest(kind="heal", value=act, note="preview"))
 
-                if cavebot_next in {"north", "south", "east", "west"}:
-                    note = "committed" if commit_flag else "preview"
-                    if ActionRequest is not None:
-                        reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
-
-                # Waypoint 'action' string can request loot/tools/trade/etc.
+                eat_food_now = False
                 try:
-                    if cavebot_action:
-                        reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
+                    eat_food_now = bool(food_trigger.interval_s > 0.0 and food_trigger.should_fire())
                 except Exception:
-                    pass
+                    eat_food_now = False
 
-                # Periodic maintenance: eat food.
-                try:
-                    if food_trigger.interval_s > 0.0 and food_trigger.should_fire():
+                if bt_runner is not None and ActionRequest is not None:
+                    reqs = bt_runner.tick(
+                        sig=sig,
+                        healing_cfg=healing_cfg,
+                        cavebot_next=cavebot_next,
+                        cavebot_action=cavebot_action,
+                        commit_flag=bool(commit_flag),
+                        eat_food=bool(eat_food_now),
+                    )
+                else:
+                    # Fallback: inline planner.
+                    if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
+                        act = (healing_cfg.action or "").strip() or "heal"
                         if ActionRequest is not None:
-                            reqs.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
-                except Exception:
-                    pass
+                            reqs.append(ActionRequest(kind="heal", value=act, note="preview"))
+
+                    if cavebot_next in {"north", "south", "east", "west"}:
+                        note = "committed" if commit_flag else "preview"
+                        if ActionRequest is not None:
+                            reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
+
+                    # Waypoint 'action' string can request loot/tools/trade/etc.
+                    try:
+                        if cavebot_action:
+                            reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
+                    except Exception:
+                        pass
+
+                    # Periodic maintenance: eat food.
+                    try:
+                        if eat_food_now:
+                            if ActionRequest is not None:
+                                reqs.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
+                    except Exception:
+                        pass
 
                 if reqs:
                     action_committed = any(getattr(r, "note", "") == "committed" for r in reqs)
@@ -1180,6 +1358,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 action_req_str = ""
                 action_committed = False
+
+            # Publish latest action snapshot for overlay/replay correlation.
+            try:
+                _a_set(action_req_str, bool(action_committed))
+            except Exception:
+                pass
 
             # Anti-stuck diagnosis (no action): infer probable cause and publish as a note.
             try:
@@ -1415,9 +1599,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             or last_event_action_committed is None
                             or action_committed != last_event_action_committed
                         ):
+                            ats = None
+                            try:
+                                _ar, _ac, _ats = _a_snapshot()
+                                if _ats:
+                                    ats = float(_ats)
+                            except Exception:
+                                ats = None
                             emit(
                                 "event.action_request",
-                                {"action_request": action_req_str, "action_committed": bool(action_committed)},
+                                {
+                                    "action_request": action_req_str,
+                                    "action_committed": bool(action_committed),
+                                    "action_ts": ats,
+                                },
                             )
                             last_event_action_req = action_req_str
                             last_event_action_committed = bool(action_committed)
@@ -1508,12 +1703,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_step_total": getattr(tel, "cavebot_step_total", None),
                         "action_request": getattr(tel, "action_request", ""),
                         "action_committed": bool(getattr(tel, "action_committed", False)),
+                        "action_ts": None,
                         "note": tel.note,
                         "stuck_reason": getattr(tel, "stuck_reason", ""),
                         "stuck_idle_s": getattr(tel, "stuck_idle_s", None),
                         "stuck_blockers": getattr(tel, "stuck_blockers", None),
                         "stuck_extra": getattr(tel, "stuck_extra", ""),
                     }
+                    try:
+                        ar, _ac, ats = _a_snapshot()
+                        if ar and ats:
+                            tel_event["action_ts"] = float(ats)
+                    except Exception:
+                        pass
                 else:
                     log_enabled = bool(log_enabled_env)
                     log_interval_ms = int(log_interval_ms_env)
@@ -1560,12 +1762,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_step_total": cavebot_step_total,
                         "action_request": action_req_str,
                         "action_committed": bool(action_committed),
+                        "action_ts": None,
                         "note": "",
                         "stuck_reason": stuck_reason_tick,
                         "stuck_idle_s": stuck_idle_s_tick,
                         "stuck_blockers": stuck_blockers_tick,
                         "stuck_extra": stuck_extra_tick,
                     }
+                    try:
+                        ar, _ac, ats = _a_snapshot()
+                        if ar and ats:
+                            tel_event["action_ts"] = float(ats)
+                    except Exception:
+                        pass
 
                 if log_enabled and jsonl.should_log(enabled=log_enabled, interval_ms=log_interval_ms):
                     _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, tel_event)))

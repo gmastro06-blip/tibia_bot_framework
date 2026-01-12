@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import threading
@@ -44,9 +45,16 @@ class BotUI:
         self._stop_event: threading.Event | None = None
         self._thread: threading.Thread | None = None
 
+        # Soak session tracking (UI-only, helps opening the latest artifacts).
+        self._last_soak_run_id: str | None = None
+        self.soak_run_id_var = None
+
         self.root = tk.Tk()
         self.root.title("Tibia Bot Framework")
         self.root.resizable(False, False)
+
+        # Soak run id (requires a root window)
+        self.soak_run_id_var = tk.StringVar(master=self.root, value="-")
 
         # Estado general
         self.status_var = tk.StringVar(value="Detenido")
@@ -144,8 +152,44 @@ class BotUI:
         self.log_interval_ms = tk.IntVar(value=250)
         self.log_out_file = tk.StringVar(value=self._config.logging_snapshot().out_file)
 
+        # Overlay exporter (env-based; applied at bot start)
+        self.overlay_enabled = tk.BooleanVar(
+            value=os.getenv("OVERLAY_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+        )
+        try:
+            _overlay_interval_default = float(os.getenv("OVERLAY_INTERVAL_S", "1.0").strip() or "1.0")
+        except Exception:
+            _overlay_interval_default = 1.0
+        self.overlay_interval_s = tk.DoubleVar(value=max(0.1, float(_overlay_interval_default)))
+        self.overlay_out_dir = tk.StringVar(
+            value=os.getenv("OVERLAY_OUT_DIR", "logs/debug_overlay").strip() or "logs/debug_overlay"
+        )
+        self.overlay_tile_grid = tk.BooleanVar(
+            value=os.getenv("OVERLAY_TILE_GRID", "1").strip().lower() not in {"0", "false", "no"}
+        )
+        try:
+            _tile_raw = os.getenv("OVERLAY_TILE_PX", "").strip() or os.getenv("TIBIA_TILE_PX", "32").strip() or "32"
+            _tile_default = int(float(_tile_raw))
+        except Exception:
+            _tile_default = 32
+        self.overlay_tile_px = tk.IntVar(value=max(4, min(128, int(_tile_default))))
+        self.overlay_rois = tk.StringVar(
+            value=os.getenv(
+                "OVERLAY_ROIS",
+                "coords_ocr,minimap_content,hp_top_ocr,mp_top_ocr,hp_low_bar,mp_low_bar,states_icons,equipment_slots,battlelist_rows",
+            ).strip()
+        )
+        self.overlay_preset = tk.StringVar(value="Custom")
+        self.telemetry_preset = tk.StringVar(value="Custom")
+
         # ROI config override (applied at bot start via env var)
         self.rois_config_override = tk.StringVar(value=os.getenv("ROIS_CONFIG", "").strip())
+
+        # UI settings persistence (best-effort): load last overlay settings.
+        try:
+            self._load_ui_settings()
+        except Exception:
+            pass
 
         # Telemetría (solo lectura, viene del loop)
         self.hp_text = tk.StringVar(value="?")
@@ -961,7 +1005,22 @@ class BotUI:
             row=14, column=2, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_config, text="").grid(row=17, column=0)  # separador simple
+        # Presets for replay/jsonl
+        tk.Label(tab_config, text="Preset (replay/log)").grid(row=17, column=0, sticky="w")
+        tel_presets = ["Custom", "Off", "Debug", "Soak", "Soak Full"]
+        ttk.Combobox(
+            tab_config,
+            textvariable=self.telemetry_preset,
+            values=tel_presets,
+            width=16,
+            state="readonly",
+        ).grid(row=17, column=1, sticky="w")
+        tk.Button(
+            tab_config,
+            text="Aplicar",
+            width=12,
+            command=lambda: self._apply_telemetry_preset(str(self.telemetry_preset.get())),
+        ).grid(row=17, column=2, sticky="w", padx=(8, 0))
 
         tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
             row=18, column=0, columnspan=2, sticky="w", pady=(10, 0)
@@ -1028,6 +1087,304 @@ class BotUI:
             tab_config,
             text="(0 desactiva. Se aplica al iniciar el bot; requiere reinicio)",
         ).grid(row=26, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+        # --- Overlay exporter (env-based) ---
+        tk.Label(tab_config, text="").grid(row=27, column=0)  # separador simple
+        tk.Label(tab_config, text="Overlay (frames anotados)").grid(
+            row=28, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        )
+
+        tk.Label(tab_config, text="Preset").grid(row=29, column=0, sticky="w", pady=(6, 0))
+        overlay_presets = ["Custom", "Minimal", "Debug HUD", "Full HUD"]
+        ttk.Combobox(
+            tab_config,
+            textvariable=self.overlay_preset,
+            values=overlay_presets,
+            width=16,
+            state="readonly",
+        ).grid(row=29, column=1, sticky="w", pady=(6, 0))
+
+        tk.Button(
+            tab_config,
+            text="Aplicar",
+            width=12,
+            command=lambda: self._apply_overlay_preset(str(self.overlay_preset.get())),
+        ).grid(row=29, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+
+        tk.Checkbutton(tab_config, text="Habilitar overlay", variable=self.overlay_enabled).grid(
+            row=30, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_config, text="Cargar UI", width=12, command=self._load_ui_settings).grid(
+            row=30, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_config, text="Guardar UI", width=12, command=self._save_ui_settings).grid(
+            row=30, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Overlay out_dir").grid(row=31, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(tab_config, textvariable=self.overlay_out_dir, width=34).grid(
+            row=31, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def open_overlay_dir() -> None:
+            try:
+                p = str(self.overlay_out_dir.get()).strip() or "logs/debug_overlay"
+                os.makedirs(p, exist_ok=True)
+                os.startfile(os.path.abspath(p))
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
+            row=31, column=2, sticky="w", padx=(8, 0)
+        )
+
+        tk.Label(tab_config, text="Interval (s)").grid(row=32, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(
+            tab_config,
+            from_=0.1,
+            to=60.0,
+            increment=0.1,
+            textvariable=self.overlay_interval_s,
+            width=8,
+        ).grid(row=32, column=1, sticky="w", pady=(6, 0))
+
+        tk.Checkbutton(tab_config, text="Tile grid", variable=self.overlay_tile_grid).grid(
+            row=33, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        tk.Label(tab_config, text="Tile px").grid(row=34, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_config, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
+            row=34, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="OVERLAY_ROIS (CSV)").grid(row=35, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(tab_config, textvariable=self.overlay_rois, width=34).grid(
+            row=35, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(
+            tab_config,
+            text="(Se aplica al iniciar el bot; requiere reinicio)",
+        ).grid(row=36, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+        def open_ui_settings_file() -> None:
+            try:
+                p = self._ui_settings_path()
+                try:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+                if not p.exists():
+                    try:
+                        self._save_ui_settings()
+                    except Exception:
+                        pass
+                os.startfile(os.path.abspath(str(p)))
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Reset defaults", width=18, command=self._reset_ui_defaults).grid(
+            row=37, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_config, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
+            row=37, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def open_latest_soak() -> None:
+            try:
+                # Prefer last run id (same UI session), otherwise find newest on disk.
+                rid = self._last_soak_run_id
+                replay_base = "logs/replay_soak"
+                overlay_base = "logs/debug_overlay_soak"
+                replay_dir = None
+                overlay_dir = None
+                if rid:
+                    replay_dir = Path(replay_base) / rid
+                    overlay_dir = Path(overlay_base) / rid
+                if replay_dir is None or not replay_dir.exists():
+                    replay_dir = self._find_latest_soak_dir(replay_base)
+                if overlay_dir is None or not overlay_dir.exists():
+                    overlay_dir = self._find_latest_soak_dir(overlay_base)
+
+                # Open whatever exists.
+                if replay_dir is not None and replay_dir.exists():
+                    os.startfile(os.path.abspath(str(replay_dir)))
+                if overlay_dir is not None and overlay_dir.exists():
+                    os.startfile(os.path.abspath(str(overlay_dir)))
+            except Exception:
+                pass
+
+        def open_latest_soak_jsonl() -> None:
+            try:
+                p = None
+                rid = self._last_soak_run_id
+                if rid:
+                    cand = Path("logs") / f"telemetry_soak_{rid}.jsonl"
+                    if cand.exists():
+                        p = cand
+                if p is None:
+                    p = self._find_latest_soak_jsonl()
+                if p is None:
+                    return
+                os.startfile(os.path.abspath(str(p)))
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Abrir último soak", width=18, command=open_latest_soak).grid(
+            row=38, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_config, text="Abrir JSONL soak", width=18, command=open_latest_soak_jsonl).grid(
+            row=38, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def open_latest_soak_all() -> None:
+            try:
+                open_latest_soak()
+                open_latest_soak_jsonl()
+            except Exception:
+                pass
+
+        tk.Button(tab_config, text="Abrir TODO soak", width=18, command=open_latest_soak_all).grid(
+            row=38, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        tk.Label(tab_config, text="Soak run_id:").grid(row=39, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_config, textvariable=self.soak_run_id_var, width=22, anchor="w").grid(
+            row=39, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def _resolve_latest_soak_inputs() -> tuple[Path | None, Path | None, Path | None, str | None]:
+            """Best-effort resolution of latest soak artifacts.
+
+            Prefers the current UI session run_id, otherwise the newest on disk.
+            """
+
+            rid = self._last_soak_run_id
+
+            replay_dir = None
+            overlay_dir = None
+            jsonl_path = None
+
+            try:
+                if rid:
+                    cand = Path("logs") / "replay_soak" / str(rid)
+                    if cand.exists():
+                        replay_dir = cand
+            except Exception:
+                replay_dir = None
+
+            try:
+                if rid:
+                    cand = Path("logs") / "debug_overlay_soak" / str(rid)
+                    if cand.exists():
+                        overlay_dir = cand
+            except Exception:
+                overlay_dir = None
+
+            try:
+                if rid:
+                    cand = Path("logs") / f"telemetry_soak_{rid}.jsonl"
+                    if cand.exists():
+                        jsonl_path = cand
+            except Exception:
+                jsonl_path = None
+
+            if replay_dir is None:
+                replay_dir = self._find_latest_soak_dir("logs/replay_soak")
+            if overlay_dir is None:
+                overlay_dir = self._find_latest_soak_dir("logs/debug_overlay_soak")
+            if jsonl_path is None:
+                jsonl_path = self._find_latest_soak_jsonl()
+
+            # Fallbacks to non-soak locations.
+            if replay_dir is None:
+                replay_dir = Path("logs") / "replay"
+            if overlay_dir is None:
+                overlay_dir = Path("logs") / "debug_overlay"
+            if jsonl_path is None:
+                jsonl_path = Path("logs") / "telemetry.jsonl"
+
+            return replay_dir, overlay_dir, jsonl_path, rid
+
+        def _timeline_default_out(rid: str | None) -> Path:
+            try:
+                if rid:
+                    return Path("logs") / f"soak_timeline_{rid}.html"
+            except Exception:
+                pass
+            return Path("logs") / "soak_timeline.html"
+
+        def open_soak_timeline_html() -> None:
+            try:
+                replay_dir, overlay_dir, jsonl_path, rid = _resolve_latest_soak_inputs()
+                out_html = _timeline_default_out(rid)
+                if not out_html.exists():
+                    return
+                os.startfile(os.path.abspath(str(out_html)))
+            except Exception:
+                pass
+
+        def generate_soak_timeline_html() -> None:
+            """Generate timeline HTML for the latest soak and open it."""
+            try:
+                replay_dir, overlay_dir, jsonl_path, rid = _resolve_latest_soak_inputs()
+                out_html = _timeline_default_out(rid)
+
+                # Ensure output dir exists.
+                try:
+                    out_html.parent.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+
+                cmd = [
+                    sys.executable,
+                    str(self._repo_root / "tools" / "soak_timeline_report.py"),
+                    "--jsonl",
+                    str(jsonl_path),
+                    "--replay-dir",
+                    str(replay_dir),
+                    "--overlay-dir",
+                    str(overlay_dir),
+                    "--out",
+                    str(out_html),
+                ]
+
+                p = subprocess.run(
+                    cmd,
+                    cwd=str(self._repo_root),
+                    capture_output=True,
+                    text=True,
+                )
+
+                if p.returncode != 0:
+                    msg = (p.stderr or p.stdout or "(sin output)").strip()
+                    if len(msg) > 1500:
+                        msg = msg[:1500] + "..."
+                    try:
+                        self._messagebox.showerror(
+                            "Timeline HTML",
+                            f"Falló generación (code={p.returncode}).\n\n{msg}",
+                        )
+                    except Exception:
+                        pass
+                    return
+
+                # Open result.
+                try:
+                    os.startfile(os.path.abspath(str(out_html)))
+                except Exception:
+                    pass
+            except Exception as e:
+                try:
+                    self._messagebox.showerror("Timeline HTML", f"Error: {e}")
+                except Exception:
+                    pass
+
+        tk.Button(tab_config, text="Soak timeline (HTML)", width=18, command=generate_soak_timeline_html).grid(
+            row=40, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(tab_config, text="Abrir timeline", width=18, command=open_soak_timeline_html).grid(
+            row=40, column=1, sticky="w", pady=(6, 0)
+        )
 
         # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
@@ -1719,9 +2076,478 @@ class BotUI:
     def _is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    def _ui_settings_path(self) -> Path:
+        """Return the JSON path used to persist UI settings.
+
+        Controlled by env var UI_SETTINGS_FILE; defaults to configs/ui_settings.json.
+        Relative paths are resolved from repo root.
+        """
+
+        raw = (os.getenv("UI_SETTINGS_FILE", "") or "").strip()
+        if not raw:
+            return self._repo_root / "configs" / "ui_settings.json"
+        p = Path(raw)
+        if not p.is_absolute():
+            p = self._repo_root / p
+        return p
+
+    def _load_ui_settings(self) -> None:
+        p = self._ui_settings_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if not isinstance(data, dict):
+            return
+
+        ov = data.get("overlay")
+        if isinstance(ov, dict):
+            try:
+                if "enabled" in ov:
+                    self.overlay_enabled.set(bool(ov.get("enabled")))
+                if "out_dir" in ov:
+                    self.overlay_out_dir.set(str(ov.get("out_dir") or "logs/debug_overlay"))
+                if "interval_s" in ov:
+                    self.overlay_interval_s.set(max(0.1, float(ov.get("interval_s") or 1.0)))
+                if "tile_grid" in ov:
+                    self.overlay_tile_grid.set(bool(ov.get("tile_grid")))
+                if "tile_px" in ov:
+                    self.overlay_tile_px.set(max(4, min(128, int(float(ov.get("tile_px") or 32)))))
+                if "rois" in ov:
+                    self.overlay_rois.set(str(ov.get("rois") or ""))
+            except Exception:
+                pass
+
+        # RuntimeConfig-backed settings
+        try:
+            h = data.get("healing")
+            if isinstance(h, dict):
+                if "enabled" in h:
+                    self.healing_enabled.set(bool(h.get("enabled")))
+                if "hp_below_pct" in h:
+                    self.heal_hp_below_pct.set(int(float(h.get("hp_below_pct") or 0)))
+                if "mp_below_pct" in h:
+                    self.heal_mp_below_pct.set(int(float(h.get("mp_below_pct") or 0)))
+                if "action" in h:
+                    self.heal_action.set(str(h.get("action") or ""))
+        except Exception:
+            pass
+
+        try:
+            cb = data.get("cavebot")
+            if isinstance(cb, dict):
+                if "enabled" in cb:
+                    self.cavebot_enabled.set(bool(cb.get("enabled")))
+                if "route_path" in cb:
+                    self.cavebot_route_path.set(str(cb.get("route_path") or "configs/route.json"))
+        except Exception:
+            pass
+
+        try:
+            s = data.get("simulation")
+            if isinstance(s, dict):
+                if "enabled" in s:
+                    self.sim_enabled.set(bool(s.get("enabled")))
+                if "paralyzed" in s:
+                    self.sim_paralyzed.set(bool(s.get("paralyzed")))
+                if "haste_active" in s:
+                    self.sim_haste_active.set(bool(s.get("haste_active")))
+                if "utamo_active" in s:
+                    self.sim_utamo_active.set(bool(s.get("utamo_active")))
+                if "hungry" in s:
+                    self.sim_hungry.set(bool(s.get("hungry")))
+        except Exception:
+            pass
+
+        try:
+            a = data.get("assistant")
+            if isinstance(a, dict):
+                if "enabled" in a:
+                    self.asst_enabled.set(bool(a.get("enabled")))
+                if "confirm_actions" in a:
+                    self.asst_confirm.set(bool(a.get("confirm_actions")))
+                if "sound_alerts" in a:
+                    self.asst_sound.set(bool(a.get("sound_alerts")))
+        except Exception:
+            pass
+
+        try:
+            r = data.get("replay")
+            if isinstance(r, dict):
+                if "enabled" in r:
+                    self.replay_enabled.set(bool(r.get("enabled")))
+                if "interval_ms" in r:
+                    self.replay_interval_ms.set(int(float(r.get("interval_ms") or 0)))
+                if "out_dir" in r:
+                    self.replay_out_dir.set(str(r.get("out_dir") or self.replay_out_dir.get()))
+        except Exception:
+            pass
+
+        try:
+            lg = data.get("logging")
+            if isinstance(lg, dict):
+                if "enabled" in lg:
+                    self.log_enabled.set(bool(lg.get("enabled")))
+                if "interval_ms" in lg:
+                    self.log_interval_ms.set(int(float(lg.get("interval_ms") or 0)))
+                if "out_file" in lg:
+                    self.log_out_file.set(str(lg.get("out_file") or self.log_out_file.get()))
+        except Exception:
+            pass
+
+        # Env-backed per-run settings
+        try:
+            idle = data.get("idle")
+            if isinstance(idle, dict):
+                if "alert_s" in idle:
+                    self.idle_alert_s.set(max(0.0, float(idle.get("alert_s") or 0.0)))
+                if "repeat_s" in idle:
+                    self.idle_repeat_s.set(max(1.0, float(idle.get("repeat_s") or 10.0)))
+                if "ui_fail_s" in idle:
+                    self.ui_idle_fail_s.set(max(0.0, float(idle.get("ui_fail_s") or 0.0)))
+        except Exception:
+            pass
+
+        try:
+            ro = data.get("rois")
+            if isinstance(ro, dict):
+                if "config_override" in ro:
+                    self.rois_config_override.set(str(ro.get("config_override") or ""))
+        except Exception:
+            pass
+
+        try:
+            preset = data.get("overlay_preset")
+            if isinstance(preset, str) and preset:
+                self.overlay_preset.set(preset)
+        except Exception:
+            pass
+
+        try:
+            tp = data.get("telemetry_preset")
+            if isinstance(tp, str) and tp:
+                self.telemetry_preset.set(tp)
+        except Exception:
+            pass
+
+    def _save_ui_settings(self) -> None:
+        p = self._ui_settings_path()
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        try:
+            payload = {
+                "version": 1,
+                "overlay_preset": str(self.overlay_preset.get()),
+                "telemetry_preset": str(self.telemetry_preset.get()),
+                "overlay": {
+                    "enabled": bool(self.overlay_enabled.get()),
+                    "out_dir": str(self.overlay_out_dir.get()).strip() or "logs/debug_overlay",
+                    "interval_s": float(self.overlay_interval_s.get()),
+                    "tile_grid": bool(self.overlay_tile_grid.get()),
+                    "tile_px": int(self.overlay_tile_px.get()),
+                    "rois": str(self.overlay_rois.get()).strip(),
+                },
+                "healing": {
+                    "enabled": bool(self.healing_enabled.get()),
+                    "hp_below_pct": int(self.heal_hp_below_pct.get()),
+                    "mp_below_pct": int(self.heal_mp_below_pct.get()),
+                    "action": str(self.heal_action.get()),
+                },
+                "cavebot": {
+                    "enabled": bool(self.cavebot_enabled.get()),
+                    "route_path": str(self.cavebot_route_path.get()),
+                },
+                "simulation": {
+                    "enabled": bool(self.sim_enabled.get()),
+                    "paralyzed": bool(self.sim_paralyzed.get()),
+                    "haste_active": bool(self.sim_haste_active.get()),
+                    "utamo_active": bool(self.sim_utamo_active.get()),
+                    "hungry": bool(self.sim_hungry.get()),
+                },
+                "assistant": {
+                    "enabled": bool(self.asst_enabled.get()),
+                    "confirm_actions": bool(self.asst_confirm.get()),
+                    "sound_alerts": bool(self.asst_sound.get()),
+                },
+                "replay": {
+                    "enabled": bool(self.replay_enabled.get()),
+                    "interval_ms": int(self.replay_interval_ms.get()),
+                    "out_dir": str(self.replay_out_dir.get()),
+                },
+                "logging": {
+                    "enabled": bool(self.log_enabled.get()),
+                    "interval_ms": int(self.log_interval_ms.get()),
+                    "out_file": str(self.log_out_file.get()),
+                },
+                "idle": {
+                    "alert_s": float(self.idle_alert_s.get()),
+                    "repeat_s": float(self.idle_repeat_s.get()),
+                    "ui_fail_s": float(self.ui_idle_fail_s.get()),
+                },
+                "rois": {
+                    "config_override": str(self.rois_config_override.get()).strip(),
+                },
+            }
+        except Exception:
+            return
+
+        try:
+            p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _apply_overlay_preset(self, name: str) -> None:
+        n = (name or "").strip().lower()
+        try:
+            if n in {"custom", ""}:
+                return
+
+            if n in {"minimal"}:
+                self.overlay_enabled.set(True)
+                self.overlay_interval_s.set(1.0)
+                self.overlay_out_dir.set("logs/debug_overlay")
+                self.overlay_tile_grid.set(False)
+                self.overlay_tile_px.set(32)
+                self.overlay_rois.set("")
+                return
+
+            if n in {"debug hud", "debug"}:
+                self.overlay_enabled.set(True)
+                self.overlay_interval_s.set(1.0)
+                self.overlay_out_dir.set("logs/debug_overlay")
+                self.overlay_tile_grid.set(True)
+                self.overlay_tile_px.set(32)
+                self.overlay_rois.set(
+                    "coords_ocr,minimap_content,hp_top_ocr,mp_top_ocr,hp_low_bar,mp_low_bar,states_icons,equipment_slots,battlelist_rows"
+                )
+                return
+
+            if n in {"full hud", "full"}:
+                self.overlay_enabled.set(True)
+                self.overlay_interval_s.set(0.5)
+                self.overlay_out_dir.set("logs/debug_overlay")
+                self.overlay_tile_grid.set(True)
+                self.overlay_tile_px.set(32)
+                self.overlay_rois.set(
+                    "coords_ocr,minimap_content,hpmp_top_strip,hp_top_ocr,mp_top_ocr,hpmp_low_panel,hp_low_bar,mp_low_bar,states_icons,equipment_slots,skills_panel,right_hud_panel,battlelist_rows,chat_panel"
+                )
+                return
+        except Exception:
+            pass
+
+    def _apply_telemetry_preset(self, name: str) -> None:
+        n = (name or "").strip().lower()
+        try:
+            if n in {"custom", ""}:
+                return
+
+            if n in {"off", "disabled"}:
+                self.replay_enabled.set(False)
+                self.log_enabled.set(False)
+                return
+
+            if n in {"debug"}:
+                self.replay_enabled.set(True)
+                self.replay_interval_ms.set(2000)
+                self.replay_out_dir.set("logs/replay")
+                self.log_enabled.set(True)
+                self.log_interval_ms.set(250)
+                self.log_out_file.set("logs/telemetry.jsonl")
+                return
+
+            if n in {"soak", "soak run"}:
+                self.replay_enabled.set(True)
+                self.replay_interval_ms.set(1500)
+                self.replay_out_dir.set("logs/replay")
+                self.log_enabled.set(True)
+                self.log_interval_ms.set(250)
+                self.log_out_file.set("logs/telemetry.jsonl")
+                return
+
+            if n in {"soak full", "soak_full", "soakfull"}:
+                # Full soak = replay+jsonl + overlay configured.
+                self.replay_enabled.set(True)
+                self.replay_interval_ms.set(1500)
+                self.replay_out_dir.set("logs/replay_soak")
+                self.log_enabled.set(True)
+                self.log_interval_ms.set(250)
+                self.log_out_file.set("logs/telemetry.jsonl")
+                try:
+                    self.overlay_preset.set("Full HUD")
+                    self._apply_overlay_preset("Full HUD")
+                    # Keep soak overlay separate to simplify debugging.
+                    self.overlay_out_dir.set("logs/debug_overlay_soak")
+                    self.overlay_interval_s.set(0.5)
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
+
+    def _reset_ui_defaults(self) -> None:
+        # Best-effort reset; keep it conservative.
+        try:
+            # Healing
+            self.healing_enabled.set(False)
+            self.heal_hp_below_pct.set(70)
+            self.heal_mp_below_pct.set(30)
+            self.heal_action.set("")
+        except Exception:
+            pass
+
+    def _find_latest_soak_dir(self, base_dir: str) -> Path | None:
+        """Return the newest YYYYMMDD_HHMMSS subdir under base_dir, if any."""
+        try:
+            base = Path(base_dir)
+            if not base.exists() or not base.is_dir():
+                return None
+            dirs = [p for p in base.iterdir() if p.is_dir()]
+            if not dirs:
+                return None
+            # Prefer lexicographic order: timestamp format sorts correctly.
+            dirs.sort(key=lambda p: p.name)
+            return dirs[-1]
+        except Exception:
+            return None
+
+    def _find_latest_soak_jsonl(self) -> Path | None:
+        try:
+            logs_dir = Path("logs")
+            if not logs_dir.exists() or not logs_dir.is_dir():
+                return None
+            files = [p for p in logs_dir.glob("telemetry_soak_*.jsonl") if p.is_file()]
+            if not files:
+                return None
+            files.sort(key=lambda p: p.name)
+            return files[-1]
+        except Exception:
+            return None
+
+        try:
+            # Cavebot
+            self.cavebot_enabled.set(False)
+            self.cavebot_route_path.set("configs/route.json")
+        except Exception:
+            pass
+
+        try:
+            # Simulation
+            self.sim_enabled.set(True)
+            self.sim_paralyzed.set(False)
+            self.sim_haste_active.set(False)
+            self.sim_utamo_active.set(False)
+            self.sim_hungry.set(False)
+        except Exception:
+            pass
+
+        try:
+            # Assistant
+            self.asst_enabled.set(True)
+            self.asst_confirm.set(True)
+            self.asst_sound.set(True)
+        except Exception:
+            pass
+
+        try:
+            # Replay/Logging
+            self.telemetry_preset.set("Custom")
+            self.replay_enabled.set(False)
+            self.replay_interval_ms.set(2000)
+            self.replay_out_dir.set(self._config.replay_snapshot().out_dir)
+            self.log_enabled.set(False)
+            self.log_interval_ms.set(250)
+            self.log_out_file.set(self._config.logging_snapshot().out_file)
+        except Exception:
+            pass
+
+        try:
+            # Idle
+            self.idle_alert_s.set(0.0)
+            self.idle_repeat_s.set(10.0)
+            self.ui_idle_fail_s.set(0.0)
+        except Exception:
+            pass
+
+        try:
+            # ROIs override
+            self.rois_config_override.set("")
+        except Exception:
+            pass
+
+        try:
+            # Overlay
+            self.overlay_preset.set("Custom")
+            self.overlay_enabled.set(False)
+            self.overlay_interval_s.set(1.0)
+            self.overlay_out_dir.set("logs/debug_overlay")
+            self.overlay_tile_grid.set(True)
+            self.overlay_tile_px.set(32)
+            self.overlay_rois.set(
+                "coords_ocr,minimap_content,hp_top_ocr,mp_top_ocr,hp_low_bar,mp_low_bar,states_icons,equipment_slots,battlelist_rows"
+            )
+        except Exception:
+            pass
+
     def start(self) -> None:
         if self._is_running():
             return
+
+        # If running a soak preset, isolate outputs per session.
+        try:
+            tel_preset = str(getattr(self, "telemetry_preset", None).get()).strip().lower()  # type: ignore[union-attr]
+        except Exception:
+            tel_preset = ""
+        if tel_preset in {"soak", "soak run", "soak full", "soak_full", "soakfull"}:
+            try:
+                run_id = time.strftime("%Y%m%d_%H%M%S")
+                try:
+                    self._last_soak_run_id = str(run_id)
+                except Exception:
+                    self._last_soak_run_id = None
+                try:
+                    if self.soak_run_id_var is not None:
+                        self.soak_run_id_var.set(str(run_id))
+                except Exception:
+                    pass
+
+                # Replay dir
+                try:
+                    base = str(self.replay_out_dir.get()).strip() or "logs/replay_soak"
+                    self.replay_out_dir.set(str(Path(base) / run_id))
+                except Exception:
+                    pass
+
+                # Overlay dir
+                try:
+                    base = str(self.overlay_out_dir.get()).strip() or "logs/debug_overlay_soak"
+                    self.overlay_out_dir.set(str(Path(base) / run_id))
+                except Exception:
+                    pass
+
+                # JSONL file (unique per run)
+                try:
+                    # Keep logs under logs/ by default.
+                    self.log_out_file.set(str(Path("logs") / f"telemetry_soak_{run_id}.jsonl"))
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            # Not a soak run.
+            try:
+                self._last_soak_run_id = None
+            except Exception:
+                pass
+            try:
+                if self.soak_run_id_var is not None:
+                    self.soak_run_id_var.set("-")
+            except Exception:
+                pass
 
         # Reset UI idle tracking for this run.
         self._reset_idle_ui()
@@ -1768,6 +2594,61 @@ class BotUI:
                 os.environ["UI_IDLE_FAIL_S"] = str(idle_fail)
             else:
                 os.environ.pop("UI_IDLE_FAIL_S", None)
+        except Exception:
+            pass
+
+        # Apply overlay exporter settings for this bot run (used by src/main.py overlay exporter).
+        try:
+            ov_enabled = bool(self.overlay_enabled.get())
+        except Exception:
+            ov_enabled = False
+        try:
+            ov_out_dir = str(self.overlay_out_dir.get()).strip() or "logs/debug_overlay"
+        except Exception:
+            ov_out_dir = "logs/debug_overlay"
+        try:
+            ov_interval_s = float(self.overlay_interval_s.get())
+        except Exception:
+            ov_interval_s = 1.0
+        try:
+            ov_tile_grid = bool(self.overlay_tile_grid.get())
+        except Exception:
+            ov_tile_grid = False
+        try:
+            ov_tile_px = int(float(self.overlay_tile_px.get()))
+        except Exception:
+            ov_tile_px = 32
+        try:
+            ov_rois = str(self.overlay_rois.get()).strip()
+        except Exception:
+            ov_rois = ""
+
+        try:
+            if ov_enabled:
+                os.environ["OVERLAY_ENABLED"] = "1"
+                os.environ["OVERLAY_OUT_DIR"] = str(ov_out_dir)
+                os.environ["OVERLAY_INTERVAL_S"] = str(max(0.1, float(ov_interval_s)))
+                if ov_tile_grid:
+                    os.environ["OVERLAY_TILE_PX"] = str(max(4, int(ov_tile_px)))
+                else:
+                    os.environ.pop("OVERLAY_TILE_PX", None)
+
+                if ov_rois:
+                    os.environ["OVERLAY_ROIS"] = ov_rois
+                else:
+                    os.environ.pop("OVERLAY_ROIS", None)
+            else:
+                os.environ.pop("OVERLAY_ENABLED", None)
+                os.environ.pop("OVERLAY_OUT_DIR", None)
+                os.environ.pop("OVERLAY_INTERVAL_S", None)
+                os.environ.pop("OVERLAY_TILE_PX", None)
+                os.environ.pop("OVERLAY_ROIS", None)
+        except Exception:
+            pass
+
+        # Persist UI settings (best-effort) so the next UI open restores them.
+        try:
+            self._save_ui_settings()
         except Exception:
             pass
 

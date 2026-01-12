@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from math import sqrt
 from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
+from pathlib import Path
+
 
 @dataclass(frozen=True)
 class Target:
@@ -72,13 +74,67 @@ class TargetSelector:
         )
         self.ignore = { _norm_label(x) for x in (p.strip() for p in ignore_raw.split(",")) if x }
 
+        # Optional: canonicalize detector labels using BestiaryMatcher.
+        # Default OFF to preserve existing behavior.
+        self._bestiary = None
+        try:
+            enabled = (os.getenv("BESTIARY_ENABLED", "") or "").strip().lower() in {"1", "true", "yes"}
+            if enabled:
+                from bestiary.matcher import BestiaryMatcher
+
+                repo_root = Path(__file__).resolve().parents[2]
+                reg_path = (os.getenv("BESTIARY_REGISTRY_PATH", "") or "").strip() or str(
+                    repo_root / "data" / "creatures_registry.json"
+                )
+                cfg_path = (os.getenv("BESTIARY_CONFIG_PATH", "") or "").strip() or str(
+                    repo_root / "configs" / "bestiary_match.yaml"
+                )
+                corr_path = (os.getenv("BESTIARY_OCR_CORRECTIONS_PATH", "") or "").strip() or str(
+                    repo_root / "configs" / "ocr_corrections.json"
+                )
+                self._bestiary = BestiaryMatcher.from_files(
+                    registry_path=reg_path,
+                    config_path=cfg_path,
+                    ocr_corrections_path=corr_path,
+                )
+
+                # Merge ignore rules into detector ignore list.
+                try:
+                    if getattr(self._bestiary, "rules", None) is not None:
+                        for k in getattr(self._bestiary.rules, "ignore", []) or []:
+                            self.ignore.add(_norm_label(str(k)))
+                except Exception:
+                    pass
+
+                # If no explicit TARGET_PRIORITY_CLASSES were set, adopt bestiary priority.
+                try:
+                    if not self.priority and getattr(self._bestiary, "rules", None) is not None:
+                        pr = getattr(self._bestiary.rules, "priority", None)
+                        if pr:
+                            self.priority = tuple(_norm_label(str(x)) for x in pr if str(x).strip())
+                except Exception:
+                    pass
+        except Exception:
+            self._bestiary = None
+
     def _iter_targets(self, boxes: Iterable[Dict[str, Any]]) -> Iterable[Target]:
         for b in boxes:
             if not isinstance(b, dict):
                 continue
-            cls = _norm_label(str(b.get("class", "")))
+            raw_cls = str(b.get("class", ""))
+            cls = _norm_label(raw_cls)
             if not cls or cls in self.ignore:
                 continue
+
+            # If bestiary canonicalization is enabled and we get a confident, non-ambiguous
+            # match, replace the class with the canonical name_key.
+            try:
+                if self._bestiary is not None:
+                    canon = self._bestiary.canonicalize(raw_cls)
+                    if canon:
+                        cls = _norm_label(canon)
+            except Exception:
+                pass
             conf = _safe_float(b.get("confidence", 0.0), 0.0)
             if conf < self.min_conf:
                 continue
