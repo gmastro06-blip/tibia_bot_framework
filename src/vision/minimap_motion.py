@@ -277,7 +277,7 @@ class MinimapMotionTracker:
                     y1 = min(int(h), vy + r + 1)
                     patch_v = hsv[y0:y1, x0:x1, 2]
                     if patch_v is not None and getattr(patch_v, "size", 0) > 0:
-                        if float(np.std(patch_v)) < std_min:
+                        if float(np.std(patch_v.astype(np.float32, copy=False))) < std_min:
                             continue
             except Exception:
                 pass

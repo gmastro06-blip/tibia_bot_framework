@@ -348,9 +348,9 @@ def main() -> None:
     # Fallback: plain sequential compare in sorted order (works for arbitrary PNG names).
     print(f"n={len(paths)}")
 
-    prev_img: np.ndarray | None = None
-    prev_name = ""
-    prev_shape: tuple[int, ...] | None = None
+    prev_img_seq: np.ndarray | None = None
+    prev_name_seq = ""
+    prev_shape_seq: tuple[int, ...] | None = None
     for idx, path in enumerate(paths):
         img = _read_image(path)
         shape = tuple(int(x) for x in img.shape)
@@ -358,26 +358,28 @@ def main() -> None:
             md5 = _md5(path)
             print(f"{path.name} md5={md5} shape={shape}")
 
-        if prev_img is None:
-            prev_img = img
-            prev_name = path.name
-            prev_shape = shape
+        if prev_img_seq is None:
+            prev_img_seq = img
+            prev_name_seq = path.name
+            prev_shape_seq = shape
             continue
 
-        mad, sx, sy, resp = _compare_pair(prev_img, img)
-        h, w = _common_hw(prev_img, img)
+        mad, sx, sy, resp = _compare_pair(prev_img_seq, img)
+        h, w = _common_hw(prev_img_seq, img)
         if not (mad == mad):
-            print(f"diff[{idx:02d}] SKIP incompatible shapes prev={prev_shape} cur={shape} ({prev_name} -> {path.name})")
+            print(
+                f"diff[{idx:02d}] SKIP incompatible shapes prev={prev_shape_seq} cur={shape} ({prev_name_seq} -> {path.name})"
+            )
         else:
-            note = "" if prev_shape == shape else f" (cropped {prev_shape} vs {shape} -> {h}x{w})"
+            note = "" if prev_shape_seq == shape else f" (cropped {prev_shape_seq} vs {shape} -> {h}x{w})"
             if args.show and args.show > 0:
                 print(
                     f"diff[{idx:02d}] mean_abs_diff={float(mad):.6f} phase_shift=({float(sx):.3f},{float(sy):.3f}) resp={float(resp):.6f}{note}"
                 )
 
-        prev_img = img
-        prev_name = path.name
-        prev_shape = shape
+        prev_img_seq = img
+        prev_name_seq = path.name
+        prev_shape_seq = shape
 
 
 if __name__ == "__main__":

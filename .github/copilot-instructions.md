@@ -38,7 +38,7 @@ poetry run mypy src/
 ## Key Conventions
 
 ### Import Patterns
-- Use `TYPE_CHECKING` imports to avoid circular dependencies (see [action/executor.py](../src/action/executor.py), [telemetry/replay.py](../src/telemetry/replay.py))
+- Use `TYPE_CHECKING` imports to avoid circular dependencies (see [decision/signals.py](../src/decision/signals.py), [telemetry/replay.py](../src/telemetry/replay.py))
 - Type hints use `Union[cv2.Mat, np.ndarray]` for OpenCV compatibility
 
 ### GameState Construction
@@ -72,9 +72,8 @@ mask_red = cv2.bitwise_or(mask_low, mask_high)
 - Return `SUCCESS`/`FAILURE`/`RUNNING` to control tree traversal
 
 ### Action Execution
-- `ActionExecutor` queues `(callable, confirm_signals, timeout, retries)` tuples
-- Cooldowns stored per `action.__name__` to prevent spam (src/action/executor.py#L23)
-- Confirmation signals are lambdas: `lambda old_gs, new_gs: new_gs.hp_cur > old_gs.hp_cur`
+- Assistant-first design: no real input injection.
+- Record intended actions as `ActionRequest` objects (see [action/input_driver.py](../src/action/input_driver.py))
 
 ### Safety & Telemetry
 - `SafetyManager.watchdog(threads)` blocks main thread, kills process on critical failure
