@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "overlay_preset": "Custom",
+  "telemetry_preset": "Custom",
+  "overlay": {
+    "enabled": false,
+    "out_dir": "logs/debug_overlay",
+    "interval_s": 1.0,
+    "tile_grid": true,
+    "tile_px": 32,
+    "rois": "coords_ocr,minimap_content,hp_top_ocr,mp_top_ocr,hp_low_bar,mp_low_bar,states_icons,equipment_slots,battlelist_rows"
+  },
+  "healing": {
+    "enabled": false,
+    "hp_below_pct": 70,
+    "hp_recover_pct": 80,
+    "mp_below_pct": 30,
+    "mp_recover_pct": 50,
+    "action": "",
+    "hp_action": "",
+    "mp_action": "",
+    "cooldown_s": 1.0
+  },
+  "cavebot": {
+    "enabled": false,
+    "route_path": "configs/route.json",
+    "mode": "steps",
+    "coords_provider": "disabled",
+    "loop": true,
+    "stop_on_low_cap": true,
+    "cap_threshold": 50,
+    "stop_on_low_potions": false,
+    "potions_remaining": 0,
+    "potions_min": 0,
+    "recovery_enabled": true,
+    "recovery_idle_s": 0.0,
+    "recovery_max_attempts": 4,
+    "recovery_stop_on_fail": false
+  },
+  "simulation": {
+    "enabled": true,
+    "paralyzed": true,
+    "haste_active": true,
+    "utamo_active": true,
+    "hungry": true
+  },
+  "assistant": {
+    "enabled": true,
+    "confirm_actions": true,
+    "sound_alerts": true
+  },
+  "replay": {
+    "enabled": false,
+    "interval_ms": 2000,
+    "out_dir": "logs/replay"
+  },
+  "logging": {
+    "enabled": false,
+    "interval_ms": 250,
+    "out_file": "logs/telemetry.jsonl"
+  },
+  "idle": {
+    "alert_s": 0.0,
+    "repeat_s": 10.0,
+    "ui_fail_s": 0.0
+  },
+  "rois": {
+    "config_override": ""
+  }
+}

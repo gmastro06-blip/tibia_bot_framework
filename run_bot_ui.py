@@ -1,17 +1,17 @@
 from __future__ import annotations
-        try:
-            self.heal_action.set(str(h.get("action", "")))
-            self.heal_hp_action.set(str(h.get("hp_action", "")))
-            self.heal_mp_action.set(str(h.get("mp_action", "")))
-        except Exception:
-            self.heal_action.set("")
-            self.heal_hp_action.set("")
-            self.heal_mp_action.set("")
 
-        try:
-            self.heal_cooldown_s.set(float(h.get("cooldown_s", 1.0)))
-        except Exception:
-            self.heal_cooldown_s.set(1.0)
+import json
+import os
+import sys
+import threading
+import time
+import subprocess
+from pathlib import Path
+from typing import Literal
+
+
+def _add_src_to_syspath() -> None:
+    repo_root = Path(__file__).resolve().parent
     src_dir = repo_root / "src"
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
@@ -32,7 +32,7 @@ class BotUI:
             from tkinter import messagebox
             from tkinter import ttk
         except Exception as e:
-            raise SystemExit(f"Tkinter no está disponible en este entorno: {e}")
+            raise SystemExit(f"Tkinter no esta disponible en este entorno: {e}")
 
         self._tk = tk
         self._messagebox = messagebox
@@ -96,8 +96,9 @@ class BotUI:
         self._route_items: list[dict] = []
         self._route_loaded_from: str = ""
         self._route_current_index: int | None = None
+        self._cavebot_follow_ui: bool = False
 
-        # Últimos resultados de sanity-check (persisten en UI)
+        # Ultimos resultados de sanity-check (persisten en UI)
         self.last_roi_summary_var = tk.StringVar(value="-")
         self.last_roi_dir_var = tk.StringVar(value="-")
         self.last_ocr_summary_var = tk.StringVar(value="-")
@@ -107,7 +108,7 @@ class BotUI:
         self.last_anchor_summary_var = tk.StringVar(value="-")
         self.last_anchor_dir_var = tk.StringVar(value="-")
 
-        # Configuración (en memoria por ahora)
+        # Configuracion (en memoria por ahora)
         self.healing_enabled = tk.BooleanVar(value=False)
         self.heal_hp_below_pct = tk.IntVar(value=70)
         self.heal_hp_recover_pct = tk.IntVar(value=80)
@@ -205,19 +206,19 @@ class BotUI:
 
         self.cavebot_step_text = tk.StringVar(value="-")
 
-        # Simulación/overrides de señales (para cuando aún no hay detección real)
+        # Simulacion/overrides de senales (para cuando aun no hay deteccion real)
         self.sim_enabled = tk.BooleanVar(value=True)
         self.sim_paralyzed = tk.BooleanVar(value=False)
         self.sim_haste_active = tk.BooleanVar(value=False)
         self.sim_utamo_active = tk.BooleanVar(value=False)
         self.sim_hungry = tk.BooleanVar(value=False)
 
-        # Modo asistente (sin inputs) + confirmación humana
+        # Modo asistente (sin inputs) + confirmacion humana
         self.asst_enabled = tk.BooleanVar(value=True)
         self.asst_confirm = tk.BooleanVar(value=True)
         self.asst_sound = tk.BooleanVar(value=True)
 
-        # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot vía env vars.
+        # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot via env vars.
         try:
             _idle_alert_default = float(os.getenv("ASSIST_IDLE_ALERT_S", "0").strip() or "0")
         except Exception:
@@ -283,7 +284,7 @@ class BotUI:
         except Exception:
             pass
 
-        # Telemetría (solo lectura, viene del loop)
+        # Telemetria (solo lectura, viene del loop)
         self.hp_text = tk.StringVar(value="?")
         self.mp_text = tk.StringVar(value="?")
         self.cap_text = tk.StringVar(value="?")
@@ -304,12 +305,14 @@ class BotUI:
         tab_control = tk.Frame(notebook)
         tab_healing = tk.Frame(notebook)
         tab_cavebot = tk.Frame(notebook)
+        tab_tools = tk.Frame(notebook)
         tab_config = tk.Frame(notebook)
 
         notebook.add(tab_control, text="Control")
         notebook.add(tab_healing, text="Healing")
         notebook.add(tab_cavebot, text="Cavebot")
-        notebook.add(tab_config, text="Configuración")
+        notebook.add(tab_tools, text="Herramientas")
+        notebook.add(tab_config, text="Configuracion")
 
         # --- TAB: Control ---
         tk.Label(tab_control, text="Estado:").grid(row=0, column=0, sticky="w")
@@ -321,56 +324,70 @@ class BotUI:
         self.start_btn.grid(row=1, column=0, pady=(10, 0), sticky="w")
         self.stop_btn.grid(row=1, column=1, pady=(10, 0), sticky="e")
 
-        tk.Label(tab_control, text="HP:").grid(row=2, column=0, sticky="w", pady=(10, 0))
-        tk.Label(tab_control, textvariable=self.hp_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(10, 0))
+        ctrl_info = tk.Frame(tab_control)
+        ctrl_info.grid(row=2, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        ctrl_info_left = tk.Frame(ctrl_info)
+        ctrl_info_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        ctrl_info_right = tk.Frame(ctrl_info)
+        ctrl_info_right.grid(row=0, column=1, sticky="nw")
 
-        tk.Label(tab_control, text="MP:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.mp_text, width=22, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, text="HP:").grid(row=0, column=0, sticky="w")
+        tk.Label(ctrl_info_left, textvariable=self.hp_text, width=22, anchor="w").grid(row=0, column=1, sticky="w")
 
-        tk.Label(tab_control, text="Cap:").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.cap_text, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, text="MP:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, textvariable=self.mp_text, width=22, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Señales:").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.signals_text, width=40, anchor="w").grid(row=5, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, text="Cap:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, textvariable=self.cap_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Target:").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.target_text, width=40, anchor="w").grid(row=6, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, text="Senales:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, textvariable=self.signals_text, width=32, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Recomendación:").grid(row=7, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.reco_text, width=40, anchor="w").grid(row=7, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, text="Target:").grid(row=0, column=0, sticky="w")
+        tk.Label(ctrl_info_right, textvariable=self.target_text, width=36, anchor="w").grid(row=0, column=1, sticky="w")
 
-        tk.Label(tab_control, text="Waypoint:").grid(row=8, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(row=8, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, text="Recomendacion:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, textvariable=self.reco_text, width=36, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Estado stream:").grid(row=9, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.stale_var, width=40, anchor="w").grid(row=9, column=1, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, text="Waypoint:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, textvariable=self.cavebot_wp_text, width=36, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Health:").grid(row=10, column=0, sticky="w", pady=(6, 0))
-        self._health_status_label = tk.Label(tab_control, textvariable=self.health_status_var, width=8, anchor="w")
-        self._health_status_label.grid(row=10, column=1, sticky="w", pady=(6, 0))
-        self._health_detail_label = tk.Label(tab_control, textvariable=self.health_var, width=52, anchor="w")
-        self._health_detail_label.grid(row=10, column=2, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, text="Estado stream:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, textvariable=self.stale_var, width=36, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_control, text="Anchor:").grid(row=11, column=0, sticky="w", pady=(6, 0))
-        self._anchor_status_label = tk.Label(tab_control, textvariable=self.anchor_status_var, width=8, anchor="w")
-        self._anchor_status_label.grid(row=11, column=1, sticky="w", pady=(6, 0))
-        self._anchor_detail_label = tk.Label(tab_control, textvariable=self.anchor_var, width=52, anchor="w")
-        self._anchor_detail_label.grid(row=11, column=2, sticky="w", pady=(6, 0))
+        ctrl_diag = tk.Frame(tab_control)
+        ctrl_diag.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        diag_left = tk.Frame(ctrl_diag)
+        diag_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        diag_right = tk.Frame(ctrl_diag)
+        diag_right.grid(row=0, column=1, sticky="nw")
 
-        tk.Label(tab_control, text="Idle:").grid(row=12, column=0, sticky="w", pady=(6, 0))
-        self._idle_status_label = tk.Label(tab_control, textvariable=self.idle_status_var, width=8, anchor="w")
-        self._idle_status_label.grid(row=12, column=1, sticky="w", pady=(6, 0))
-        self._idle_detail_label = tk.Label(tab_control, textvariable=self.idle_var, width=52, anchor="w")
-        self._idle_detail_label.grid(row=12, column=2, sticky="w", pady=(6, 0))
+        tk.Label(diag_left, text="Health:").grid(row=0, column=0, sticky="w")
+        self._health_status_label = tk.Label(diag_left, textvariable=self.health_status_var, width=8, anchor="w")
+        self._health_status_label.grid(row=0, column=1, sticky="w")
+        self._health_detail_label = tk.Label(diag_left, textvariable=self.health_var, width=40, anchor="w")
+        self._health_detail_label.grid(row=0, column=2, sticky="w")
 
-        tk.Label(tab_control, text="Stuck:").grid(row=13, column=0, sticky="w", pady=(6, 0))
-        self._stuck_status_label = tk.Label(tab_control, textvariable=self.stuck_status_var, width=8, anchor="w")
-        self._stuck_status_label.grid(row=13, column=1, sticky="w", pady=(6, 0))
-        self._stuck_detail_label = tk.Label(tab_control, textvariable=self.stuck_var, width=52, anchor="w")
-        self._stuck_detail_label.grid(row=13, column=2, sticky="w", pady=(6, 0))
+        tk.Label(diag_left, text="Anchor:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self._anchor_status_label = tk.Label(diag_left, textvariable=self.anchor_status_var, width=8, anchor="w")
+        self._anchor_status_label.grid(row=1, column=1, sticky="w", pady=(6, 0))
+        self._anchor_detail_label = tk.Label(diag_left, textvariable=self.anchor_var, width=40, anchor="w")
+        self._anchor_detail_label.grid(row=1, column=2, sticky="w", pady=(6, 0))
 
-        # Panel operador: últimos eventos
-        tk.Label(tab_control, text="Eventos (últimos):").grid(row=14, column=0, sticky="w", pady=(6, 0))
+        tk.Label(diag_right, text="Idle:").grid(row=0, column=0, sticky="w")
+        self._idle_status_label = tk.Label(diag_right, textvariable=self.idle_status_var, width=8, anchor="w")
+        self._idle_status_label.grid(row=0, column=1, sticky="w")
+        self._idle_detail_label = tk.Label(diag_right, textvariable=self.idle_var, width=40, anchor="w")
+        self._idle_detail_label.grid(row=0, column=2, sticky="w")
+
+        tk.Label(diag_right, text="Stuck:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self._stuck_status_label = tk.Label(diag_right, textvariable=self.stuck_status_var, width=8, anchor="w")
+        self._stuck_status_label.grid(row=1, column=1, sticky="w", pady=(6, 0))
+        self._stuck_detail_label = tk.Label(diag_right, textvariable=self.stuck_var, width=40, anchor="w")
+        self._stuck_detail_label.grid(row=1, column=2, sticky="w", pady=(6, 0))
+
+        # Panel operador: ultimos eventos
+        tk.Label(tab_control, text="Eventos (ultimos):").grid(row=4, column=0, sticky="w", pady=(6, 0))
 
         def _copy_inputs_to_clipboard() -> None:
             # Prefer planned inputs; fall back to action_request.
@@ -388,44 +405,27 @@ class BotUI:
                 self.root.clipboard_append(txt)
                 self.root.update()
                 self._messagebox.showinfo("Copiar", "Copiado al portapapeles.")
-                        self.heal_hp_below_pct.set(int(float(h.get("hp_below_pct") or 0)))
-                        self.heal_hp_recover_pct.set(int(float(h.get("hp_recover_pct") or 0)))
-                        except Exception:
-                            self.heal_hp_below_pct.set(70)
-                            self.heal_hp_recover_pct.set(80)
+            except Exception:
+                try:
+                    self._messagebox.showinfo("Copiar", "No se pudo copiar al portapapeles.")
                 except Exception:
                     pass
 
         tk.Button(tab_control, text="Copiar inputs", width=14, command=_copy_inputs_to_clipboard).grid(
-            row=14, column=1, sticky="w", pady=(6, 0)
+            row=4, column=1, sticky="w", pady=(6, 0)
         )
 
-                        self.heal_mp_below_pct.set(int(float(h.get("mp_below_pct") or 0)))
-                        self.heal_mp_recover_pct.set(int(float(h.get("mp_recover_pct") or 0)))
-                        except Exception:
-                            self.heal_mp_below_pct.set(30)
-                            self.heal_mp_recover_pct.set(50)
+        tk.Label(tab_control, text="Inputs:").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, textvariable=self.input_plan_text, width=52, anchor="w").grid(
+            row=4, column=3, sticky="w", pady=(6, 0)
         )
 
         self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none")
         try:
             self._events_text.configure(state="disabled")
-                        self.heal_action.set(str(h.get("action", "")))
-                        self.heal_hp_action.set(str(h.get("hp_action", "")))
-                        self.heal_mp_action.set(str(h.get("mp_action", "")))
-                        except Exception:
-                            self.heal_action.set("")
-                            self.heal_hp_action.set("")
-                            self.heal_mp_action.set("")
-
-                        try:
-                            self.heal_cooldown_s.set(float(h.get("cooldown_s", 1.0)))
-                        except Exception:
-                            self.heal_cooldown_s.set(1.0)
-
-        # Herramientas de precisión (no bloquean; generan artefactos en logs/)
-        tk.Label(tab_control, text="").grid(row=16, column=0)  # separador simple
-        tk.Label(tab_control, text="Herramientas:").grid(row=16, column=0, sticky="w", pady=(6, 0))
+        except Exception:
+            pass
+        self._events_text.grid(row=5, column=0, columnspan=5, sticky="w", pady=(4, 0))
 
         def _monitor_default() -> int:
             raw = os.getenv("FORCE_MONITOR", "2").strip() or "2"
@@ -805,7 +805,7 @@ class BotUI:
                 else:
                     last_dir = self._last_anchor_sanity_dir
                 if not last_dir:
-                    self._messagebox.showinfo("Info", "Aún no hay un run reciente.")
+                    self._messagebox.showinfo("Info", "Aun no hay un run reciente.")
                     return
                 p = Path(last_dir) / ("overlay.png" if which == "overlay" else "report.json")
                 if not p.exists():
@@ -815,86 +815,81 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_control, text="ROI sanity", width=12, command=run_roi_sanity_ui).grid(
-            row=17, column=1, sticky="w", pady=(6, 0)
+        # --- TAB: Herramientas ---
+        tk.Label(tab_tools, text="Sanity checks").grid(row=0, column=0, sticky="w", pady=(4, 0))
+        tk.Button(tab_tools, text="ROI sanity", width=12, command=run_roi_sanity_ui).grid(
+            row=1, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Button(tab_control, text="OCR test", width=12, command=run_ocr_sanity_ui).grid(
-            row=17, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Button(tab_tools, text="OCR test", width=12, command=run_ocr_sanity_ui).grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
-
-        tk.Button(tab_control, text="Coords OCR test", width=14, command=run_coords_sanity_ui).grid(
-            row=17, column=0, sticky="w", pady=(6, 0)
+        tk.Button(tab_tools, text="Coords OCR test", width=14, command=run_coords_sanity_ui).grid(
+            row=1, column=0, sticky="w", pady=(4, 0)
         )
-
-        tk.Button(tab_control, text="Anchor test", width=12, command=run_anchor_sanity_ui).grid(
-            row=17, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Button(tab_tools, text="Anchor test", width=12, command=run_anchor_sanity_ui).grid(
+            row=1, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
         )
-
-        tk.Button(tab_control, text="Anchor setup", width=12, command=run_anchor_setup_ui).grid(
-            row=17, column=4, sticky="w", padx=(8, 0), pady=(6, 0)
-        )
-
-        tk.Button(tab_control, text="ROI overlay", width=12, command=lambda: _open_last_artifact("overlay", "roi")).grid(
-            row=18, column=1, sticky="w", pady=(6, 0)
-        )
-        tk.Button(tab_control, text="ROI report", width=12, command=lambda: _open_last_artifact("report", "roi")).grid(
-            row=18, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Button(tab_tools, text="Anchor setup", width=12, command=run_anchor_setup_ui).grid(
+            row=1, column=4, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        tk.Button(tab_control, text="Anchor overlay", width=12, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
-            row=18, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Label(tab_tools, text="Abrir artefactos").grid(row=2, column=0, sticky="w", pady=(10, 0))
+        tk.Button(tab_tools, text="ROI overlay", width=12, command=lambda: _open_last_artifact("overlay", "roi")).grid(
+            row=3, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="ROI report", width=12, command=lambda: _open_last_artifact("report", "roi")).grid(
+            row=3, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="Coords overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
+            row=3, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="Coords report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
+            row=4, column=0, sticky="w", pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="Anchor overlay", width=12, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
+            row=3, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="Anchor report", width=12, command=lambda: _open_last_artifact("report", "anchor")).grid(
+            row=4, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="OCR overlay", width=12, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
+            row=4, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Button(tab_tools, text="OCR report", width=12, command=lambda: _open_last_artifact("report", "ocr")).grid(
+            row=4, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        tk.Button(tab_control, text="OCR overlay", width=12, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
-            row=19, column=1, sticky="w", pady=(6, 0)
+        tk.Label(tab_tools, text="Ultimos resultados").grid(row=5, column=0, sticky="w", pady=(10, 0))
+        tk.Label(tab_tools, text="Ultimo ROI:").grid(row=6, column=0, sticky="w", pady=(4, 0))
+        tk.Label(tab_tools, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(
+            row=6, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Button(tab_control, text="OCR report", width=12, command=lambda: _open_last_artifact("report", "ocr")).grid(
-            row=19, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
-        )
-
-        tk.Button(tab_control, text="Coords OCR overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
-            row=18, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(tab_control, text="Coords OCR report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
-            row=19, column=0, sticky="w", pady=(6, 0)
+        tk.Label(tab_tools, textvariable=self.last_roi_dir_var, width=52, anchor="w").grid(
+            row=7, column=1, columnspan=3, sticky="w"
         )
 
-        tk.Button(tab_control, text="Anchor report", width=12, command=lambda: _open_last_artifact("report", "anchor")).grid(
-            row=19, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Label(tab_tools, text="Ultimo OCR:").grid(row=8, column=0, sticky="w", pady=(4, 0))
+        tk.Label(tab_tools, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(
+            row=8, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Label(tab_tools, textvariable=self.last_ocr_dir_var, width=52, anchor="w").grid(
+            row=9, column=1, columnspan=3, sticky="w"
         )
 
-        # Últimos resultados
-        tk.Label(tab_control, text="").grid(row=20, column=0)
-        tk.Label(tab_control, text="Último ROI:").grid(row=21, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(
-            row=21, column=1, sticky="w", pady=(6, 0)
+        tk.Label(tab_tools, text="Ultimo Coords:").grid(row=10, column=0, sticky="w", pady=(4, 0))
+        tk.Label(tab_tools, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(
+            row=10, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(tab_control, textvariable=self.last_roi_dir_var, width=52, anchor="w").grid(
-            row=22, column=1, columnspan=3, sticky="w"
+        tk.Label(tab_tools, textvariable=self.last_coords_dir_var, width=52, anchor="w").grid(
+            row=11, column=1, columnspan=3, sticky="w"
         )
 
-        tk.Label(tab_control, text="Último OCR:").grid(row=23, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(
-            row=23, column=1, sticky="w", pady=(6, 0)
+        tk.Label(tab_tools, text="Ultimo Anchor:").grid(row=12, column=0, sticky="w", pady=(4, 0))
+        tk.Label(tab_tools, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(
+            row=12, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(tab_control, textvariable=self.last_ocr_dir_var, width=52, anchor="w").grid(
-            row=24, column=1, columnspan=3, sticky="w"
-        )
-
-        tk.Label(tab_control, text="Último Coords:").grid(row=25, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(
-            row=25, column=1, sticky="w", pady=(6, 0)
-        )
-        tk.Label(tab_control, textvariable=self.last_coords_dir_var, width=52, anchor="w").grid(
-            row=26, column=1, columnspan=3, sticky="w"
-        )
-
-        tk.Label(tab_control, text="Último Anchor:").grid(row=27, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(
-            row=27, column=1, sticky="w", pady=(6, 0)
-        )
-        tk.Label(tab_control, textvariable=self.last_anchor_dir_var, width=52, anchor="w").grid(
-            row=28, column=1, columnspan=3, sticky="w"
+        tk.Label(tab_tools, textvariable=self.last_anchor_dir_var, width=52, anchor="w").grid(
+            row=13, column=1, columnspan=3, sticky="w"
         )
 
         # --- TAB: Healing ---
@@ -902,44 +897,66 @@ class BotUI:
             row=0, column=0, columnspan=2, sticky="w"
         )
 
-        tk.Label(tab_healing, text="Curar si HP < (%)").grid(row=1, column=0, sticky="w", pady=(10, 0))
-        tk.Spinbox(tab_healing, from_=1, to=100, textvariable=self.heal_hp_below_pct, width=6).grid(
-            row=1, column=1, sticky="w", pady=(10, 0)
-        )
-        tk.Label(tab_healing, text="HP recover (%)").grid(row=1, column=2, sticky="w", pady=(10, 0))
-        tk.Spinbox(tab_healing, from_=1, to=100, textvariable=self.heal_hp_recover_pct, width=6).grid(
-            row=1, column=3, sticky="w", pady=(10, 0)
+        heal_frame = tk.Frame(tab_healing)
+        heal_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        heal_left = tk.Frame(heal_frame)
+        heal_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        heal_right = tk.Frame(heal_frame)
+        heal_right.grid(row=0, column=1, sticky="nw")
+
+        tk.Label(heal_left, text="Curar si HP < (%)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(heal_left, from_=1, to=100, textvariable=self.heal_hp_below_pct, width=6).grid(
+            row=0, column=1, sticky="w"
         )
 
-        tk.Label(tab_healing, text="Curar si MP < (%)").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_healing, from_=0, to=100, textvariable=self.heal_mp_below_pct, width=6).grid(
+        tk.Label(heal_left, text="Recuperar HP a (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(heal_left, from_=1, to=100, textvariable=self.heal_hp_recover_pct, width=6).grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(heal_left, text="Accion HP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        f_keys = [f"F{i}" for i in range(1, 13)]
+        ttk.Combobox(heal_left, textvariable=self.heal_hp_action, values=f_keys, width=8, state="normal").grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Label(tab_healing, text="MP recover (%)").grid(row=2, column=2, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_healing, from_=0, to=100, textvariable=self.heal_mp_recover_pct, width=6).grid(
-            row=2, column=3, sticky="w", pady=(6, 0)
+
+        tk.Label(heal_left, text="Cooldown (s)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(heal_left, textvariable=self.heal_cooldown_s, width=8).grid(row=3, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(heal_right, text="Curar si MP < (%)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(heal_right, from_=0, to=100, textvariable=self.heal_mp_below_pct, width=6).grid(
+            row=0, column=1, sticky="w"
         )
 
-        tk.Label(tab_healing, text="Acción legacy (hotkey/spell)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_healing, textvariable=self.heal_action, width=20).grid(row=3, column=1, sticky="w", pady=(6, 0))
-        tk.Label(tab_healing, text="HP acción").grid(row=3, column=2, sticky="w", pady=(6, 0))
-        tk.Entry(tab_healing, textvariable=self.heal_hp_action, width=14).grid(row=3, column=3, sticky="w", pady=(6, 0))
+        tk.Label(heal_right, text="Recuperar MP a (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(heal_right, from_=0, to=100, textvariable=self.heal_mp_recover_pct, width=6).grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
+        )
 
-        tk.Label(tab_healing, text="MP acción").grid(row=4, column=2, sticky="w", pady=(6, 0))
-        tk.Entry(tab_healing, textvariable=self.heal_mp_action, width=14).grid(row=4, column=3, sticky="w", pady=(6, 0))
+        tk.Label(heal_right, text="Accion MP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(heal_right, textvariable=self.heal_mp_action, values=f_keys, width=8, state="normal").grid(
+            row=2, column=1, sticky="w", pady=(6, 0)
+        )
 
-        tk.Label(tab_healing, text="Cooldown (s)").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_healing, from_=0.0, to=10.0, increment=0.1, textvariable=self.heal_cooldown_s, width=6).grid(
-            row=4, column=1, sticky="w", pady=(6, 0)
+        tk.Label(heal_right, text="Accion generica (fallback)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(heal_right, textvariable=self.heal_action, values=f_keys, width=8, state="normal").grid(
+            row=3, column=1, sticky="w", pady=(6, 0)
         )
 
         # --- TAB: Cavebot ---
-        tk.Checkbutton(tab_cavebot, text="Habilitar cavebot", variable=self.cavebot_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
+        cb_top = tk.Frame(tab_cavebot)
+        cb_top.grid(row=0, column=0, columnspan=4, sticky="w")
+        cb_left = tk.Frame(cb_top)
+        cb_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        cb_right = tk.Frame(cb_top)
+        cb_right.grid(row=0, column=1, sticky="nw")
+
+        tk.Checkbutton(cb_left, text="Habilitar cavebot", variable=self.cavebot_enabled).grid(
+            row=0, column=0, columnspan=3, sticky="w"
         )
 
-        tk.Label(tab_cavebot, text="Ruta (JSON)").grid(row=1, column=0, sticky="w", pady=(10, 0))
-        tk.Entry(tab_cavebot, textvariable=self.cavebot_route_path, width=34).grid(
+        tk.Label(cb_left, text="Ruta (JSON)").grid(row=1, column=0, sticky="w", pady=(10, 0))
+        tk.Entry(cb_left, textvariable=self.cavebot_route_path, width=32).grid(
             row=1, column=1, sticky="w", pady=(10, 0)
         )
 
@@ -957,35 +974,108 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_cavebot, text="Browse", width=8, command=browse_route).grid(
+        tk.Button(cb_left, text="Browse", width=8, command=browse_route).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
         )
 
-        tk.Label(tab_cavebot, text="Modo:").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        tk.Radiobutton(tab_cavebot, text="Steps (sin coords)", variable=self.cavebot_mode, value="steps").grid(
+        tk.Label(cb_left, text="Modo:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Radiobutton(cb_left, text="Steps (sin coords)", variable=self.cavebot_mode, value="steps").grid(
             row=2, column=1, sticky="w", pady=(8, 0)
         )
-        tk.Radiobutton(tab_cavebot, text="Pos (con coords)", variable=self.cavebot_mode, value="pos").grid(
+        tk.Radiobutton(cb_left, text="Pos (con coords)", variable=self.cavebot_mode, value="pos").grid(
             row=2, column=2, sticky="w", pady=(8, 0)
         )
 
-        tk.Checkbutton(tab_cavebot, text="Loop ruta", variable=self.cavebot_loop).grid(
-            row=2, column=3, sticky="w", pady=(8, 0)
+        tk.Checkbutton(cb_left, text="Loop ruta", variable=self.cavebot_loop).grid(
+            row=2, column=3, sticky="w", pady=(8, 0), padx=(8, 0)
         )
 
-        tk.Label(tab_cavebot, text="Coords provider:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Radiobutton(tab_cavebot, text="disabled", variable=self.coords_provider, value="disabled").grid(
+        tk.Label(cb_left, text="Coords provider:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Radiobutton(cb_left, text="disabled", variable=self.coords_provider, value="disabled").grid(
             row=3, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Radiobutton(tab_cavebot, text="ocr", variable=self.coords_provider, value="ocr").grid(
+        tk.Radiobutton(cb_left, text="ocr", variable=self.coords_provider, value="ocr").grid(
             row=3, column=2, sticky="w", pady=(6, 0)
         )
-        tk.Radiobutton(tab_cavebot, text="minimap (exp)", variable=self.coords_provider, value="minimap").grid(
+        tk.Radiobutton(cb_left, text="minimap (exp)", variable=self.coords_provider, value="minimap").grid(
             row=3, column=3, sticky="w", pady=(6, 0)
         )
 
+        def _start_cavebot_ui() -> None:
+            try:
+                self._cavebot_follow_ui = True
+            except Exception:
+                pass
+            try:
+                self.cavebot_enabled.set(True)
+            except Exception:
+                pass
+            # Reset selection to start following from the beginning.
+            try:
+                self._route_current_index = None
+                self._route_listbox.selection_clear(0, "end")
+                if self._route_items:
+                    self._route_listbox.selection_set(0)
+                    self._route_listbox.see(0)
+            except Exception:
+                pass
+
+        def _stop_cavebot_ui() -> None:
+            try:
+                self._cavebot_follow_ui = False
+            except Exception:
+                pass
+            try:
+                self.cavebot_enabled.set(False)
+            except Exception:
+                pass
+            try:
+                self._route_current_index = None
+                self._route_listbox.selection_clear(0, "end")
+                self._route_next_var.set("-")
+            except Exception:
+                pass
+
+        tk.Button(cb_left, text="Iniciar cavebot", width=14, command=_start_cavebot_ui).grid(
+            row=4, column=0, sticky="w", pady=(10, 0)
+        )
+        tk.Button(cb_left, text="Detener cavebot", width=14, command=_stop_cavebot_ui).grid(
+            row=4, column=1, sticky="w", padx=(8, 0), pady=(10, 0)
+        )
+
+        tk.Label(cb_right, text="Paso:").grid(row=0, column=0, sticky="w")
+        tk.Label(cb_right, textvariable=self.cavebot_step_text, width=36, anchor="w").grid(
+            row=0, column=1, sticky="w"
+        )
+
+        tk.Label(cb_right, text="Proxima accion:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cb_right, textvariable=self.cavebot_next_text, width=36, anchor="w").grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(cb_right, text="Waypoint:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cb_right, textvariable=self.cavebot_wp_text, width=36, anchor="w").grid(
+            row=2, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(cb_right, text="Action:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cb_right, textvariable=self.cavebot_action_text, width=36, anchor="w").grid(
+            row=3, column=1, sticky="w", pady=(6, 0)
+        )
+
+        def request_advance() -> None:
+            try:
+                self._config.request_advance()
+            except Exception:
+                pass
+
+        self._cavebot_mark_btn = tk.Button(cb_right, text="Marcar como ejecutado", width=18, command=request_advance)
+        self._cavebot_mark_btn.grid(row=4, column=0, sticky="w", pady=(10, 0))
+        self._cavebot_next_btn = tk.Button(cb_right, text="Siguiente accion", width=14, command=request_advance)
+        self._cavebot_next_btn.grid(row=4, column=1, sticky="w", pady=(10, 0))
+
         cb_block = tk.Frame(tab_cavebot)
-        cb_block.grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        cb_block.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
         tk.Label(
             cb_block,
@@ -1040,16 +1130,16 @@ class BotUI:
         )
 
         # Checklist de ruta
-        tk.Label(tab_cavebot, text="").grid(row=8, column=0)
-        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=9, column=0, sticky="w", pady=(10, 0))
+        tk.Label(tab_cavebot, text="").grid(row=2, column=0)
+        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=3, column=0, sticky="w", pady=(10, 0))
 
         self._route_status_var = tk.StringVar(value="(ruta no cargada)")
         tk.Label(tab_cavebot, textvariable=self._route_status_var, width=60, anchor="w").grid(
-            row=9, column=1, columnspan=3, sticky="w", pady=(10, 0)
+            row=3, column=1, columnspan=3, sticky="w", pady=(10, 0)
         )
 
         self._route_listbox = tk.Listbox(tab_cavebot, height=10, width=60)
-        self._route_listbox.grid(row=10, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self._route_listbox.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         def request_step_jump_selected() -> None:
             try:
@@ -1074,9 +1164,9 @@ class BotUI:
             pass
 
         self._route_next_var = tk.StringVar(value="-")
-        tk.Label(tab_cavebot, text="Próximos:").grid(row=11, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_cavebot, text="Proximos:").grid(row=5, column=0, sticky="w", pady=(6, 0))
         tk.Label(tab_cavebot, textvariable=self._route_next_var, width=60, anchor="w").grid(
-            row=11, column=1, columnspan=2, sticky="w", pady=(6, 0)
+            row=5, column=1, columnspan=2, sticky="w", pady=(6, 0)
         )
 
         def _route_format_item(idx: int, wp: object) -> str:
@@ -1131,50 +1221,15 @@ class BotUI:
             _load_route_for_ui()
 
         tk.Button(tab_cavebot, text="Recargar ruta", width=14, command=reload_route_ui).grid(
-            row=10, column=3, sticky="w", padx=(8, 0)
+            row=4, column=3, sticky="w", padx=(8, 0)
         )
 
         tk.Button(tab_cavebot, text="Saltar a paso", width=14, command=request_step_jump_selected).grid(
-            row=11, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
+            row=5, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Button(tab_cavebot, text="Reset (inicio)", width=14, command=request_step_reset).grid(
-            row=12, column=3, sticky="w", padx=(8, 0)
-        )
-
-        tk.Label(tab_cavebot, text="Paso:").grid(row=5, column=0, sticky="w", pady=(12, 0))
-        tk.Label(tab_cavebot, textvariable=self.cavebot_step_text, width=40, anchor="w").grid(
-            row=5, column=1, sticky="w", pady=(12, 0)
-        )
-
-        tk.Label(tab_cavebot, text="Próxima acción:").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_cavebot, textvariable=self.cavebot_next_text, width=40, anchor="w").grid(
-            row=6, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(tab_cavebot, text="Waypoint:").grid(row=7, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_cavebot, textvariable=self.cavebot_wp_text, width=40, anchor="w").grid(
-            row=7, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(tab_cavebot, text="Action:").grid(row=8, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_cavebot, textvariable=self.cavebot_action_text, width=40, anchor="w").grid(
-            row=8, column=1, sticky="w", pady=(6, 0)
-        )
-
-        def request_advance() -> None:
-            try:
-                self._config.request_advance()
-            except Exception:
-                pass
-
-        self._cavebot_mark_btn = tk.Button(tab_cavebot, text="Marcar como ejecutado", width=18, command=request_advance)
-        self._cavebot_mark_btn.grid(
-            row=12, column=0, sticky="w", pady=(10, 0)
-        )
-        self._cavebot_next_btn = tk.Button(tab_cavebot, text="Siguiente acción", width=14, command=request_advance)
-        self._cavebot_next_btn.grid(
-            row=12, column=1, sticky="w", pady=(10, 0)
+            row=5, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         # Mantener la ruta cargada para checklist cuando cambie el path.
@@ -1184,28 +1239,34 @@ class BotUI:
             pass
         _load_route_for_ui()
 
-        # --- TAB: Configuración ---
-        tk.Checkbutton(tab_config, text="Habilitar simulación de señales", variable=self.sim_enabled).grid(
+        # --- TAB: Configuracion --- (dos columnas)
+        cfg_grid = tk.Frame(tab_config)
+        cfg_grid.grid(row=0, column=0, columnspan=4, sticky="nw")
+        cfg_left = tk.Frame(cfg_grid)
+        cfg_left.grid(row=0, column=0, sticky="nw", padx=(0, 16))
+        cfg_right = tk.Frame(cfg_grid)
+        cfg_right.grid(row=0, column=1, sticky="nw")
+
+        # Simulacion y ROIs (izquierda)
+        tk.Checkbutton(cfg_left, text="Habilitar simulacion de senales", variable=self.sim_enabled).grid(
             row=0, column=0, columnspan=2, sticky="w"
         )
-        tk.Checkbutton(tab_config, text="Paralyzed", variable=self.sim_paralyzed).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        tk.Checkbutton(cfg_left, text="Paralyzed", variable=self.sim_paralyzed).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
         )
-        tk.Checkbutton(tab_config, text="Haste activo", variable=self.sim_haste_active).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_left, text="Haste activo", variable=self.sim_haste_active).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
-        tk.Checkbutton(tab_config, text="Utamo activo", variable=self.sim_utamo_active).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_left, text="Utamo activo", variable=self.sim_utamo_active).grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
-        tk.Checkbutton(tab_config, text="Hungry", variable=self.sim_hungry).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_left, text="Hungry", variable=self.sim_hungry).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(tab_config, text="").grid(row=5, column=0)  # separador simple
-
-        tk.Label(tab_config, text="ROIs config (override)").grid(row=6, column=0, sticky="w", pady=(10, 0))
-        tk.Entry(tab_config, textvariable=self.rois_config_override, width=34).grid(
-            row=6, column=1, sticky="w", pady=(10, 0)
+        tk.Label(cfg_left, text="ROIs config (override)").grid(row=5, column=0, sticky="w", pady=(10, 0))
+        tk.Entry(cfg_left, textvariable=self.rois_config_override, width=30).grid(
+            row=5, column=1, sticky="w", pady=(10, 0)
         )
 
         def browse_rois() -> None:
@@ -1222,50 +1283,49 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Browse", width=8, command=browse_rois).grid(
-            row=6, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
+        tk.Button(cfg_left, text="Browse", width=8, command=browse_rois).grid(
+            row=5, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
         )
 
         tk.Label(
-            tab_config,
+            cfg_left,
             text="(Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         tk.Label(
-            tab_config,
+            cfg_left,
             text=(
                 "Tip estable (sin coords visibles): usa COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps "
                 "(ver ./scripts/profile_no_coords_steps.ps1). Minimap es experimental; ver README."
             ),
-            wraplength=520,
+            wraplength=320,
             justify="left",
-        ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        tk.Label(tab_config, text="").grid(row=9, column=0)  # separador simple
-
-        tk.Checkbutton(tab_config, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
-            row=10, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        # Asistente + Replay/Log (derecha)
+        tk.Checkbutton(cfg_right, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
         )
-        tk.Checkbutton(tab_config, text="Confirmación humana (cavebot)", variable=self.asst_confirm).grid(
-            row=11, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_right, text="Confirmacion humana (cavebot)", variable=self.asst_confirm).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
-        tk.Checkbutton(tab_config, text="Alertas sonoras", variable=self.asst_sound).grid(
-            row=12, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(tab_config, text="").grid(row=13, column=0)  # separador simple
-
-        tk.Checkbutton(tab_config, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=14, column=0, columnspan=2, sticky="w", pady=(10, 0)
-        )
-        tk.Label(tab_config, text="Replay interval (ms)").grid(row=15, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
-            row=15, column=1, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_right, text="Alertas sonoras", variable=self.asst_sound).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(tab_config, text="Replay out_dir").grid(row=16, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_config, textvariable=self.replay_out_dir, width=34).grid(
-            row=16, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="").grid(row=3, column=0, pady=(6, 0))
+
+        tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
+            row=4, column=0, columnspan=2, sticky="w"
+        )
+        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
+            row=5, column=1, sticky="w", pady=(4, 0)
+        )
+
+        tk.Label(cfg_right, text="Replay out_dir").grid(row=6, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.replay_out_dir, width=28).grid(
+            row=6, column=1, sticky="w", pady=(4, 0)
         )
 
         def open_replay_dir() -> None:
@@ -1282,41 +1342,40 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
-            row=16, column=2, sticky="w", padx=(8, 0)
+        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
+            row=6, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(tab_config, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
-            row=14, column=2, sticky="w", padx=(8, 0)
+        tk.Button(cfg_right, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
+            row=4, column=2, sticky="w", padx=(8, 0)
         )
 
-        # Presets for replay/jsonl
-        tk.Label(tab_config, text="Preset (replay/log)").grid(row=17, column=0, sticky="w")
+        tk.Label(cfg_right, text="Preset (replay/log)").grid(row=7, column=0, sticky="w", pady=(6, 0))
         tel_presets = ["Custom", "Off", "Debug", "Soak", "Soak Full"]
         ttk.Combobox(
-            tab_config,
+            cfg_right,
             textvariable=self.telemetry_preset,
             values=tel_presets,
             width=16,
             state="readonly",
-        ).grid(row=17, column=1, sticky="w")
+        ).grid(row=7, column=1, sticky="w", pady=(6, 0))
         tk.Button(
-            tab_config,
+            cfg_right,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_telemetry_preset(str(self.telemetry_preset.get())),
-        ).grid(row=17, column=2, sticky="w", padx=(8, 0))
+        ).grid(row=7, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
-        tk.Checkbutton(tab_config, text="Exportar telemetría JSONL", variable=self.log_enabled).grid(
-            row=18, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        tk.Checkbutton(cfg_right, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
+            row=8, column=0, columnspan=2, sticky="w", pady=(8, 0)
         )
-        tk.Label(tab_config, text="Log interval (ms)").grid(row=19, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
-            row=19, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="Log interval (ms)").grid(row=9, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
+            row=9, column=1, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(tab_config, text="Log out_file").grid(row=20, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_config, textvariable=self.log_out_file, width=34).grid(
-            row=20, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="Log out_file").grid(row=10, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.log_out_file, width=28).grid(
+            row=10, column=1, sticky="w", pady=(4, 0)
         )
 
         def open_log_parent() -> None:
@@ -1333,7 +1392,6 @@ class BotUI:
                 p = str(self.log_out_file.get()).strip() or "logs/telemetry.jsonl"
                 parent = os.path.dirname(p) or "."
                 os.makedirs(parent, exist_ok=True)
-                # crear si no existe para que startfile funcione
                 if not os.path.exists(p):
                     with open(p, "a", encoding="utf-8"):
                         pass
@@ -1341,73 +1399,66 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_log_parent).grid(
-            row=20, column=2, sticky="w", padx=(8, 0)
+        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_log_parent).grid(
+            row=10, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(tab_config, text="Abrir archivo", width=12, command=open_log_file).grid(
-            row=19, column=2, sticky="w", padx=(8, 0)
-        )
-
-        # --- Idle alert (UI + core) ---
-        tk.Label(tab_config, text="").grid(row=21, column=0)  # separador simple
-        tk.Label(tab_config, text="Idle (alerta / anti-stuck, sin inputs)").grid(
-            row=22, column=0, columnspan=3, sticky="w", pady=(10, 0)
-        )
-        tk.Label(tab_config, text="WARN si idle ≥ (s)").grid(row=23, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
-            row=23, column=1, sticky="w", pady=(6, 0)
+        tk.Button(cfg_right, text="Abrir archivo", width=12, command=open_log_file).grid(
+            row=9, column=2, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_config, text="FAIL si idle ≥ (s)").grid(row=24, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
-            row=24, column=1, sticky="w", pady=(6, 0)
+        # Idle alert + Overlay (derecha, debajo)
+        tk.Label(cfg_right, text="Idle (alerta / anti-stuck, sin inputs)").grid(
+            row=11, column=0, columnspan=3, sticky="w", pady=(10, 0)
         )
-
-        tk.Label(tab_config, text="Repetir alerta cada (s)").grid(row=25, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
-            row=25, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="WARN si idle >= (s)").grid(row=12, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
+            row=12, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cfg_right, text="FAIL si idle >= (s)").grid(row=13, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
+            row=13, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cfg_right, text="Repetir alerta cada (s)").grid(row=14, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+            row=14, column=1, sticky="w", pady=(4, 0)
         )
         tk.Label(
-            tab_config,
+            cfg_right,
             text="(0 desactiva. Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=26, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=15, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        # --- Overlay exporter (env-based) ---
-        tk.Label(tab_config, text="").grid(row=27, column=0)  # separador simple
-        tk.Label(tab_config, text="Overlay (frames anotados)").grid(
-            row=28, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        tk.Label(cfg_right, text="Overlay (frames anotados)").grid(
+            row=16, column=0, columnspan=3, sticky="w", pady=(10, 0)
         )
-
-        tk.Label(tab_config, text="Preset").grid(row=29, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cfg_right, text="Preset").grid(row=17, column=0, sticky="w", pady=(4, 0))
         overlay_presets = ["Custom", "Minimal", "Debug HUD", "Full HUD"]
         ttk.Combobox(
-            tab_config,
+            cfg_right,
             textvariable=self.overlay_preset,
             values=overlay_presets,
             width=16,
             state="readonly",
-        ).grid(row=29, column=1, sticky="w", pady=(6, 0))
-
+        ).grid(row=17, column=1, sticky="w", pady=(4, 0))
         tk.Button(
-            tab_config,
+            cfg_right,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_overlay_preset(str(self.overlay_preset.get())),
-        ).grid(row=29, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        ).grid(row=17, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
 
-        tk.Checkbutton(tab_config, text="Habilitar overlay", variable=self.overlay_enabled).grid(
-            row=30, column=0, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_right, text="Habilitar overlay", variable=self.overlay_enabled).grid(
+            row=18, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
-        tk.Button(tab_config, text="Cargar UI", width=12, command=self._load_ui_settings).grid(
-            row=30, column=1, sticky="w", pady=(6, 0)
+        tk.Button(cfg_right, text="Cargar UI", width=12, command=self._load_ui_settings).grid(
+            row=18, column=2, sticky="w", pady=(4, 0)
         )
-        tk.Button(tab_config, text="Guardar UI", width=12, command=self._save_ui_settings).grid(
-            row=30, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Button(cfg_right, text="Guardar UI", width=12, command=self._save_ui_settings).grid(
+            row=19, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        tk.Label(tab_config, text="Overlay out_dir").grid(row=31, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_config, textvariable=self.overlay_out_dir, width=34).grid(
-            row=31, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="Overlay out_dir").grid(row=19, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.overlay_out_dir, width=28).grid(
+            row=19, column=1, sticky="w", pady=(4, 0)
         )
 
         def open_overlay_dir() -> None:
@@ -1418,38 +1469,37 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
-            row=31, column=2, sticky="w", padx=(8, 0)
+        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
+            row=20, column=2, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_config, text="Interval (s)").grid(row=32, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cfg_right, text="Interval (s)").grid(row=20, column=0, sticky="w", pady=(4, 0))
         tk.Spinbox(
-            tab_config,
+            cfg_right,
             from_=0.1,
             to=60.0,
             increment=0.1,
             textvariable=self.overlay_interval_s,
             width=8,
-        ).grid(row=32, column=1, sticky="w", pady=(6, 0))
+        ).grid(row=20, column=1, sticky="w", pady=(4, 0))
 
-        tk.Checkbutton(tab_config, text="Tile grid", variable=self.overlay_tile_grid).grid(
-            row=33, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        tk.Checkbutton(cfg_right, text="Tile grid", variable=self.overlay_tile_grid).grid(
+            row=21, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
-        tk.Label(tab_config, text="Tile px").grid(row=34, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(tab_config, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
-            row=34, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(tab_config, text="OVERLAY_ROIS (CSV)").grid(row=35, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_config, textvariable=self.overlay_rois, width=34).grid(
-            row=35, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="Tile px").grid(row=21, column=2, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
+            row=21, column=3, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(
-            tab_config,
-            text="(Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=36, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        tk.Label(cfg_right, text="OVERLAY_ROIS (CSV)").grid(row=22, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.overlay_rois, width=28).grid(
+            row=22, column=1, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cfg_right, text="(Se aplica al iniciar el bot; requiere reinicio)").grid(
+            row=23, column=0, columnspan=3, sticky="w", pady=(4, 0)
+        )
 
+        # Ajustes UI y soak (abajo)
         def open_ui_settings_file() -> None:
             try:
                 p = self._ui_settings_path()
@@ -1466,16 +1516,15 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Reset defaults", width=18, command=self._reset_ui_defaults).grid(
-            row=37, column=0, sticky="w", pady=(6, 0)
+        tk.Button(cfg_right, text="Reset defaults", width=18, command=self._reset_ui_defaults).grid(
+            row=24, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(tab_config, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
-            row=37, column=1, sticky="w", pady=(6, 0)
+        tk.Button(cfg_right, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
+            row=24, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_latest_soak() -> None:
             try:
-                # Prefer last run id (same UI session), otherwise find newest on disk.
                 rid = self._last_soak_run_id
                 replay_base = "logs/replay_soak"
                 overlay_base = "logs/debug_overlay_soak"
@@ -1489,7 +1538,6 @@ class BotUI:
                 if overlay_dir is None or not overlay_dir.exists():
                     overlay_dir = self._find_latest_soak_dir(overlay_base)
 
-                # Open whatever exists.
                 if replay_dir is not None and replay_dir.exists():
                     os.startfile(os.path.abspath(str(replay_dir)))
                 if overlay_dir is not None and overlay_dir.exists():
@@ -1513,13 +1561,6 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Abrir último soak", width=18, command=open_latest_soak).grid(
-            row=38, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(tab_config, text="Abrir JSONL soak", width=18, command=open_latest_soak_jsonl).grid(
-            row=38, column=1, sticky="w", pady=(6, 0)
-        )
-
         def open_latest_soak_all() -> None:
             try:
                 open_latest_soak()
@@ -1527,13 +1568,19 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(tab_config, text="Abrir TODO soak", width=18, command=open_latest_soak_all).grid(
-            row=38, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        tk.Button(cfg_right, text="Abrir ultimo soak", width=18, command=open_latest_soak).grid(
+            row=25, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(cfg_right, text="Abrir JSONL soak", width=18, command=open_latest_soak_jsonl).grid(
+            row=25, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(cfg_right, text="Abrir TODO soak", width=18, command=open_latest_soak_all).grid(
+            row=25, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Label(tab_config, text="Soak run_id:").grid(row=39, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_config, textvariable=self.soak_run_id_var, width=22, anchor="w").grid(
-            row=39, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cfg_right, text="Soak run_id:").grid(row=26, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cfg_right, textvariable=self.soak_run_id_var, width=22, anchor="w").grid(
+            row=26, column=1, sticky="w", pady=(6, 0)
         )
 
         def _resolve_latest_soak_inputs() -> tuple[Path | None, Path | None, Path | None, str | None]:
@@ -1646,7 +1693,7 @@ class BotUI:
                     try:
                         self._messagebox.showerror(
                             "Timeline HTML",
-                            f"Falló generación (code={p.returncode}).\n\n{msg}",
+                            f"Fallo generacion (code={p.returncode}).\n\n{msg}",
                         )
                     except Exception:
                         pass
@@ -1670,7 +1717,7 @@ class BotUI:
             row=40, column=1, sticky="w", pady=(6, 0)
         )
 
-        # Aplicación en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
+        # Aplicacion en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
             self._config.update_healing(
                 enabled=bool(self.healing_enabled.get()),
@@ -2140,7 +2187,7 @@ class BotUI:
                         except Exception:
                             pass
 
-                    # Stuck status (diagnóstico del bot en tel.note)
+                    # Stuck status (diagnostico del bot en tel.note)
                     try:
                         note = str(getattr(tel, "note", "") or "").strip()
                         s_reason = str(getattr(tel, "stuck_reason", "") or "").strip()
@@ -2158,7 +2205,7 @@ class BotUI:
                         elif s_reason:
                             status = "FAIL" if s_reason == "STALE_GS" else "WARN"
                             self.stuck_status_var.set(status)
-                            if note.startswith("⛔ Stuck:"):
+                            if note.startswith("Ôøö Stuck:"):
                                 self.stuck_var.set(note)
                             else:
                                 try:
@@ -2169,7 +2216,7 @@ class BotUI:
                                     blk_s = "?" if s_block is None else str(int(s_block))
                                 except Exception:
                                     blk_s = "?"
-                                msg = f"⛔ Stuck: {s_reason} | idle {idle_s} | blockers {blk_s}"
+                                msg = f"Ôøö Stuck: {s_reason} | idle {idle_s} | blockers {blk_s}"
                                 if s_extra:
                                     msg = f"{msg} | {s_extra}"
                                 self.stuck_var.set(msg)
@@ -2351,7 +2398,7 @@ class BotUI:
                         # Checklist: resaltar waypoint actual si podemos mapearlo.
                         try:
                             _load_route_for_ui()
-                            if self._route_items:
+                            if self._cavebot_follow_ui and self._route_items:
                                 cur_idx = None
                                 # Prefer StepNavigator structured index when available.
                                 try:
@@ -2396,7 +2443,7 @@ class BotUI:
                                     except Exception:
                                         pass
 
-                                # Próximos N
+                                # Proximos N
                                 try:
                                     n = 3
                                     if self._route_current_index is not None:
@@ -2406,9 +2453,16 @@ class BotUI:
                                             wpp = self._route_items[j].get("wp")
                                             label = getattr(wpp, "name", None) or f"({getattr(wpp, 'x', '?')},{getattr(wpp, 'y', '?')})"
                                             nxt.append(str(label))
-                                        self._route_next_var.set(" → ".join(nxt) if nxt else "-")
+                                        self._route_next_var.set(" -> ".join(nxt) if nxt else "-")
                                     else:
                                         self._route_next_var.set("-")
+                                except Exception:
+                                    pass
+                            elif not self._cavebot_follow_ui:
+                                try:
+                                    self._route_current_index = None
+                                    self._route_listbox.selection_clear(0, "end")
+                                    self._route_next_var.set("-")
                                 except Exception:
                                     pass
                         except Exception:
@@ -2464,6 +2518,10 @@ class BotUI:
             pass
         try:
             self._route_current_index = None
+        except Exception:
+            pass
+        try:
+            self._cavebot_follow_ui = False
         except Exception:
             pass
         try:
@@ -2530,10 +2588,20 @@ class BotUI:
                     self.healing_enabled.set(bool(h.get("enabled")))
                 if "hp_below_pct" in h:
                     self.heal_hp_below_pct.set(int(float(h.get("hp_below_pct") or 0)))
+                if "hp_recover_pct" in h:
+                    self.heal_hp_recover_pct.set(int(float(h.get("hp_recover_pct") or 0)))
                 if "mp_below_pct" in h:
                     self.heal_mp_below_pct.set(int(float(h.get("mp_below_pct") or 0)))
+                if "mp_recover_pct" in h:
+                    self.heal_mp_recover_pct.set(int(float(h.get("mp_recover_pct") or 0)))
                 if "action" in h:
                     self.heal_action.set(str(h.get("action") or ""))
+                if "hp_action" in h:
+                    self.heal_hp_action.set(str(h.get("hp_action") or ""))
+                if "mp_action" in h:
+                    self.heal_mp_action.set(str(h.get("mp_action") or ""))
+                if "cooldown_s" in h:
+                    self.heal_cooldown_s.set(float(h.get("cooldown_s") or 0.0))
         except Exception:
             pass
 
@@ -2689,8 +2757,13 @@ class BotUI:
                 "healing": {
                     "enabled": bool(self.healing_enabled.get()),
                     "hp_below_pct": int(self.heal_hp_below_pct.get()),
+                    "hp_recover_pct": int(self.heal_hp_recover_pct.get()),
                     "mp_below_pct": int(self.heal_mp_below_pct.get()),
+                    "mp_recover_pct": int(self.heal_mp_recover_pct.get()),
                     "action": str(self.heal_action.get()),
+                    "hp_action": str(self.heal_hp_action.get()),
+                    "mp_action": str(self.heal_mp_action.get()),
+                    "cooldown_s": float(self.heal_cooldown_s.get()),
                 },
                 "cavebot": {
                     "enabled": bool(self.cavebot_enabled.get()),
@@ -2841,8 +2914,13 @@ class BotUI:
             # Healing
             self.healing_enabled.set(False)
             self.heal_hp_below_pct.set(70)
+            self.heal_hp_recover_pct.set(80)
             self.heal_mp_below_pct.set(30)
+            self.heal_mp_recover_pct.set(50)
             self.heal_action.set("")
+            self.heal_hp_action.set("")
+            self.heal_mp_action.set("")
+            self.heal_cooldown_s.set(1.0)
         except Exception:
             pass
 
@@ -3168,7 +3246,7 @@ class BotUI:
         self._thread = threading.Thread(target=_runner, daemon=True)
         self._thread.start()
 
-        self.status_var.set("Ejecutándose")
+        self.status_var.set("Ejecutandose")
         self.start_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
 
@@ -3200,10 +3278,10 @@ class BotUI:
 
     def on_close(self) -> None:
         if self._is_running():
-            if not self._messagebox.askyesno("Salir", "El bot está corriendo. ¿Quieres pararlo y salir?"):
+            if not self._messagebox.askyesno("Salir", "El bot esta corriendo. Quieres pararlo y salir?"):
                 return
             self.stop()
-            # Dar un pequeño margen antes de cerrar
+            # Dar un pequeno margen antes de cerrar
             self.root.after(300, self.root.destroy)
             return
 

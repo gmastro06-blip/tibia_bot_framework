@@ -909,12 +909,32 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         # Safe action sink (records what we'd do, no real input injection).
         try:
-            from action.input_driver import ActionRequest, MockInputDriver
+            from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver
 
             mock_driver = MockInputDriver(max_items=500)
+            driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
+            target_hotkey = os.getenv("TARGET_HOTKEY", "").strip()
+            minimap_hotkey = os.getenv("MINIMAP_CLICK_HOTKEY", "").strip()
+            if driver_name in {"keyboard", "wininput"}:
+                input_driver = WindowsKeyboardDriver(
+                    target_hotkey=target_hotkey or None,
+                    minimap_hotkey=minimap_hotkey or None,
+                )
+            else:
+                input_driver = mock_driver
         except Exception:
             ActionRequest = None  # type: ignore[assignment]
             mock_driver = None
+            input_driver = None
+
+        # Simulation-only auto-input generator (logs-only, no real injection).
+        sim_inputs_auto = os.getenv("SIM_INPUTS_AUTO", "1").strip().lower() not in {"0", "false", "no"}
+        try:
+            sim_inputs_interval_s = float(os.getenv("SIM_INPUTS_INTERVAL_S", "2.0").strip() or "2.0")
+        except Exception:
+            sim_inputs_interval_s = 2.0
+        sim_inputs_interval_s = max(0.5, sim_inputs_interval_s)
+        sim_inputs_last_ts = 0.0
 
         # Optional BehaviorTree planner (assistant-only). Defaults ON but is fail-safe.
         bt_runner = None
@@ -1772,6 +1792,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
+                        # Auto-generate simulated inputs when simulation mode is on (logs-only).
+                        try:
+                            if (
+                                sim_cfg is not None
+                                and bool(getattr(sim_cfg, "enabled", False))
+                                and sim_inputs_auto
+                                and (time.time() - sim_inputs_last_ts) >= sim_inputs_interval_s
+                            ):
+                                sim_inputs_last_ts = time.time()
+                                if ActionRequest is not None:
+                                    reqs.append(ActionRequest(kind="keyboard_sim", value="heal_hotkey", note="sim"))
+                                    reqs.append(ActionRequest(kind="minimap_click_sim", value="center_tile", note="sim"))
+                        except Exception:
+                            pass
+
                 if reqs:
                     try:
                         reqs = expand_service_requests(reqs)
@@ -1873,10 +1908,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         input_plan_str = ""
 
-                    if mock_driver is not None:
+                    if input_driver is not None:
                         for r in reqs:
                             try:
-                                mock_driver.send(r)
+                                input_driver.send(r)
                             except Exception:
                                 pass
             except Exception:
