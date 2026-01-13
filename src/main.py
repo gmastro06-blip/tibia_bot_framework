@@ -217,22 +217,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         if drop_key:
             _h_inc(drop_key)
-            # Downgrade minimap provider when confidence is low (prevents jittery coords).
-            try:
-                if coords_provider_minimap:
-                    conf = getattr(gamestate, "coords_confidence", None)
-                    warn_thr = float(os.getenv("MINIMAP_CONFIDENCE_WARN", "0.5") or 0.5)
-                    if conf is not None and float(conf) < warn_thr:
-                        coords_status = "UNSTABLE"
-                        # Optional note for UI when confidence is low.
-                        if runtime_config is not None:
-                            try:
-                                low_conf_note = f"⚠️ minimap coords low confidence ({float(conf):.2f})"
-                                runtime_config.update_telemetry(note=low_conf_note)
-                            except Exception:
-                                pass
-            except Exception:
-                pass
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
@@ -915,6 +899,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
             target_hotkey = os.getenv("TARGET_HOTKEY", "").strip()
             minimap_hotkey = os.getenv("MINIMAP_CLICK_HOTKEY", "").strip()
+
+            try:
+                if runtime_config is not None:
+                    asst_cfg = runtime_config.assistant_snapshot()
+                    mode = str(getattr(asst_cfg, "input_mode", "") or "").strip().lower()
+                    if mode:
+                        driver_name = mode
+                    th = str(getattr(asst_cfg, "target_hotkey", "") or "").strip()
+                    mh = str(getattr(asst_cfg, "minimap_hotkey", "") or "").strip()
+                    if th:
+                        target_hotkey = th
+                    if mh:
+                        minimap_hotkey = mh
+            except Exception:
+                pass
             if driver_name in {"keyboard", "wininput"}:
                 input_driver = WindowsKeyboardDriver(
                     target_hotkey=target_hotkey or None,

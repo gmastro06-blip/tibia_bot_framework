@@ -218,6 +218,14 @@ class BotUI:
         self.asst_confirm = tk.BooleanVar(value=True)
         self.asst_sound = tk.BooleanVar(value=True)
 
+        try:
+            _action_driver = os.getenv("ACTION_DRIVER", "log").strip().lower() or "log"
+        except Exception:
+            _action_driver = "log"
+        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "keyboard", "wininput"} else "log")
+        self.asst_target_hotkey = tk.StringVar(value=os.getenv("TARGET_HOTKEY", "").strip())
+        self.asst_minimap_hotkey = tk.StringVar(value=os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
+
         # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot via env vars.
         try:
             _idle_alert_default = float(os.getenv("ASSIST_IDLE_ALERT_S", "0").strip() or "0")
@@ -1313,19 +1321,34 @@ class BotUI:
             row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(cfg_right, text="").grid(row=3, column=0, pady=(6, 0))
-
-        tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=4, column=0, columnspan=2, sticky="w"
+        tk.Label(cfg_right, text="Modo de inputs").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "keyboard", "wininput").grid(
+            row=3, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
+
+        tk.Label(cfg_right, text="TARGET hotkey").grid(row=4, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.asst_target_hotkey, width=10).grid(
+            row=4, column=1, sticky="w", pady=(4, 0)
+        )
+
+        tk.Label(cfg_right, text="Minimap click hotkey").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(cfg_right, textvariable=self.asst_minimap_hotkey, width=10).grid(
             row=5, column=1, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(cfg_right, text="Replay out_dir").grid(row=6, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cfg_right, text="").grid(row=6, column=0, pady=(6, 0))
+
+        tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
+            row=7, column=0, columnspan=2, sticky="w"
+        )
+        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=8, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(cfg_right, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
+            row=8, column=1, sticky="w", pady=(4, 0)
+        )
+
+        tk.Label(cfg_right, text="Replay out_dir").grid(row=9, column=0, sticky="w", pady=(4, 0))
         tk.Entry(cfg_right, textvariable=self.replay_out_dir, width=28).grid(
-            row=6, column=1, sticky="w", pady=(4, 0)
+            row=9, column=1, sticky="w", pady=(4, 0)
         )
 
         def open_replay_dir() -> None:
@@ -1342,14 +1365,14 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
-            row=6, column=2, sticky="w", padx=(8, 0)
-        )
         tk.Button(cfg_right, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
-            row=4, column=2, sticky="w", padx=(8, 0)
+            row=8, column=2, sticky="w", padx=(8, 0)
+        )
+        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
+            row=9, column=2, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(cfg_right, text="Preset (replay/log)").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cfg_right, text="Preset (replay/log)").grid(row=10, column=0, sticky="w", pady=(6, 0))
         tel_presets = ["Custom", "Off", "Debug", "Soak", "Soak Full"]
         ttk.Combobox(
             cfg_right,
@@ -1357,25 +1380,25 @@ class BotUI:
             values=tel_presets,
             width=16,
             state="readonly",
-        ).grid(row=7, column=1, sticky="w", pady=(6, 0))
+        ).grid(row=10, column=1, sticky="w", pady=(6, 0))
         tk.Button(
             cfg_right,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_telemetry_preset(str(self.telemetry_preset.get())),
-        ).grid(row=7, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        ).grid(row=10, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         tk.Checkbutton(cfg_right, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
-            row=8, column=0, columnspan=2, sticky="w", pady=(8, 0)
+            row=11, column=0, columnspan=2, sticky="w", pady=(8, 0)
         )
-        tk.Label(cfg_right, text="Log interval (ms)").grid(row=9, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cfg_right, text="Log interval (ms)").grid(row=12, column=0, sticky="w", pady=(4, 0))
         tk.Spinbox(cfg_right, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
-            row=9, column=1, sticky="w", pady=(4, 0)
+            row=12, column=1, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(cfg_right, text="Log out_file").grid(row=10, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cfg_right, text="Log out_file").grid(row=13, column=0, sticky="w", pady=(4, 0))
         tk.Entry(cfg_right, textvariable=self.log_out_file, width=28).grid(
-            row=10, column=1, sticky="w", pady=(4, 0)
+            row=13, column=1, sticky="w", pady=(4, 0)
         )
 
         def open_log_parent() -> None:
@@ -1400,10 +1423,10 @@ class BotUI:
                 pass
 
         tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_log_parent).grid(
-            row=10, column=2, sticky="w", padx=(8, 0)
+            row=13, column=2, sticky="w", padx=(8, 0)
         )
         tk.Button(cfg_right, text="Abrir archivo", width=12, command=open_log_file).grid(
-            row=9, column=2, sticky="w", padx=(8, 0)
+            row=14, column=2, sticky="w", padx=(8, 0)
         )
 
         # Idle alert + Overlay (derecha, debajo)
@@ -1751,6 +1774,9 @@ class BotUI:
                 enabled=bool(self.asst_enabled.get()),
                 confirm_actions=bool(self.asst_confirm.get()),
                 sound_alerts=bool(self.asst_sound.get()),
+                input_mode=str(self.asst_input_mode.get()),
+                target_hotkey=str(self.asst_target_hotkey.get()),
+                minimap_hotkey=str(self.asst_minimap_hotkey.get()),
             )
 
         def sync_replay_and_logging(*_args):
@@ -1781,7 +1807,7 @@ class BotUI:
             v.trace_add("write", sync_cavebot)
         for v in [self.sim_enabled, self.sim_paralyzed, self.sim_haste_active, self.sim_utamo_active, self.sim_hungry]:
             v.trace_add("write", sync_simulation)
-        for v in [self.asst_enabled, self.asst_confirm, self.asst_sound]:
+        for v in [self.asst_enabled, self.asst_confirm, self.asst_sound, self.asst_input_mode, self.asst_target_hotkey, self.asst_minimap_hotkey]:
             v.trace_add("write", sync_assistant)
         for v in [
             self.replay_enabled,
@@ -2672,6 +2698,15 @@ class BotUI:
                     self.asst_confirm.set(bool(a.get("confirm_actions")))
                 if "sound_alerts" in a:
                     self.asst_sound.set(bool(a.get("sound_alerts")))
+                if "input_mode" in a:
+                    mode = str(a.get("input_mode") or "log").strip().lower()
+                    if mode not in {"log", "keyboard", "wininput"}:
+                        mode = "log"
+                    self.asst_input_mode.set(mode)
+                if "target_hotkey" in a:
+                    self.asst_target_hotkey.set(str(a.get("target_hotkey") or ""))
+                if "minimap_hotkey" in a:
+                    self.asst_minimap_hotkey.set(str(a.get("minimap_hotkey") or ""))
         except Exception:
             pass
 
@@ -2792,6 +2827,9 @@ class BotUI:
                     "enabled": bool(self.asst_enabled.get()),
                     "confirm_actions": bool(self.asst_confirm.get()),
                     "sound_alerts": bool(self.asst_sound.get()),
+                    "input_mode": str(self.asst_input_mode.get()),
+                    "target_hotkey": str(self.asst_target_hotkey.get()),
+                    "minimap_hotkey": str(self.asst_minimap_hotkey.get()),
                 },
                 "replay": {
                     "enabled": bool(self.replay_enabled.get()),
@@ -2974,6 +3012,9 @@ class BotUI:
             self.asst_enabled.set(True)
             self.asst_confirm.set(True)
             self.asst_sound.set(True)
+            self.asst_input_mode.set("log")
+            self.asst_target_hotkey.set(os.getenv("TARGET_HOTKEY", "").strip())
+            self.asst_minimap_hotkey.set(os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
         except Exception:
             pass
 

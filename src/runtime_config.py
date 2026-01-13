@@ -49,6 +49,9 @@ class AssistantConfig:
     enabled: bool = True
     confirm_actions: bool = True
     sound_alerts: bool = True
+    input_mode: str = "log"  # "log"|"keyboard"
+    target_hotkey: str = ""
+    minimap_hotkey: str = ""
 
 
 @dataclass
@@ -335,6 +338,9 @@ class RuntimeConfig:
                 enabled=bool(self.assistant.enabled),
                 confirm_actions=bool(self.assistant.confirm_actions),
                 sound_alerts=bool(self.assistant.sound_alerts),
+                input_mode=str(getattr(self.assistant, "input_mode", "log") or "log"),
+                target_hotkey=str(getattr(self.assistant, "target_hotkey", "")),
+                minimap_hotkey=str(getattr(self.assistant, "minimap_hotkey", "")),
             )
 
     def replay_snapshot(self) -> ReplayConfig:
@@ -446,6 +452,9 @@ class RuntimeConfig:
         enabled: bool | None = None,
         confirm_actions: bool | None = None,
         sound_alerts: bool | None = None,
+        input_mode: str | None = None,
+        target_hotkey: str | None = None,
+        minimap_hotkey: str | None = None,
     ) -> None:
         with self._lock:
             if enabled is not None:
@@ -454,6 +463,15 @@ class RuntimeConfig:
                 self.assistant.confirm_actions = bool(confirm_actions)
             if sound_alerts is not None:
                 self.assistant.sound_alerts = bool(sound_alerts)
+            if input_mode is not None:
+                mode = str(input_mode).strip().lower()
+                if mode not in {"keyboard", "wininput", "log"}:
+                    mode = "log"
+                self.assistant.input_mode = mode
+            if target_hotkey is not None:
+                self.assistant.target_hotkey = str(target_hotkey)
+            if minimap_hotkey is not None:
+                self.assistant.minimap_hotkey = str(minimap_hotkey)
 
     def update_replay(
         self,
