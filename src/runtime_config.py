@@ -107,9 +107,18 @@ class TelemetrySnapshot:
     cavebot_step_idx: int | None = None
     cavebot_step_next_idx: int | None = None
     cavebot_step_total: int | None = None
+    # Cavebot gating (assistant-only): e.g. require:<expr> failed
+    cavebot_blocked: bool | None = None
+    cavebot_block_reason: str = ""
     # Cavebot termination / stop state (assistant-only)
     cavebot_finished: bool | None = None
     cavebot_finish_reason: str = ""  # e.g. "ROUTE_END|LOW_CAP|LOW_POTIONS"
+    # Navigation observability (pos mode)
+    nav_mode: str = ""  # "axis"|"astar"|""
+    nav_blockers: int | None = None
+    nav_astar_found: bool | None = None
+    nav_astar_path_len: int | None = None
+    nav_astar_visited: int | None = None
     # What the bot would do (assistant mode): serialized mock action(s)
     action_request: str = ""
     action_committed: bool = False
@@ -246,8 +255,15 @@ class RuntimeConfig:
                 cavebot_step_idx=getattr(self.telemetry, "cavebot_step_idx", None),
                 cavebot_step_next_idx=getattr(self.telemetry, "cavebot_step_next_idx", None),
                 cavebot_step_total=getattr(self.telemetry, "cavebot_step_total", None),
+                cavebot_blocked=getattr(self.telemetry, "cavebot_blocked", None),
+                cavebot_block_reason=str(getattr(self.telemetry, "cavebot_block_reason", "")),
                 cavebot_finished=getattr(self.telemetry, "cavebot_finished", None),
                 cavebot_finish_reason=str(getattr(self.telemetry, "cavebot_finish_reason", "")),
+                nav_mode=str(getattr(self.telemetry, "nav_mode", "")),
+                nav_blockers=getattr(self.telemetry, "nav_blockers", None),
+                nav_astar_found=getattr(self.telemetry, "nav_astar_found", None),
+                nav_astar_path_len=getattr(self.telemetry, "nav_astar_path_len", None),
+                nav_astar_visited=getattr(self.telemetry, "nav_astar_visited", None),
                 action_request=str(self.telemetry.action_request),
                 action_committed=bool(self.telemetry.action_committed),
                 input_plan=str(getattr(self.telemetry, "input_plan", "")),
@@ -482,8 +498,15 @@ class RuntimeConfig:
         cavebot_step_idx: int | None = None,
         cavebot_step_next_idx: int | None = None,
         cavebot_step_total: int | None = None,
+        cavebot_blocked: bool | None = None,
+        cavebot_block_reason: str | None = None,
         cavebot_finished: bool | None = None,
         cavebot_finish_reason: str | None = None,
+        nav_mode: str | None = None,
+        nav_blockers: int | None = None,
+        nav_astar_found: bool | None = None,
+        nav_astar_path_len: int | None = None,
+        nav_astar_visited: int | None = None,
         action_request: str | None = None,
         action_committed: bool | None = None,
         input_plan: str | None = None,
@@ -616,10 +639,33 @@ class RuntimeConfig:
                     self.telemetry.cavebot_step_total = int(cavebot_step_total)
                 except Exception:
                     self.telemetry.cavebot_step_total = None
+            if cavebot_blocked is not None:
+                self.telemetry.cavebot_blocked = bool(cavebot_blocked)
+            if cavebot_block_reason is not None:
+                self.telemetry.cavebot_block_reason = str(cavebot_block_reason)
             if cavebot_finished is not None:
                 self.telemetry.cavebot_finished = bool(cavebot_finished)
             if cavebot_finish_reason is not None:
                 self.telemetry.cavebot_finish_reason = str(cavebot_finish_reason)
+            if nav_mode is not None:
+                self.telemetry.nav_mode = str(nav_mode)
+            if nav_blockers is not None:
+                try:
+                    self.telemetry.nav_blockers = int(nav_blockers)
+                except Exception:
+                    self.telemetry.nav_blockers = None
+            if nav_astar_found is not None:
+                self.telemetry.nav_astar_found = bool(nav_astar_found)
+            if nav_astar_path_len is not None:
+                try:
+                    self.telemetry.nav_astar_path_len = int(nav_astar_path_len)
+                except Exception:
+                    self.telemetry.nav_astar_path_len = None
+            if nav_astar_visited is not None:
+                try:
+                    self.telemetry.nav_astar_visited = int(nav_astar_visited)
+                except Exception:
+                    self.telemetry.nav_astar_visited = None
             if action_request is not None:
                 self.telemetry.action_request = str(action_request)
             if action_committed is not None:

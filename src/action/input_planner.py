@@ -36,6 +36,32 @@ class InputPlanner:
         kind = (req.kind or "").strip().lower()
         value = (req.value or "").strip()
 
+        if kind == "wait":
+            # Log-only: represent as an explicit wait.
+            ms = 0
+            try:
+                ms = int(float(value)) if value else 0
+            except Exception:
+                ms = 0
+            if ms <= 0:
+                ms = 500
+            return [PlannedInput(kind="wait", value=f"{ms}ms")]
+
+        if kind == "note":
+            if not value:
+                return []
+            return [PlannedInput(kind="note", value=value)]
+
+        if kind == "beep":
+            # Value can be empty (defaults) or "freq:dur".
+            return [PlannedInput(kind="beep", value=value or "default")]
+
+        if kind == "require":
+            # Not an input; keep as a trace.
+            if not value:
+                return [PlannedInput(kind="note", value="require")]
+            return [PlannedInput(kind="note", value=f"require:{value}")]
+
         if kind == "move":
             # Default: arrows. Can be overridden by env.
             mapping = {

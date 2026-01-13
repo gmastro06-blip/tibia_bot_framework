@@ -42,7 +42,7 @@ def test_rules_alias_ignore_priority_parse() -> None:
     assert "dragon" in rules.ignore
     assert rules.priority == ("orc", "dragon")
 
-    reg = {"orc": {}, "dragon": {}}
+    reg: dict[str, dict[str, object]] = {"orc": {}, "dragon": {}}
     m = BestiaryMatcher(reg, cfg=BestiaryMatchConfig.from_mapping(d), rules=rules)
     # alias
     assert m.canonicalize("0rc") == "orc"

@@ -172,7 +172,31 @@ class BotUI:
         self.cavebot_potions_remaining = tk.IntVar(value=max(0, int(_pot_rem)))
         self.cavebot_potions_min = tk.IntVar(value=max(0, int(_pot_min)))
 
+        # Cavebot recovery (assistant-only): propose sidesteps when stuck.
+        try:
+            _rec_enabled = os.getenv("ASSIST_RECOVERY_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+        except Exception:
+            _rec_enabled = True
+        try:
+            _rec_idle = float((os.getenv("ASSIST_RECOVERY_IDLE_S", "") or "").strip() or "0")
+        except Exception:
+            _rec_idle = 0.0
+        try:
+            _rec_max = int(float(os.getenv("ASSIST_RECOVERY_MAX_ATTEMPTS", "4").strip() or "4"))
+        except Exception:
+            _rec_max = 4
+        try:
+            _rec_stop = os.getenv("ASSIST_RECOVERY_STOP_ON_FAIL", "0").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            _rec_stop = False
+        self.cavebot_recovery_enabled = tk.BooleanVar(value=bool(_rec_enabled))
+        # 0 => auto (core will use ASSIST_IDLE_ALERT_S or fallback)
+        self.cavebot_recovery_idle_s = tk.DoubleVar(value=max(0.0, float(_rec_idle)))
+        self.cavebot_recovery_max_attempts = tk.IntVar(value=max(1, int(_rec_max)))
+        self.cavebot_recovery_stop_on_fail = tk.BooleanVar(value=bool(_rec_stop))
+
         self.cavebot_finish_text = tk.StringVar(value="-")
+        self.cavebot_block_text = tk.StringVar(value="-")
 
         self.cavebot_step_text = tk.StringVar(value="-")
 
@@ -953,9 +977,30 @@ class BotUI:
             row=1, column=7, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(cb_block, text="Fin:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        # Recovery (assistant-only)
+        tk.Checkbutton(cb_block, text="Recovery (anti-stuck)", variable=self.cavebot_recovery_enabled).grid(
+            row=2, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Label(cb_block, text="Idle s:").grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
+        tk.Spinbox(cb_block, from_=0.0, to=999.0, increment=0.5, textvariable=self.cavebot_recovery_idle_s, width=6).grid(
+            row=2, column=2, sticky="w", pady=(6, 0)
+        )
+        tk.Label(cb_block, text="Max:").grid(row=2, column=3, sticky="w", padx=(14, 0), pady=(6, 0))
+        tk.Spinbox(cb_block, from_=1, to=99, textvariable=self.cavebot_recovery_max_attempts, width=6).grid(
+            row=2, column=4, sticky="w", pady=(6, 0)
+        )
+        tk.Checkbutton(cb_block, text="Stop si falla", variable=self.cavebot_recovery_stop_on_fail).grid(
+            row=2, column=5, columnspan=3, sticky="w", padx=(14, 0), pady=(6, 0)
+        )
+
+        tk.Label(cb_block, text="Fin:").grid(row=3, column=0, sticky="w", pady=(4, 0))
         tk.Label(cb_block, textvariable=self.cavebot_finish_text, width=60, anchor="w").grid(
-            row=2, column=1, columnspan=7, sticky="w", pady=(4, 0)
+            row=3, column=1, columnspan=7, sticky="w", pady=(4, 0)
+        )
+
+        tk.Label(cb_block, text="Bloqueado:").grid(row=4, column=0, sticky="w", pady=(2, 0))
+        tk.Label(cb_block, textvariable=self.cavebot_block_text, width=60, anchor="w").grid(
+            row=4, column=1, columnspan=7, sticky="w", pady=(2, 0)
         )
 
         # Checklist de ruta
@@ -1738,6 +1783,20 @@ class BotUI:
                 except Exception:
                     pass
 
+                # Cavebot blocked state (require-gates)
+                try:
+                    blocked = bool(getattr(tel, "cavebot_blocked", False))
+                except Exception:
+                    blocked = False
+                try:
+                    why = str(getattr(tel, "cavebot_block_reason", "") or "").strip()
+                except Exception:
+                    why = ""
+                try:
+                    self.cavebot_block_text.set(why if (blocked and why) else ("(blocked)" if blocked else "-"))
+                except Exception:
+                    pass
+
                 # Disable/enable advance buttons based on finish state.
                 try:
                     running = bool(self._is_running())
@@ -2339,6 +2398,10 @@ class BotUI:
             pass
         try:
             self.cavebot_finish_text.set("-")
+            try:
+                self.cavebot_block_text.set("-")
+            except Exception:
+                pass
         except Exception:
             pass
         try:
@@ -2452,6 +2515,16 @@ class BotUI:
                     self.cavebot_potions_remaining.set(max(0, int(float(cb.get("potions_remaining") or 0))))
                 if "potions_min" in cb:
                     self.cavebot_potions_min.set(max(0, int(float(cb.get("potions_min") or 0))))
+
+                # Recovery (assistant-only)
+                if "recovery_enabled" in cb:
+                    self.cavebot_recovery_enabled.set(bool(cb.get("recovery_enabled")))
+                if "recovery_idle_s" in cb:
+                    self.cavebot_recovery_idle_s.set(max(0.0, float(cb.get("recovery_idle_s") or 0.0)))
+                if "recovery_max_attempts" in cb:
+                    self.cavebot_recovery_max_attempts.set(max(1, int(float(cb.get("recovery_max_attempts") or 1))))
+                if "recovery_stop_on_fail" in cb:
+                    self.cavebot_recovery_stop_on_fail.set(bool(cb.get("recovery_stop_on_fail")))
         except Exception:
             pass
 
@@ -2579,6 +2652,10 @@ class BotUI:
                     "stop_on_low_potions": bool(self.cavebot_stop_on_low_potions.get()),
                     "potions_remaining": int(self.cavebot_potions_remaining.get()),
                     "potions_min": int(self.cavebot_potions_min.get()),
+                    "recovery_enabled": bool(self.cavebot_recovery_enabled.get()),
+                    "recovery_idle_s": float(self.cavebot_recovery_idle_s.get()),
+                    "recovery_max_attempts": int(self.cavebot_recovery_max_attempts.get()),
+                    "recovery_stop_on_fail": bool(self.cavebot_recovery_stop_on_fail.get()),
                 },
                 "simulation": {
                     "enabled": bool(self.sim_enabled.get()),
@@ -2900,6 +2977,31 @@ class BotUI:
             os.environ["POTIONS_STOP_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_potions.get()) else "0"
             os.environ["POTIONS_MIN"] = str(max(0, int(self.cavebot_potions_min.get())))
             os.environ["POTIONS_REMAINING"] = str(max(0, int(self.cavebot_potions_remaining.get())))
+        except Exception:
+            pass
+
+        # Apply recovery policy (assistant-only).
+        try:
+            os.environ["ASSIST_RECOVERY_ENABLED"] = "1" if bool(self.cavebot_recovery_enabled.get()) else "0"
+        except Exception:
+            pass
+        try:
+            idle_s = float(self.cavebot_recovery_idle_s.get())
+        except Exception:
+            idle_s = 0.0
+        try:
+            if idle_s > 0.0:
+                os.environ["ASSIST_RECOVERY_IDLE_S"] = str(float(idle_s))
+            else:
+                os.environ.pop("ASSIST_RECOVERY_IDLE_S", None)
+        except Exception:
+            pass
+        try:
+            os.environ["ASSIST_RECOVERY_MAX_ATTEMPTS"] = str(max(1, int(self.cavebot_recovery_max_attempts.get())))
+        except Exception:
+            pass
+        try:
+            os.environ["ASSIST_RECOVERY_STOP_ON_FAIL"] = "1" if bool(self.cavebot_recovery_stop_on_fail.get()) else "0"
         except Exception:
             pass
 

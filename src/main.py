@@ -20,7 +20,7 @@ from runtime_config import RuntimeConfig
 from decision.targeting import TargetSelector, format_target, Target
 from decision.signals import evaluate_signals
 from decision.scheduler import PeriodicTrigger
-from decision.waypoint_actions import build_requests_from_waypoint_action
+from decision.waypoint_actions import build_requests_from_waypoint_action, evaluate_waypoint_requirements
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
@@ -770,6 +770,33 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             idle_repeat_s = 10.0
         idle_repeat_s = max(1.0, float(idle_repeat_s))
+
+        # Assistant-only recovery policy (no input injection): when the cavebot is
+        # trying to move but the position doesn't change for a while, suggest a
+        # perpendicular sidestep for a few attempts.
+        recovery_enabled = os.getenv("ASSIST_RECOVERY_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+        try:
+            recovery_idle_s = float(os.getenv("ASSIST_RECOVERY_IDLE_S", "").strip() or "0")
+        except Exception:
+            recovery_idle_s = 0.0
+        if recovery_idle_s <= 0.0:
+            # Default: piggyback on idle detection threshold if configured.
+            recovery_idle_s = float(idle_alert_s) if float(idle_alert_s) > 0.0 else 8.0
+        try:
+            recovery_min_interval_s = float(os.getenv("ASSIST_RECOVERY_MIN_INTERVAL_S", "1").strip() or "1")
+        except Exception:
+            recovery_min_interval_s = 1.0
+        recovery_min_interval_s = max(0.1, float(recovery_min_interval_s))
+        try:
+            recovery_max_attempts = int(float(os.getenv("ASSIST_RECOVERY_MAX_ATTEMPTS", "4").strip() or "4"))
+        except Exception:
+            recovery_max_attempts = 4
+        recovery_max_attempts = max(1, int(recovery_max_attempts))
+        recovery_stop_on_fail = os.getenv("ASSIST_RECOVERY_STOP_ON_FAIL", "0").strip().lower() in {"1", "true", "yes"}
+
+        recovery_attempts = 0
+        recovery_last_pos_seen: tuple[int, int, int | None] | None = None
+        recovery_last_applied_ts = 0.0
         last_pos_key: tuple[int, int, int | None] | None = None
         last_pos_change_ts = 0.0
         last_idle_warn_ts = 0.0
@@ -949,6 +976,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         last_pos_change_ts = now
                     else:
                         idle_for_s = max(0.0, now - float(last_pos_change_ts or now))
+
+                    # Recovery attempts reset whenever position changes.
+                    try:
+                        if pos_key != recovery_last_pos_seen:
+                            recovery_last_pos_seen = pos_key
+                            recovery_attempts = 0
+                    except Exception:
+                        pass
                 else:
                     pos_key = None
                     idle_for_s = None
@@ -1116,6 +1151,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             cavebot_finished = False
             cavebot_finish_reason = ""
 
+            # Waypoint gating (assistant-only): e.g. require:<expr> blocks advancing.
+            cavebot_blocked = False
+            cavebot_block_reason = ""
+
+            # Navigation observability (pos mode).
+            nav_mode = ""
+            nav_blockers = None
+            nav_astar_found = None
+            nav_astar_path_len = None
+            nav_astar_visited = None
+
+            # Recovery info (surfaced in telemetry when we emit a stuck reason)
+            recovery_info = ""
+
             if cavebot_cfg is not None and cavebot_cfg.enabled:
                 cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
                 # Reload route if needed
@@ -1204,6 +1253,36 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 last_advance_seen = cur_adv
                         else:
                             should_advance = True
+
+                        # Require-gates: block advancing when requirements are not met.
+                        if (not cavebot_finished) and should_advance:
+                            try:
+                                ok, why = evaluate_waypoint_requirements(
+                                    cavebot_action,
+                                    low_hp=getattr(sig, "low_hp", None) if sig is not None else None,
+                                    low_mp=getattr(sig, "low_mp", None) if sig is not None else None,
+                                    paralyzed=getattr(sig, "paralyzed", None) if sig is not None else None,
+                                    haste_active=getattr(sig, "haste_active", None) if sig is not None else None,
+                                    utamo_active=getattr(sig, "utamo_active", None) if sig is not None else None,
+                                    hungry=getattr(sig, "hungry", None) if sig is not None else None,
+                                    low_cap=low_cap,
+                                    low_potions=low_potions,
+                                    coords_status=coords_status,
+                                    target=target_str,
+                                )
+                                if not ok:
+                                    cavebot_blocked = True
+                                    cavebot_block_reason = str(why or "require_failed")
+                                    should_advance = False
+                                    # Keep decision in preview mode.
+                                    cavebot_next = "blocked"
+                                    note_out = f"⛔ Blocked: {cavebot_block_reason}"
+                                    try:
+                                        print(note_out)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
 
                         if (not cavebot_finished) and should_advance:
                             decision = step_navigator.decide()
@@ -1356,6 +1435,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 blocked_abs = None
 
                             decision = navigator.decide(pos, blocked=blocked_abs)
+
+                            # Navigation observability snapshot
+                            try:
+                                nav_mode = str(getattr(navigator, "pathfind_mode", "") or "")
+                                nav_blockers = int(getattr(navigator, "last_blockers_n", 0) or 0)
+                                nav_astar_found = getattr(navigator, "last_astar_found", None)
+                                nav_astar_path_len = getattr(navigator, "last_astar_path_len", None)
+                                nav_astar_visited = getattr(navigator, "last_astar_visited", None)
+                            except Exception:
+                                pass
                             if decision.reached_waypoint and decision.waypoint is not None:
                                 wp = decision.waypoint
                                 label = wp.name or f"({wp.x},{wp.y})"
@@ -1377,6 +1466,41 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 cavebot_next = f"reached {label}"
                         except Exception:
                             pass
+
+            # Assistant-only recovery: if we have trusted coords and haven't moved
+            # for a while *while cavebot wants to move*, suggest a sidestep.
+            try:
+                if (
+                    recovery_enabled
+                    and not cavebot_finished
+                    and cavebot_next in {"north", "south", "east", "west"}
+                    and pos_key is not None
+                    and coords_status == "OK"
+                    and idle_for_s is not None
+                    and float(idle_for_s) >= float(recovery_idle_s)
+                ):
+                    now = time.time()
+                    if (now - float(recovery_last_applied_ts or 0.0)) >= float(recovery_min_interval_s):
+                        from decision.recovery import choose_sidestep_direction
+
+                        override = choose_sidestep_direction(str(cavebot_next), attempt=int(recovery_attempts))
+                        if override:
+                            recovery_info = (
+                                f"recovery=sidestep intent={cavebot_next} use={override} "
+                                f"attempt={int(recovery_attempts) + 1}/{int(recovery_max_attempts)}"
+                            )
+                            cavebot_next = str(override)
+                            recovery_last_applied_ts = float(now)
+                            recovery_attempts = int(recovery_attempts) + 1
+
+                            if recovery_stop_on_fail and int(recovery_attempts) >= int(recovery_max_attempts):
+                                cavebot_finished = True
+                                cavebot_finish_reason = (
+                                    f"{cavebot_finish_reason}|STUCK" if cavebot_finish_reason else "STUCK"
+                                )
+                                cavebot_next = "stop"
+            except Exception:
+                pass
 
             # Recomendación humana (sin ejecutar inputs)
             recommendation = ""
@@ -1409,9 +1533,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     eat_food_now = False
 
                 if bt_runner is not None and ActionRequest is not None:
+                    target_cls = ""
+                    target_conf = None
+                    try:
+                        if last_target is not None:
+                            target_cls = str(getattr(last_target, "cls", "") or "")
+                            target_conf = float(getattr(last_target, "confidence", 0.0) or 0.0)
+                    except Exception:
+                        target_cls = ""
+                        target_conf = None
+
                     reqs = bt_runner.tick(
                         sig=sig,
                         healing_cfg=healing_cfg,
+                        target_cls=target_cls,
+                        target_conf=target_conf,
                         cavebot_next=cavebot_next,
                         cavebot_action=cavebot_action,
                         commit_flag=bool(commit_flag),
@@ -1419,6 +1555,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     )
                 else:
                     # Fallback: inline planner.
+                    try:
+                        if last_target is not None and ActionRequest is not None:
+                            tcls = str(getattr(last_target, "cls", "") or "").strip().lower()
+                            if tcls:
+                                reqs.append(ActionRequest(kind="target", value=tcls, note="preview"))
+                    except Exception:
+                        pass
+
                     if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
                         act = (healing_cfg.action or "").strip() or "heal"
                         if ActionRequest is not None:
@@ -1449,6 +1593,87 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     action_req_str = ";".join(
                         f"{r.kind}:{r.value}{'*' if getattr(r, 'note', '') == 'committed' else ''}" for r in reqs
                     )
+
+                    # Assistant-only notification: allow waypoint action to request a beep.
+                    try:
+                        want_beep_committed = any(
+                            str(getattr(r, "kind", "") or "").lower() == "beep"
+                            and str(getattr(r, "note", "") or "") == "committed"
+                            for r in reqs
+                        )
+                        want_beep_preview = any(
+                            str(getattr(r, "kind", "") or "").lower() == "beep"
+                            and str(getattr(r, "note", "") or "") != "committed"
+                            for r in reqs
+                        )
+
+                        allow_preview = os.getenv("ASSIST_BEEP_PREVIEW", "0").strip().lower() in {"1", "true", "yes"}
+
+                        should_beep = False
+                        if want_beep_committed and bool(commit_flag):
+                            should_beep = True
+                        elif want_beep_preview and allow_preview:
+                            should_beep = True
+
+                        if (
+                            should_beep
+                            and assistant_cfg is not None
+                            and assistant_cfg.enabled
+                            and assistant_cfg.sound_alerts
+                        ):
+                            try:
+                                import winsound
+
+                                # Pick a tone based on the planned beep request value.
+                                # This is still assistant-only (no input injection).
+                                beep_value = ""
+                                try:
+                                    for r in reqs:
+                                        if str(getattr(r, "kind", "") or "").lower() != "beep":
+                                            continue
+                                        rv = str(getattr(r, "value", "") or "")
+                                        rn = str(getattr(r, "note", "") or "")
+                                        if want_beep_committed and rn == "committed":
+                                            beep_value = rv
+                                            break
+                                        if want_beep_preview and rn != "committed":
+                                            beep_value = rv
+                                            break
+                                        if not beep_value:
+                                            beep_value = rv
+                                except Exception:
+                                    beep_value = ""
+
+                                def _env_int(name: str, default: int) -> int:
+                                    try:
+                                        return int(float(os.getenv(name, str(default)).strip() or str(default)))
+                                    except Exception:
+                                        return int(default)
+
+                                freq = _env_int("ASSIST_BEEP_FREQ_DEFAULT", 740)
+                                dur = _env_int("ASSIST_BEEP_DUR_MS", 120)
+
+                                v = (beep_value or "").strip().lower()
+                                if v == "target_reliable":
+                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_RELIABLE", 880)
+                                elif v == "target_probable":
+                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_PROBABLE", 740)
+                                elif v == "target_ambiguous":
+                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_AMBIGUOUS", 660)
+                                elif v == "target_unknown":
+                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_UNKNOWN", 520)
+                                else:
+                                    # keep default
+                                    pass
+
+                                winsound.Beep(int(freq), int(dur))
+                            except Exception:
+                                try:
+                                    print("\a", end="")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
 
                     # LOG-ONLY planned input sequence (no injection).
                     try:
@@ -1545,6 +1770,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 stuck_reason = "IDLE"
 
                         if stuck_reason is not None:
+                            try:
+                                if recovery_info:
+                                    extra = f"{extra} | {recovery_info}" if extra else str(recovery_info)
+                            except Exception:
+                                pass
                             stuck_reason_tick = str(stuck_reason)
                             stuck_extra_tick = str(extra)
 
@@ -1660,8 +1890,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cavebot_step_idx=cavebot_step_idx,
                         cavebot_step_next_idx=cavebot_step_next_idx,
                         cavebot_step_total=cavebot_step_total,
+                        cavebot_blocked=cavebot_blocked,
+                        cavebot_block_reason=cavebot_block_reason,
                         cavebot_finished=cavebot_finished,
                         cavebot_finish_reason=cavebot_finish_reason,
+                        nav_mode=nav_mode,
+                        nav_blockers=nav_blockers,
+                        nav_astar_found=nav_astar_found,
+                        nav_astar_path_len=nav_astar_path_len,
+                        nav_astar_visited=nav_astar_visited,
                         action_request=action_req_str,
                         action_committed=action_committed,
                         input_plan=input_plan_str,
@@ -1880,6 +2117,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_step_idx": cavebot_step_idx,
                         "cavebot_step_next_idx": cavebot_step_next_idx,
                         "cavebot_step_total": cavebot_step_total,
+                        "cavebot_blocked": bool(cavebot_blocked),
+                        "cavebot_block_reason": str(cavebot_block_reason or ""),
                         "action_request": action_req_str,
                         "action_committed": bool(action_committed),
                         "action_ts": None,
@@ -1888,6 +2127,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "stuck_idle_s": stuck_idle_s_tick,
                         "stuck_blockers": stuck_blockers_tick,
                         "stuck_extra": stuck_extra_tick,
+                        "nav_mode": str(nav_mode or ""),
+                        "nav_blockers": nav_blockers,
+                        "nav_astar_found": nav_astar_found,
+                        "nav_astar_path_len": nav_astar_path_len,
+                        "nav_astar_visited": nav_astar_visited,
                     }
                     try:
                         ar, _ac, ats, ip = _a_snapshot()

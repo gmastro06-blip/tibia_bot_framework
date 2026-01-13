@@ -82,7 +82,7 @@ mask_red = cv2.bitwise_or(mask_low, mask_high)
 
 ## Configuration Files
 - **configs/route.json**: Navigator waypoints `[{"x": 10, "y": 20}, ...]`
-- **configs/bestiary_match.yaml**: Creature priority rules (YAML schema TBD)
+ - **configs/bestiary_match.yaml**: Creature priority rules (YAML schema implemented)
 - **data/creatures_registry.json**: Canonical creature metadata
 - **configs/ocr_corrections.json**: Map misread text → correct names
 

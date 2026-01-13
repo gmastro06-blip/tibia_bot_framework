@@ -40,3 +40,45 @@ def test_step_navigator_loops(monkeypatch):
     assert d3.direction == "west"
     d4 = nav.decide()
     assert d4.reached_waypoint is True
+
+
+def test_step_navigator_consumes_action_after_waypoint(monkeypatch):
+    monkeypatch.setenv("CAVEBOT_LOOP", "0")
+
+    nav = StepNavigator(
+        [
+            Waypoint(0, 0),
+            Waypoint(0, 0, action="loot", has_xy=False),
+            Waypoint(1, 0),
+        ]
+    )
+
+    # Action should be surfaced before movement.
+    d0 = nav.decide()
+    assert d0.reached_waypoint is True
+    assert d0.direction is None
+    assert d0.waypoint is not None
+    assert d0.waypoint.action == "loot"
+
+    d1 = nav.decide()
+    assert d1.direction == "east"
+
+
+def test_step_navigator_conditional_jump_uses_env(monkeypatch):
+    monkeypatch.setenv("CAVEBOT_LOOP", "0")
+    monkeypatch.setenv("ROUTE_VAR_HUNT_DOWN", "1")
+
+    nav = StepNavigator(
+        [
+            Waypoint(0, 0),
+            Waypoint(0, 0, conditional_jump={"var_name": "hunt_down", "label_jump": "A", "label_skip": "B"}, has_xy=False),
+            Waypoint(0, 0, label="A", has_xy=False),
+            Waypoint(1, 0),
+            Waypoint(0, 0, label="B", has_xy=False),
+            Waypoint(9, 0),
+        ]
+    )
+
+    # Jump should take us to label A => next coordinate is (1,0), so first move is east.
+    d1 = nav.decide()
+    assert d1.direction == "east"

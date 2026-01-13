@@ -31,3 +31,21 @@ def test_step_navigator_preview_reached_waypoint_when_segment_complete() -> None
     nxt = nav.preview()
     assert nxt.reached_waypoint is True
     assert nxt.direction is None
+
+
+def test_step_navigator_preview_surfaces_action_after_waypoint() -> None:
+    nav = StepNavigator([Waypoint(0, 0), Waypoint(0, 0, action="loot", has_xy=False), Waypoint(1, 0)])
+
+    # Preview should show the action step first.
+    p1 = nav.preview()
+    assert p1.reached_waypoint is True
+    assert p1.direction is None
+    assert p1.waypoint is not None
+    assert p1.waypoint.action == "loot"
+
+    # Calling preview again should not mutate; still the action.
+    p2 = nav.preview()
+    assert p2.reached_waypoint is True
+    assert p2.direction is None
+    assert p2.waypoint is not None
+    assert p2.waypoint.action == "loot"

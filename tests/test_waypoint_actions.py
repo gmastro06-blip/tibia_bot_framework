@@ -33,3 +33,17 @@ def test_waypoint_actions_sets_committed_note() -> None:
     assert len(reqs) == 1
     assert reqs[0].kind == "loot"
     assert reqs[0].note == "committed"
+
+
+def test_waypoint_actions_supports_note_wait_beep_require() -> None:
+    reqs = build_requests_from_waypoint_action(
+        "note:Hello World; wait:750; beep:660:120; require:!low_hp,coords_ok",
+        committed=False,
+    )
+
+    assert [r.kind for r in reqs] == ["note", "wait", "beep", "require"]
+    assert [r.note for r in reqs] == ["preview"] * len(reqs)
+    assert reqs[0].value == "Hello World"
+    assert reqs[1].value == "750"
+    assert reqs[2].value == "660:120"
+    assert reqs[3].value == "!low_hp,coords_ok"

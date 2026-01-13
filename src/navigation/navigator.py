@@ -44,6 +44,13 @@ class Navigator:
         except Exception:
             self.astar_max_nodes = 8000
 
+        # Debug/observability (read-only, best-effort)
+        self.last_blockers_n: int = 0
+        self.last_astar_found: bool | None = None
+        self.last_astar_path_len: int | None = None
+        self.last_astar_visited: int | None = None
+        self.last_goal_local: tuple[int, int] | None = None
+
     def reset(self) -> None:
         self.idx = 0
 
@@ -60,6 +67,8 @@ class Navigator:
         return self.route[self.idx]
 
     def _at_waypoint(self, pos: Union[Tuple[int, int], Tuple[int, int, int]], wp: Waypoint) -> bool:
+        if not bool(getattr(wp, "has_xy", True)):
+            return False
         x, y = int(pos[0]), int(pos[1])
         if abs(x - wp.x) > self.tol or abs(y - wp.y) > self.tol:
             return False
@@ -78,18 +87,37 @@ class Navigator:
     def decide(
         self, pos: Union[Tuple[int, int], Tuple[int, int, int]], blocked: set[Tuple[int, int]] | None = None
     ) -> NavDecision:
-        wp = self.current_waypoint()
-        if wp is None:
-            return NavDecision(direction=None, reached_waypoint=False, waypoint=None)
+        # Allow label-only / action-only steps in the route.
+        # They should not be treated as real coordinates.
+        while True:
+            wp = self.current_waypoint()
+            if wp is None:
+                return NavDecision(direction=None, reached_waypoint=False, waypoint=None)
 
-        if self._at_waypoint(pos, wp):
-            # reached: advance
-            self.idx += 1
-            return NavDecision(direction=None, reached_waypoint=True, waypoint=wp)
+            if not bool(getattr(wp, "has_xy", True)):
+                # Consume non-coordinate steps.
+                self.idx += 1
+                # Emit a reached event only for actionable steps.
+                if getattr(wp, "action", None):
+                    return NavDecision(direction=None, reached_waypoint=True, waypoint=wp)
+                # Labels/comments/calls are skipped silently.
+                continue
+
+            if self._at_waypoint(pos, wp):
+                # reached: advance
+                self.idx += 1
+                return NavDecision(direction=None, reached_waypoint=True, waypoint=wp)
+            break
 
         x, y = int(pos[0]), int(pos[1])
         dx = wp.x - x
         dy = wp.y - y
+
+        # Track blockers (even in non-A* mode) for UI/diagnostics.
+        try:
+            self.last_blockers_n = int(len(blocked) if blocked else 0)
+        except Exception:
+            self.last_blockers_n = 0
 
         # Local A* (dynamic obstacles) - only if enabled via env.
         if self.pathfind_mode in {"astar", "a*"}:
@@ -99,6 +127,10 @@ class Navigator:
             gx = x + clamp_int(dx, -r, r)
             gy = y + clamp_int(dy, -r, r)
             goal_local = (int(gx), int(gy))
+            try:
+                self.last_goal_local = (int(goal_local[0]), int(goal_local[1]))
+            except Exception:
+                self.last_goal_local = None
 
             is_walkable = make_bounded_walkable(
                 min_x=int(x - r),
@@ -110,6 +142,19 @@ class Navigator:
             )
 
             res = astar((int(x), int(y)), goal_local, is_walkable=is_walkable, max_nodes=int(self.astar_max_nodes))
+            try:
+                if res is None:
+                    self.last_astar_found = False
+                    self.last_astar_path_len = None
+                    self.last_astar_visited = None
+                else:
+                    self.last_astar_found = True
+                    self.last_astar_path_len = int(len(res.path))
+                    self.last_astar_visited = int(res.visited)
+            except Exception:
+                self.last_astar_found = None
+                self.last_astar_path_len = None
+                self.last_astar_visited = None
             if res is not None and len(res.path) >= 2:
                 nx, ny = res.path[1]
                 if nx == x + 1 and ny == y:
@@ -121,6 +166,12 @@ class Navigator:
                 if nx == x and ny == y - 1:
                     return NavDecision(direction="north", reached_waypoint=False, waypoint=wp)
             # Fallback to axis-greedy if A* can't find a path.
+        else:
+            # Clear A* debug fields when not using A*.
+            self.last_astar_found = None
+            self.last_astar_path_len = None
+            self.last_astar_visited = None
+            self.last_goal_local = None
 
         # Move one tile step, prefer axis with larger absolute distance.
         if abs(dx) >= abs(dy):

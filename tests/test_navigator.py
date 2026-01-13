@@ -45,3 +45,28 @@ def test_navigator_loops(monkeypatch):
     # should loop back to wp0; from (1,0) towards (0,0) => west
     d = nav.decide((1, 0))
     assert d.direction == "west"
+
+
+def test_navigator_skips_label_only_steps(monkeypatch):
+    monkeypatch.setenv("CAVEBOT_WAYPOINT_TOL", "0")
+    monkeypatch.setenv("CAVEBOT_LOOP", "0")
+
+    nav = Navigator([Waypoint(0, 0, label="start", has_xy=False), Waypoint(3, 0)])
+
+    d = nav.decide((0, 0))
+    assert d.direction == "east"
+
+
+def test_navigator_emits_action_only_steps(monkeypatch):
+    monkeypatch.setenv("CAVEBOT_WAYPOINT_TOL", "0")
+    monkeypatch.setenv("CAVEBOT_LOOP", "0")
+
+    nav = Navigator([Waypoint(0, 0, action="loot", has_xy=False), Waypoint(2, 0)])
+
+    d0 = nav.decide((0, 0))
+    assert d0.reached_waypoint is True
+    assert d0.waypoint is not None
+    assert d0.waypoint.action == "loot"
+
+    d1 = nav.decide((0, 0))
+    assert d1.direction == "east"

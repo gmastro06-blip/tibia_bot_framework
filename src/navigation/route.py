@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 class Waypoint:
     x: int
     y: int
+    # True if this waypoint came from a route item that actually had x/y.
+    # Label-only / action-only steps are allowed by the route schema and should
+    # not be treated as (0,0) coordinates.
+    has_xy: bool = True
     z: Optional[int] = None
     name: Optional[str] = None
     action: Optional[str] = None
@@ -69,6 +73,7 @@ def load_route(path: str) -> List[Waypoint]:
         except Exception:
             xi = None
             yi = None
+        has_xy = bool(xi is not None and yi is not None)
         zi: Optional[int] = None
         if z is not None and str(z).strip() != "":
             try:
@@ -89,6 +94,7 @@ def load_route(path: str) -> List[Waypoint]:
             Waypoint(
                 x=xi if xi is not None else 0,
                 y=yi if yi is not None else 0,
+                has_xy=has_xy,
                 z=zi,
                 name=str(name) if name is not None else None,
                 action=str(action) if action is not None else None,
