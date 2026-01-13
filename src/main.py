@@ -21,6 +21,9 @@ from decision.targeting import TargetSelector, format_target, Target
 from decision.signals import evaluate_signals
 from decision.scheduler import PeriodicTrigger
 from decision.waypoint_actions import build_requests_from_waypoint_action, evaluate_waypoint_requirements
+from decision.service_flow import expand_service_requests
+from decision.auto_steps import AutoStepFallback
+from decision.healing import HealingController
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
@@ -214,15 +217,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         if drop_key:
             _h_inc(drop_key)
-        try:
-            q.get_nowait()
-        except Exception:
-            return
-        try:
-            q.put_nowait(item)
-        except Exception:
-            pass
-
+            # Downgrade minimap provider when confidence is low (prevents jittery coords).
+            try:
+                if coords_provider_minimap:
+                    conf = getattr(gamestate, "coords_confidence", None)
+                    warn_thr = float(os.getenv("MINIMAP_CONFIDENCE_WARN", "0.5") or 0.5)
+                    if conf is not None and float(conf) < warn_thr:
+                        coords_status = "UNSTABLE"
+                        # Optional note for UI when confidence is low.
+                        if runtime_config is not None:
+                            try:
+                                low_conf_note = f"⚠️ minimap coords low confidence ({float(conf):.2f})"
+                                runtime_config.update_telemetry(note=low_conf_note)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
@@ -327,20 +337,26 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     # Thread de captura
     def capture_thread():
-        print("📸 Thread de captura iniciado")
+        nonlocal rois, resolution
+        target_fps = 10.0
+        fps_raw = os.getenv("CAPTURE_FPS", "").strip()
+        if fps_raw:
+            try:
+                target_fps = float(fps_raw)
+            except Exception:
+                target_fps = 10.0
+
         profile = os.getenv("BOT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
         prof_every_s = 5.0
         last_prof = time.time()
         n_cap = 0
         cap_ms_sum = 0.0
-        fps_raw = os.getenv("CAPTURE_FPS", "").strip()
-        target_fps = 10.0
-        if fps_raw:
-            try:
-                target_fps = max(1.0, float(fps_raw))
-            except Exception:
-                target_fps = 10.0
+
         target_period = 1.0 / max(1.0, target_fps)
+        try:
+            print("📸 Thread de captura iniciado")
+        except Exception:
+            pass
         while not stop_event.is_set():
             t0 = time.time()
             frame = capture.capture()
@@ -348,10 +364,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             if profile:
                 cap_ms_sum += (time.time() - t0) * 1000.0
                 n_cap += 1
+
             if frame is not None:
                 _h_inc("capture_ok")
                 _h_set("last_frame_ts", time.time())
-                nonlocal rois, resolution
                 if rois is None or resolution is None:
                     resolution = (int(frame.shape[1]), int(frame.shape[0]))
                     rois_loaded, source_resolution = load_roi_config(resolution)
@@ -361,7 +377,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             else:
                 _h_inc("capture_none")
 
-            # Sleep adaptativo (mantiene FPS objetivo sin spin)
             elapsed = time.time() - t0
             to_sleep = max(0.0, target_period - elapsed)
             if to_sleep:
@@ -637,17 +652,46 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
-                    # Coords/provider snapshot.
+                    # Coords/provider snapshot + nav mode (for overlay observability).
                     try:
                         cp = getattr(gamestate, "coords_provider", None)
                         gx = getattr(gamestate, "pos_x", None)
                         gy = getattr(gamestate, "pos_y", None)
                         gz = getattr(gamestate, "pos_z", None)
+                        conf = getattr(gamestate, "coords_confidence", None)
+                        cstat = getattr(gamestate, "coords_provider_status", "")
+                        c_level = getattr(gamestate, "coords_confidence_level", "")
                         pos_s = ""
                         if gx is not None and gy is not None:
                             pos_s = f" pos=({int(gx)},{int(gy)}" + (f",{int(gz)}" if gz is not None else "") + ")"
                         if cp or pos_s:
-                            info_lines.append(f"coords_provider={cp or ''}{pos_s}")
+                            extra = ""
+                            if conf is not None:
+                                extra = f" conf={float(conf):.2f}"
+                            if c_level:
+                                extra = f"{extra} level={c_level}"
+                            if cstat:
+                                extra = f"{extra} status={cstat}"
+                            info_lines.append(f"coords_provider={cp or ''}{pos_s}{extra}")
+                    except Exception:
+                        pass
+
+                    # Navigation mode snapshot (from telemetry when available).
+                    try:
+                        nav_line = ""
+                        if runtime_config is not None:
+                            tel = runtime_config.telemetry_snapshot()
+                            mode = getattr(tel, "nav_mode", "") or ""
+                            nxt = getattr(tel, "cavebot_next", "") or ""
+                            reason = getattr(tel, "note", "") or ""
+                            if mode:
+                                nav_line = f"nav={mode}"
+                                if nxt:
+                                    nav_line = f"{nav_line} next={nxt}"
+                                if reason:
+                                    nav_line = f"{nav_line} note={reason[:60]}" if len(reason) > 60 else f"{nav_line} note={reason}"
+                        if nav_line:
+                            info_lines.append(nav_line)
                     except Exception:
                         pass
 
@@ -820,6 +864,25 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             coords_fail_jump = 25
         coords_warn_jump = max(1, int(coords_warn_jump))
         coords_fail_jump = max(coords_warn_jump, int(coords_fail_jump))
+
+        auto_steps_enabled = os.getenv("CAVEBOT_AUTO_STEPS", "1").strip().lower() not in {"0", "false", "no"}
+        try:
+            auto_steps_activate_s = float(os.getenv("CAVEBOT_AUTO_STEPS_ACTIVATE_S", "1.5").strip() or "1.5")
+        except Exception:
+            auto_steps_activate_s = 1.5
+        try:
+            auto_steps_recover_s = float(os.getenv("CAVEBOT_AUTO_STEPS_RECOVER_S", "2.0").strip() or "2.0")
+        except Exception:
+            auto_steps_recover_s = 2.0
+        auto_steps = AutoStepFallback(
+            enabled=auto_steps_enabled,
+            activate_level=(os.getenv("CAVEBOT_AUTO_STEPS_ACTIVATE_LEVEL", "red").strip() or "red"),
+            activate_s=auto_steps_activate_s,
+            recover_level=(os.getenv("CAVEBOT_AUTO_STEPS_RECOVER_LEVEL", "amber").strip() or "amber"),
+            recover_s=auto_steps_recover_s,
+        )
+        auto_steps_active = False
+        healing_ctrl = HealingController()
         last_event_target = ""
         last_event_reco = ""
         last_event_wp = ""
@@ -829,6 +892,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_event_flags: tuple[bool, bool, bool, bool, bool, bool] | None = None
         last_event_note = ""
         last_block_log_ts = 0.0
+        last_stuck_reason_seen = ""
+        stuck_repeat_count = 0
+        last_reseed_seen = 0
 
         # Env-based JSONL logging (used when no RuntimeConfig/UI is attached).
         log_enabled_env_raw = os.getenv("LOG_JSONL_ENABLED", "").strip().lower()
@@ -891,6 +957,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 runtime_config.snapshot() if runtime_config is not None else (None, None)
             )
 
+            if cavebot_cfg is not None:
+                try:
+                    auto_steps.enabled = bool(getattr(cavebot_cfg, "auto_steps_enabled", auto_steps.enabled))
+                    auto_steps.activate_level = str(getattr(cavebot_cfg, "auto_steps_activate_level", auto_steps.activate_level))
+                    auto_steps.recover_level = str(getattr(cavebot_cfg, "auto_steps_recover_level", auto_steps.recover_level))
+                    auto_steps.activate_s = float(getattr(cavebot_cfg, "auto_steps_activate_s", auto_steps.activate_s))
+                    auto_steps.recover_s = float(getattr(cavebot_cfg, "auto_steps_recover_s", auto_steps.recover_s))
+                except Exception:
+                    pass
+
             sim_cfg = runtime_config.simulation_snapshot() if runtime_config is not None else None
             assistant_cfg = runtime_config.assistant_snapshot() if runtime_config is not None else None
 
@@ -931,12 +1007,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 sig = None
 
+            heal_dec = healing_ctrl.update(sig, healing_cfg)
+
             # Anti-stuck inputs-free: track last position change and compute idle duration.
             note_out = ""
             pos_key: tuple[int, int, int | None] | None = None
             idle_for_s: float | None = None
             coords_status = ""
             coords_jump = 0
+            coords_confidence_level = ""
             # Structured stuck fields (sent to UI regardless of note throttling)
             stuck_reason_tick = ""
             stuck_idle_s_tick = 0.0
@@ -995,6 +1074,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 coords_status = "DISABLED" if coords_provider_disabled else "NO_COORDS"
                 coords_jump = 0
 
+            coords_confidence_level = str(getattr(gamestate, "coords_confidence_level", "") or "")
+
+            # Downgrade minimap provider when confidence is low (prevents jittery coords).
+            try:
+                if coords_provider_minimap:
+                    conf = getattr(gamestate, "coords_confidence", None)
+                    warn_thr = float(os.getenv("MINIMAP_CONFIDENCE_WARN", "0.5") or 0.5)
+                    if conf is not None and float(conf) < warn_thr:
+                        coords_status = "UNSTABLE"
+            except Exception:
+                pass
+
             # Diagnóstico específico para minimap (seed/ROI), rate-limited.
             try:
                 if coords_provider_minimap and pos_key is None and not coords_provider_disabled:
@@ -1041,6 +1132,24 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     runtime_config.update_telemetry(note=msg)
                             except Exception:
                                 pass
+            except Exception:
+                pass
+
+            # Minimap reseed request (assistant/UI-driven).
+            try:
+                if runtime_config is not None:
+                    reseed_cur = runtime_config.reseed_counter_snapshot()
+                    if reseed_cur != last_reseed_seen:
+                        last_reseed_seen = reseed_cur
+                        note_out = note_out or "ℹ️ minimap reseed requested"
+                        try:
+                            print("🔄 minimap reseed requested (UI)")
+                        except Exception:
+                            pass
+                        try:
+                            gamestate_builder.reseed_minimap()
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -1166,17 +1275,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             recovery_info = ""
 
             if cavebot_cfg is not None and cavebot_cfg.enabled:
-                cavebot_mode = os.getenv("CAVEBOT_MODE", "pos").strip().lower()
+                cavebot_mode = str(getattr(cavebot_cfg, "mode", "") or "").strip().lower() or os.getenv("CAVEBOT_MODE", "pos").strip().lower()
+                if bool(getattr(cavebot_cfg, "force_steps", False)):
+                    cavebot_mode = "steps"
+                base_steps_mode = cavebot_mode in {"steps", "step"}
                 # Reload route if needed
                 if (navigator is None and step_navigator is None) or navigator_route_path != cavebot_cfg.route_path:
                     try:
                         route = load_route(cavebot_cfg.route_path)
                         navigator = None
                         step_navigator = None
-                        if cavebot_mode in {"steps", "step"}:
+                        if base_steps_mode:
                             step_navigator = StepNavigator(route)
                         else:
                             navigator = Navigator(route)
+                            if auto_steps_enabled:
+                                step_navigator = StepNavigator(route)
                         navigator_route_path = cavebot_cfg.route_path
                         print(f"🧭 Cavebot: ruta cargada ({len(route)} waypoints)")
                     except Exception as e:
@@ -1185,7 +1299,24 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         navigator_route_path = None
                         print(f"🧭 Cavebot: no pude cargar ruta ({cavebot_cfg.route_path}): {e}")
 
+                use_steps_mode = base_steps_mode
+                auto_steps_reason = ""
                 if step_navigator is not None:
+                    try:
+                        use_steps_mode, auto_steps_reason = auto_steps.update(
+                            coords_confidence_level,
+                            has_coords=pos_key is not None,
+                            base_steps=base_steps_mode,
+                        )
+                        auto_steps_active = bool(use_steps_mode and not base_steps_mode)
+                    except Exception:
+                        auto_steps_active = False
+                        use_steps_mode = base_steps_mode
+                        auto_steps_reason = ""
+                else:
+                    auto_steps_active = False
+
+                if step_navigator is not None and use_steps_mode:
                     try:
                         # Keep loop behavior in sync with env (UI applies per-run, but this allows live toggles too).
                         try:
@@ -1313,6 +1444,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             label = wp.name or f"({wp.x},{wp.y})"
                             cavebot_next = f"reached {label}"
 
+                        nav_mode = "steps_auto" if auto_steps_active else "steps"
+
+                        if auto_steps_active and auto_steps_reason and not note_out:
+                            note_out = f"ℹ️ {auto_steps_reason}"
+
                         # StepNavigator index exposure for UI checklist.
                         try:
                             cavebot_step_total = int(len(getattr(step_navigator, "route", []) or []))
@@ -1368,6 +1504,32 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 pos = (int(px_raw), int(py_raw))
                         except Exception:
                             pos = None
+
+                    # Confidence gating for minimap provider: block moves when signal is weak.
+                    try:
+                        if coords_provider_minimap:
+                            coords_confidence = getattr(gamestate, "coords_confidence", None)
+                            block_thr = float(os.getenv("MINIMAP_CONFIDENCE_BLOCK", "0.3") or 0.3)
+                            if coords_confidence is not None and float(coords_confidence) < block_thr:
+                                coords_status = "LOW_CONF"
+                                pos = None
+                                if runtime_config is not None:
+                                    try:
+                                        runtime_config.update_telemetry(
+                                            note=f"⛔ minimap coords low confidence ({float(coords_confidence):.2f})"
+                                        )
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+
+                    if coords_status in {"BAD_JUMP", "UNSTABLE", "LOW_CONF"}:
+                        stuck_reason_tick = coords_status
+                        stuck_idle_s_tick = 0.0
+                        stuck_blockers_tick = 0
+                        stuck_extra_tick = "coords unstable"
+                        if not note_out:
+                            note_out = f"⛔ coords {coords_status}"
 
                     # Degradación/gating por coords: no usar coords si NO_COORDS o jitter/saltos.
                     if pos is None or coords_status in {"NO_COORDS", "BAD_JUMP", "UNSTABLE", "DISABLED", "NO_SEED", "NO_MINIMAP_ROI"}:
@@ -1504,9 +1666,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             # Recomendación humana (sin ejecutar inputs)
             recommendation = ""
-            if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
-                action = (healing_cfg.action or "").strip()
-                recommendation = f"heal: {action}" if action else "heal"
+            if healing_cfg is not None and healing_cfg.enabled and (heal_dec.heal_hp or heal_dec.heal_mp):
+                hp_act = (getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "")).strip()
+                mp_act = (getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "")).strip()
+                if heal_dec.heal_hp and heal_dec.heal_mp:
+                    joined = "+".join([a for a in [hp_act, mp_act] if a]) or "heal"
+                    recommendation = f"heal: {joined}"
+                elif heal_dec.heal_hp:
+                    recommendation = f"heal: {hp_act}" if hp_act else "heal"
+                elif heal_dec.heal_mp:
+                    recommendation = f"heal: {mp_act}" if mp_act else "heal"
 
             if low_cap:
                 if recommendation:
@@ -1532,6 +1701,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 except Exception:
                     eat_food_now = False
 
+                heal_committed = True
+                try:
+                    if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                        heal_committed = False
+                except Exception:
+                    heal_committed = True
+
                 if bt_runner is not None and ActionRequest is not None:
                     target_cls = ""
                     target_conf = None
@@ -1552,6 +1728,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cavebot_action=cavebot_action,
                         commit_flag=bool(commit_flag),
                         eat_food=bool(eat_food_now),
+                        heal_hp=bool(getattr(heal_dec, "heal_hp", False)),
+                        heal_mp=bool(getattr(heal_dec, "heal_mp", False)),
                     )
                 else:
                     # Fallback: inline planner.
@@ -1563,10 +1741,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
-                    if sig is not None and healing_cfg is not None and healing_cfg.enabled and sig.healing_trigger:
-                        act = (healing_cfg.action or "").strip() or "heal"
-                        if ActionRequest is not None:
-                            reqs.append(ActionRequest(kind="heal", value=act, note="preview"))
+                    heal_note = "committed" if heal_committed else "preview"
+                    if healing_cfg is not None and healing_cfg.enabled:
+                        if getattr(heal_dec, "heal_hp", False):
+                            act_hp = (getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
+                            if ActionRequest is not None:
+                                reqs.append(ActionRequest(kind="heal", value=act_hp, note=heal_note))
+                        if getattr(heal_dec, "heal_mp", False):
+                            act_mp = (getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
+                            if ActionRequest is not None:
+                                reqs.append(ActionRequest(kind="heal", value=act_mp, note=heal_note))
 
                     if cavebot_next in {"north", "south", "east", "west"}:
                         note = "committed" if commit_flag else "preview"
@@ -1589,6 +1773,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         pass
 
                 if reqs:
+                    try:
+                        reqs = expand_service_requests(reqs)
+                    except Exception:
+                        pass
+
                     action_committed = any(getattr(r, "note", "") == "committed" for r in reqs)
                     action_req_str = ";".join(
                         f"{r.kind}:{r.value}{'*' if getattr(r, 'note', '') == 'committed' else ''}" for r in reqs
@@ -1794,12 +1983,37 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             dur_s = "?"
 
+                        if stuck_reason == last_stuck_reason_seen:
+                            stuck_repeat_count = int(stuck_repeat_count) + 1
+                        else:
+                            stuck_repeat_count = 0
+                        last_stuck_reason_seen = str(stuck_reason)
+
                         msg = f"⛔ Stuck: {stuck_reason} | pos {pos_s} | idle {dur_s}"
                         if extra:
                             msg = f"{msg} | {extra}"
+                        if stuck_repeat_count > 0:
+                            msg = f"{msg} | repeat={stuck_repeat_count + 1}"
                         note_out = msg
                         try:
                             print(msg)
+                        except Exception:
+                            pass
+
+                        # Optional beep to highlight persistent stuck states.
+                        try:
+                            if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
+                                if now - last_idle_beep_ts >= max(1.0, float(idle_repeat_s)):
+                                    last_idle_beep_ts = now
+                                    try:
+                                        import winsound
+
+                                        winsound.Beep(600, 140)
+                                    except Exception:
+                                        try:
+                                            print("\a", end="")
+                                        except Exception:
+                                            pass
                         except Exception:
                             pass
 
@@ -1870,6 +2084,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         minimap_acc_dy=getattr(gamestate, "minimap_acc_dy", None),
                         minimap_marker_dpx_dx=getattr(gamestate, "minimap_marker_dpx_dx", None),
                         minimap_marker_dpx_dy=getattr(gamestate, "minimap_marker_dpx_dy", None),
+                        coords_confidence=getattr(gamestate, "coords_confidence", None),
+                        coords_provider_status=getattr(gamestate, "coords_provider_status", ""),
+                        coords_confidence_level=getattr(gamestate, "coords_confidence_level", ""),
                         ring_equipped=ring_equipped,
                         amulet_equipped=amulet_equipped,
                         low_hp=sig.low_hp,
@@ -2039,6 +2256,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "minimap_acc_dy": getattr(tel, "minimap_acc_dy", None),
                         "minimap_marker_dpx_dx": getattr(tel, "minimap_marker_dpx_dx", None),
                         "minimap_marker_dpx_dy": getattr(tel, "minimap_marker_dpx_dy", None),
+                        "coords_confidence": getattr(tel, "coords_confidence", None),
+                        "coords_provider_status": getattr(tel, "coords_provider_status", ""),
                         "ring_equipped": getattr(tel, "ring_equipped", None),
                         "amulet_equipped": getattr(tel, "amulet_equipped", None),
                         "low_hp": tel.low_hp,
@@ -2100,6 +2319,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "minimap_acc_dy": getattr(gamestate, "minimap_acc_dy", None),
                         "minimap_marker_dpx_dx": getattr(gamestate, "minimap_marker_dpx_dx", None),
                         "minimap_marker_dpx_dy": getattr(gamestate, "minimap_marker_dpx_dy", None),
+                        "coords_confidence": getattr(gamestate, "coords_confidence", None),
+                        "coords_provider_status": getattr(gamestate, "coords_provider_status", ""),
+                        "coords_confidence_level": getattr(gamestate, "coords_confidence_level", ""),
                         "ring_equipped": ring_equipped,
                         "amulet_equipped": amulet_equipped,
                         "low_hp": bool(getattr(sig, "low_hp", False)) if sig is not None else None,
@@ -2148,14 +2370,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 pass
 
             # Healing en tiempo real (lógica mínima: solo decide + log)
-            if sig is not None and healing_cfg is not None and healing_cfg.enabled:
+            if healing_cfg is not None and healing_cfg.enabled:
                 try:
-                    if sig.healing_trigger:
-                        action = (healing_cfg.action or "").strip()
-                        if action:
-                            print(f"🩹 Healing TRIGGER ({action})")
-                        else:
-                            print("🩹 Healing TRIGGER")
+                    if getattr(heal_dec, "heal_hp", False) or getattr(heal_dec, "heal_mp", False):
+                        hp_act = (getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "")).strip()
+                        mp_act = (getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "")).strip()
+                        if getattr(heal_dec, "heal_hp", False) and getattr(heal_dec, "heal_mp", False):
+                            label = "+".join([a for a in [hp_act, mp_act] if a]) or "heal"
+                            print(f"🩹 Healing TRIGGER ({label})")
+                        elif getattr(heal_dec, "heal_hp", False):
+                            label = hp_act or "heal"
+                            print(f"🩹 Healing TRIGGER ({label})")
+                        elif getattr(heal_dec, "heal_mp", False):
+                            label = mp_act or "heal"
+                            print(f"🩹 Healing TRIGGER ({label})")
                 except Exception:
                     pass
 

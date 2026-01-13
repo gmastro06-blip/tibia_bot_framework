@@ -31,3 +31,9 @@ def test_plan_many_concatenates() -> None:
         ]
     )
     assert format_plan(plan) == "key:Left;hotkey:ctrl+l"
+
+
+def test_plan_service_actions_are_macro_traces() -> None:
+    p = InputPlanner()
+    plan = p.plan_one(ActionRequest(kind="depot", value="deposit"))
+    assert format_plan(plan) == "macro:depot:deposit"

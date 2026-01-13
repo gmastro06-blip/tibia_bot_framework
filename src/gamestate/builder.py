@@ -33,6 +33,9 @@ class GameState:
     minimap_acc_dy: Optional[float] = None
     minimap_marker_dpx_dx: Optional[float] = None
     minimap_marker_dpx_dy: Optional[float] = None
+    coords_confidence: Optional[float] = None
+    coords_provider_status: Optional[str] = None
+    coords_confidence_level: Optional[str] = None
     ring_equipped: Optional[bool] = None
     amulet_equipped: Optional[bool] = None
     hungry: Optional[bool] = None
@@ -89,6 +92,26 @@ class GameStateBuilder:
         self._minimap_tracker = MinimapMotionTracker()
         self._minimap_seed: tuple[int, int, int | None] | None = None
         self._minimap_coords: tuple[int, int, int | None] | None = None
+        self._minimap_accept_streak: int = 0
+        self._minimap_last_resp: float = 0.0
+        self._minimap_confidence: float = 0.0
+        self._minimap_status: str = ""
+        self._minimap_accept_streak: int = 0
+        self._minimap_last_resp: float = 0.0
+
+    def reseed_minimap(self) -> None:
+        """Resetea el tracker de minimapa y obliga a pedir seed de nuevo."""
+
+        try:
+            self._minimap_tracker.reset()
+        except Exception:
+            pass
+        self._minimap_seed = None
+        self._minimap_coords = None
+        self._minimap_accept_streak = 0
+        self._minimap_last_resp = 0.0
+        self._minimap_confidence = 0.0
+        self._minimap_status = "reseed"
 
     @staticmethod
     def _coords_provider_kind() -> str:
@@ -202,6 +225,7 @@ class GameStateBuilder:
         """
 
         if not (isinstance(rois, dict) and rois.get("minimap_content") is not None):
+            self._minimap_status = "minimap_no_roi"
             return None
 
         # Seed una vez (o si todavía no existe).
@@ -217,6 +241,7 @@ class GameStateBuilder:
                 seed = self._coords_from_file()
 
             if seed is None:
+                self._minimap_status = "minimap_no_seed"
                 return None
 
             self._minimap_seed = seed
@@ -227,8 +252,10 @@ class GameStateBuilder:
             mx, my, mw, mh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["minimap_content"])
             crop = frame[my : my + mh, mx : mx + mw]
             if crop is None or crop.size == 0:
+                self._minimap_status = "minimap_no_crop"
                 return self._minimap_coords
         except Exception:
+            self._minimap_status = "minimap_no_crop"
             return self._minimap_coords
 
         step = None
@@ -238,6 +265,7 @@ class GameStateBuilder:
             step = None
 
         if step is None:
+            self._minimap_status = "minimap_no_step"
             return self._minimap_coords
 
         dx_tiles, dy_tiles, _resp = step
@@ -245,12 +273,43 @@ class GameStateBuilder:
             self._minimap_coords = self._minimap_seed
 
         if self._minimap_coords is None:
+            self._minimap_status = "minimap_no_seed"
             return None
+
+        # Confidence gating to reduce jitter (minimap is noisy vs OCR coords).
+        resp = _resp
+        self._minimap_last_resp = float(resp) if resp is not None else 0.0
+        accept_resp = float(os.getenv("MINIMAP_ACCEPT_MIN_RESPONSE", "0.20") or 0.20)
+        min_streak = int(float(os.getenv("MINIMAP_ACCEPT_MIN_STREAK", "2") or 2))
+        max_step_tiles = int(float(os.getenv("MINIMAP_ACCEPT_MAX_STEP_TILES", "4") or 4))
+        min_streak = max(1, min_streak)
+        max_step_tiles = max(1, max_step_tiles)
+
+        if self._minimap_last_resp < accept_resp:
+            self._minimap_accept_streak = 0
+            self._minimap_confidence = min(1.0, self._minimap_last_resp / accept_resp) if accept_resp > 0 else 0.0
+            self._minimap_status = "minimap_low_resp"
+            return self._minimap_coords
+
+        self._minimap_accept_streak += 1
+        self._minimap_confidence = min(1.0, float(self._minimap_accept_streak) / float(min_streak))
+
+        if self._minimap_accept_streak < min_streak:
+            self._minimap_status = "minimap_warming"
+            return self._minimap_coords
+
+        if abs(int(dx_tiles)) > max_step_tiles or abs(int(dy_tiles)) > max_step_tiles:
+            # Untrusted jump, reset streak and ignore.
+            self._minimap_accept_streak = 0
+            self._minimap_status = "minimap_reject_step"
+            return self._minimap_coords
 
         x0, y0, z0 = self._minimap_coords
         x1 = int(x0) + int(dx_tiles)
         y1 = int(y0) + int(dy_tiles)
         self._minimap_coords = (x1, y1, z0)
+        self._minimap_status = "ok"
+        self._minimap_confidence = 1.0
         return self._minimap_coords
 
     @staticmethod
@@ -477,6 +536,8 @@ class GameStateBuilder:
             pos_y=pos_y,
             pos_z=pos_z,
             coords_provider=coords_provider_kind,
+            coords_confidence=None,
+            coords_provider_status=None,
             hp_pct=hp_pct,
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
@@ -515,6 +576,32 @@ class GameStateBuilder:
                 except Exception:
                     gamestate.minimap_marker_dpx_dx = None
                     gamestate.minimap_marker_dpx_dy = None
+
+                try:
+                    gamestate.coords_confidence = float(self._minimap_confidence)
+                except Exception:
+                    gamestate.coords_confidence = None
+
+                try:
+                    status = str(self._minimap_status or "")
+                    level = None
+                    try:
+                        c = float(self._minimap_confidence)
+                        if c >= 0.7:
+                            level = "green"
+                        elif c >= 0.4:
+                            level = "amber"
+                        else:
+                            level = "red"
+                    except Exception:
+                        level = None
+                    gamestate.coords_confidence_level = level
+                    if level:
+                        gamestate.coords_provider_status = f"{status}|{level}" if status else level
+                    else:
+                        gamestate.coords_provider_status = status
+                except Exception:
+                    gamestate.coords_provider_status = None
         except Exception:
             pass
 

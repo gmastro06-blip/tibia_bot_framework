@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from decision.waypoint_actions import WaypointActionConfig, build_requests_from_waypoint_action
+from decision.waypoint_actions import (
+    WaypointActionConfig,
+    build_requests_from_waypoint_action,
+    evaluate_waypoint_requirements,
+)
 
 
 def test_waypoint_actions_parses_known_actions_preview() -> None:
@@ -17,7 +21,7 @@ def test_waypoint_actions_parses_known_actions_preview() -> None:
         cfg=cfg,
     )
 
-    assert [r.kind for r in reqs] == ["loot", "tool", "tool", "switch", "trade", "waypoint_action"]
+    assert [r.kind for r in reqs] == ["loot", "tool", "tool", "switch", "npc_trade", "waypoint_action"]
     assert [r.note for r in reqs] == ["preview"] * len(reqs)
     assert reqs[0].value == "ctrl+l"
     assert reqs[1].value == "r"
@@ -47,3 +51,32 @@ def test_waypoint_actions_supports_note_wait_beep_require() -> None:
     assert reqs[1].value == "750"
     assert reqs[2].value == "660:120"
     assert reqs[3].value == "!low_hp,coords_ok"
+
+
+def test_waypoint_actions_maps_route_service_actions_to_specific_kinds() -> None:
+    reqs = build_requests_from_waypoint_action(
+        "deposit;refill;bank;sell;buy_ammo;check_supplies;check2",
+        committed=False,
+    )
+
+    assert [r.kind for r in reqs] == [
+        "depot",
+        "supplies",
+        "bank",
+        "npc_trade",
+        "npc_trade",
+        "supplies",
+        "supplies",
+    ]
+    assert [r.value for r in reqs] == ["deposit", "refill", "bank", "sell", "buy_ammo", "check_supplies", "check2"]
+    assert [r.note for r in reqs] == ["preview"] * 7
+
+
+def test_require_coords_confidence_gt() -> None:
+    ok, why = evaluate_waypoint_requirements("require:coords_conf>0.5", coords_confidence=0.6)
+    assert ok
+    assert why == ""
+
+    ok, why = evaluate_waypoint_requirements("require:coords_conf>0.5", coords_confidence=0.3)
+    assert not ok
+    assert why.startswith("require:coords_conf>")

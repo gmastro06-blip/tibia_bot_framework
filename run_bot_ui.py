@@ -1,17 +1,17 @@
 from __future__ import annotations
+        try:
+            self.heal_action.set(str(h.get("action", "")))
+            self.heal_hp_action.set(str(h.get("hp_action", "")))
+            self.heal_mp_action.set(str(h.get("mp_action", "")))
+        except Exception:
+            self.heal_action.set("")
+            self.heal_hp_action.set("")
+            self.heal_mp_action.set("")
 
-import json
-import os
-import sys
-import threading
-import time
-import subprocess
-from pathlib import Path
-from typing import Literal
-
-
-def _add_src_to_syspath() -> None:
-    repo_root = Path(__file__).resolve().parent
+        try:
+            self.heal_cooldown_s.set(float(h.get("cooldown_s", 1.0)))
+        except Exception:
+            self.heal_cooldown_s.set(1.0)
     src_dir = repo_root / "src"
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
@@ -110,8 +110,13 @@ class BotUI:
         # Configuración (en memoria por ahora)
         self.healing_enabled = tk.BooleanVar(value=False)
         self.heal_hp_below_pct = tk.IntVar(value=70)
+        self.heal_hp_recover_pct = tk.IntVar(value=80)
         self.heal_mp_below_pct = tk.IntVar(value=30)
+        self.heal_mp_recover_pct = tk.IntVar(value=50)
         self.heal_action = tk.StringVar(value="")
+        self.heal_hp_action = tk.StringVar(value="")
+        self.heal_mp_action = tk.StringVar(value="")
+        self.heal_cooldown_s = tk.DoubleVar(value=1.0)
 
         self.cavebot_enabled = tk.BooleanVar(value=False)
         self.cavebot_route_path = tk.StringVar(value="configs/route.json")
@@ -383,9 +388,11 @@ class BotUI:
                 self.root.clipboard_append(txt)
                 self.root.update()
                 self._messagebox.showinfo("Copiar", "Copiado al portapapeles.")
-            except Exception:
-                try:
-                    self._messagebox.showinfo("Copiar", "No se pudo copiar al portapapeles.")
+                        self.heal_hp_below_pct.set(int(float(h.get("hp_below_pct") or 0)))
+                        self.heal_hp_recover_pct.set(int(float(h.get("hp_recover_pct") or 0)))
+                        except Exception:
+                            self.heal_hp_below_pct.set(70)
+                            self.heal_hp_recover_pct.set(80)
                 except Exception:
                     pass
 
@@ -393,17 +400,28 @@ class BotUI:
             row=14, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_control, text="Inputs:").grid(row=14, column=2, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.input_plan_text, width=52, anchor="w").grid(
-            row=14, column=3, sticky="w", pady=(6, 0)
+                        self.heal_mp_below_pct.set(int(float(h.get("mp_below_pct") or 0)))
+                        self.heal_mp_recover_pct.set(int(float(h.get("mp_recover_pct") or 0)))
+                        except Exception:
+                            self.heal_mp_below_pct.set(30)
+                            self.heal_mp_recover_pct.set(50)
         )
 
         self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none")
         try:
             self._events_text.configure(state="disabled")
-        except Exception:
-            pass
-        self._events_text.grid(row=15, column=0, columnspan=5, sticky="w", pady=(4, 0))
+                        self.heal_action.set(str(h.get("action", "")))
+                        self.heal_hp_action.set(str(h.get("hp_action", "")))
+                        self.heal_mp_action.set(str(h.get("mp_action", "")))
+                        except Exception:
+                            self.heal_action.set("")
+                            self.heal_hp_action.set("")
+                            self.heal_mp_action.set("")
+
+                        try:
+                            self.heal_cooldown_s.set(float(h.get("cooldown_s", 1.0)))
+                        except Exception:
+                            self.heal_cooldown_s.set(1.0)
 
         # Herramientas de precisión (no bloquean; generan artefactos en logs/)
         tk.Label(tab_control, text="").grid(row=16, column=0)  # separador simple
@@ -888,14 +906,32 @@ class BotUI:
         tk.Spinbox(tab_healing, from_=1, to=100, textvariable=self.heal_hp_below_pct, width=6).grid(
             row=1, column=1, sticky="w", pady=(10, 0)
         )
+        tk.Label(tab_healing, text="HP recover (%)").grid(row=1, column=2, sticky="w", pady=(10, 0))
+        tk.Spinbox(tab_healing, from_=1, to=100, textvariable=self.heal_hp_recover_pct, width=6).grid(
+            row=1, column=3, sticky="w", pady=(10, 0)
+        )
 
         tk.Label(tab_healing, text="Curar si MP < (%)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(tab_healing, from_=0, to=100, textvariable=self.heal_mp_below_pct, width=6).grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
+        tk.Label(tab_healing, text="MP recover (%)").grid(row=2, column=2, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_healing, from_=0, to=100, textvariable=self.heal_mp_recover_pct, width=6).grid(
+            row=2, column=3, sticky="w", pady=(6, 0)
+        )
 
-        tk.Label(tab_healing, text="Acción (hotkey/spell)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(tab_healing, textvariable=self.heal_action, width=28).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_healing, text="Acción legacy (hotkey/spell)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(tab_healing, textvariable=self.heal_action, width=20).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Label(tab_healing, text="HP acción").grid(row=3, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(tab_healing, textvariable=self.heal_hp_action, width=14).grid(row=3, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_healing, text="MP acción").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(tab_healing, textvariable=self.heal_mp_action, width=14).grid(row=4, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(tab_healing, text="Cooldown (s)").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(tab_healing, from_=0.0, to=10.0, increment=0.1, textvariable=self.heal_cooldown_s, width=6).grid(
+            row=4, column=1, sticky="w", pady=(6, 0)
+        )
 
         # --- TAB: Cavebot ---
         tk.Checkbutton(tab_cavebot, text="Habilitar cavebot", variable=self.cavebot_enabled).grid(
@@ -1639,8 +1675,13 @@ class BotUI:
             self._config.update_healing(
                 enabled=bool(self.healing_enabled.get()),
                 hp_below_pct=int(self.heal_hp_below_pct.get()),
+                hp_recover_pct=int(self.heal_hp_recover_pct.get()),
                 mp_below_pct=int(self.heal_mp_below_pct.get()),
+                mp_recover_pct=int(self.heal_mp_recover_pct.get()),
                 action=str(self.heal_action.get()),
+                hp_action=str(self.heal_hp_action.get()),
+                mp_action=str(self.heal_mp_action.get()),
+                cooldown_s=float(self.heal_cooldown_s.get()),
             )
 
         def sync_cavebot(*_args):
@@ -1677,7 +1718,17 @@ class BotUI:
                 out_file=str(self.log_out_file.get()),
             )
 
-        for v in [self.healing_enabled, self.heal_hp_below_pct, self.heal_mp_below_pct, self.heal_action]:
+        for v in [
+            self.healing_enabled,
+            self.heal_hp_below_pct,
+            self.heal_hp_recover_pct,
+            self.heal_mp_below_pct,
+            self.heal_mp_recover_pct,
+            self.heal_action,
+            self.heal_hp_action,
+            self.heal_mp_action,
+            self.heal_cooldown_s,
+        ]:
             v.trace_add("write", sync_healing)
         for v in [self.cavebot_enabled, self.cavebot_route_path]:
             v.trace_add("write", sync_cavebot)

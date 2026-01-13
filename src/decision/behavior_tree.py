@@ -15,6 +15,8 @@ from decision.waypoint_actions import build_requests_from_waypoint_action
 class BTInputs:
     sig: Any
     healing_cfg: Any
+    heal_hp: bool
+    heal_mp: bool
     target_cls: str
     target_conf: float | None
     cavebot_next: str
@@ -53,11 +55,25 @@ class _PlanHealing(py_trees.behaviour.Behaviour):
 
         try:
             enabled = bool(getattr(inp.healing_cfg, "enabled", False))
+            hp_flag = bool(getattr(inp, "heal_hp", False))
+            mp_flag = bool(getattr(inp, "heal_mp", False))
             triggered = bool(getattr(inp.sig, "healing_trigger", False)) if inp.sig is not None else False
-            if enabled and triggered:
-                act = (getattr(inp.healing_cfg, "action", "") or "").strip() or "heal"
+            explicit = hp_flag or mp_flag
+
+            if enabled and (explicit or triggered):
+                act_hp = (getattr(inp.healing_cfg, "hp_action", "") or getattr(inp.healing_cfg, "action", "") or "").strip() or "heal"
+                act_mp = (getattr(inp.healing_cfg, "mp_action", "") or getattr(inp.healing_cfg, "action", "") or "").strip() or "heal"
                 reqs: list[ActionRequest] = list(self.bb.get(_BB.out_requests) or [])
-                reqs.append(ActionRequest(kind="heal", value=str(act), note="preview"))
+
+                if explicit:
+                    if hp_flag:
+                        reqs.append(ActionRequest(kind="heal", value=str(act_hp), note="preview"))
+                    if mp_flag:
+                        reqs.append(ActionRequest(kind="heal", value=str(act_mp), note="preview"))
+                elif triggered:
+                    # Legacy fallback: single heal when only healing_trigger is provided.
+                    reqs.append(ActionRequest(kind="heal", value=str(act_hp), note="preview"))
+
                 self.bb.set(_BB.out_requests, reqs)
         except Exception:
             pass
@@ -442,6 +458,8 @@ class BehaviorTreeRunner:
         *,
         sig: Any,
         healing_cfg: Any,
+        heal_hp: bool = False,
+        heal_mp: bool = False,
         target_cls: str,
         target_conf: float | None,
         cavebot_next: str,
@@ -454,6 +472,8 @@ class BehaviorTreeRunner:
             BTInputs(
                 sig=sig,
                 healing_cfg=healing_cfg,
+                heal_hp=bool(heal_hp),
+                heal_mp=bool(heal_mp),
                 target_cls=str(target_cls or ""),
                 target_conf=(float(target_conf) if target_conf is not None else None),
                 cavebot_next=str(cavebot_next or ""),

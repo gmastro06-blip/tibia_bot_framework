@@ -8,7 +8,17 @@ from runtime_config import RuntimeConfig
 def test_runtime_config_snapshot_is_copy() -> None:
     cfg = RuntimeConfig()
 
-    cfg.update_healing(enabled=True, hp_below_pct=80, mp_below_pct=25, action="exura")
+    cfg.update_healing(
+        enabled=True,
+        hp_below_pct=80,
+        hp_recover_pct=85,
+        mp_below_pct=25,
+        mp_recover_pct=40,
+        action="exura",
+        hp_action="exura vita",
+        mp_action="mana pot",
+        cooldown_s=2.5,
+    )
     cfg.update_cavebot(enabled=True, route_path="configs/route.json")
 
     healing1, cavebot1 = cfg.snapshot()
@@ -22,8 +32,13 @@ def test_runtime_config_snapshot_is_copy() -> None:
     healing2, cavebot2 = cfg.snapshot()
     assert healing2.enabled is True
     assert healing2.hp_below_pct == 80
+    assert healing2.hp_recover_pct == 85
     assert healing2.mp_below_pct == 25
+    assert healing2.mp_recover_pct == 40
     assert healing2.action == "exura"
+    assert healing2.hp_action == "exura vita"
+    assert healing2.mp_action == "mana pot"
+    assert healing2.cooldown_s == 2.5
 
     assert cavebot2.enabled is True
     assert cavebot2.route_path == "configs/route.json"
@@ -134,6 +149,14 @@ def test_runtime_config_step_jump_counter_and_snapshot() -> None:
     assert idx2 == 0
 
 
+def test_runtime_config_reseed_counter() -> None:
+    cfg = RuntimeConfig()
+    assert cfg.reseed_counter_snapshot() == 0
+    assert cfg.request_reseed_minimap() == 1
+    assert cfg.reseed_counter_snapshot() == 1
+    assert cfg.request_reseed_minimap() == 2
+
+
 def test_runtime_config_thread_safety_smoke() -> None:
     cfg = RuntimeConfig()
 
@@ -150,6 +173,10 @@ def test_runtime_config_thread_safety_smoke() -> None:
         healing, cavebot = cfg.snapshot()
         assert isinstance(healing.enabled, bool)
         assert isinstance(healing.hp_below_pct, int)
+        assert isinstance(healing.hp_recover_pct, int)
+        assert isinstance(healing.mp_below_pct, int)
+        assert isinstance(healing.mp_recover_pct, int)
+        assert isinstance(healing.cooldown_s, float)
         assert isinstance(cavebot.enabled, bool)
         assert isinstance(cavebot.route_path, str)
 

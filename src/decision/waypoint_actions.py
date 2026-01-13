@@ -85,7 +85,8 @@ def build_requests_from_waypoint_action(
     - "loot" or "quick_loot" -> ActionRequest(kind="loot", value="ctrl+l")
     - "rope" / "shovel" -> ActionRequest(kind="tool", value="rope")
     - "antitrap" / "weapon_switch" -> ActionRequest(kind="switch", value="weapon_switch")
-    - "buy_potions" / "sell_potions" -> ActionRequest(kind="trade", value="buy_potions")
+    - "buy_potions" / "sell_potions" -> ActionRequest(kind="npc_trade", value="buy_potions")
+    - Route service actions like "deposit"/"refill"/"bank"/"sell"/"buy_ammo" -> ActionRequest(kind="depot"|"bank"|"npc_trade"|"supplies", value="deposit")
 
     Multiple actions can be separated by ';' or '|'.
     """
@@ -107,8 +108,14 @@ def build_requests_from_waypoint_action(
             out.append(ActionRequest(kind="tool", value=c.shovel_hotkey, note=note))
         elif cmd in {"antitrap", "weapon_switch", "switch_weapon"}:
             out.append(ActionRequest(kind="switch", value=c.weapon_switch, note=note))
-        elif cmd in {"sell_potions", "buy_potions"}:
-            out.append(ActionRequest(kind="trade", value=cmd, note=note))
+        elif cmd in {"sell_potions", "buy_potions", "buy_ammo", "sell"}:
+            out.append(ActionRequest(kind="npc_trade", value=cmd, note=note))
+        elif cmd in {"deposit", "deposit_all"}:
+            out.append(ActionRequest(kind="depot", value=cmd, note=note))
+        elif cmd in {"bank", "withdraw"}:
+            out.append(ActionRequest(kind="bank", value=cmd, note=note))
+        elif cmd in {"refill", "check_supplies", "check_supply", "check", "check2"}:
+            out.append(ActionRequest(kind="supplies", value=cmd, note=note))
         elif cmd in {"wait", "wait_ms"}:
             ms = 0
             try:
@@ -153,6 +160,7 @@ def evaluate_waypoint_requirements(
     low_cap: bool | None = None,
     low_potions: bool | None = None,
     coords_status: str = "",
+    coords_confidence: float | None = None,
     target: str = "",
 ) -> Tuple[bool, str]:
     """Evaluate `require:` tokens inside a waypoint action string.
@@ -161,6 +169,8 @@ def evaluate_waypoint_requirements(
     - `flag` / `!flag` where flag is one of:
       low_hp, low_mp, paralyzed, haste_active, utamo_active, hungry, low_cap, low_potions
     - `coords_ok` / `!coords_ok` (coords_status == "OK")
+        - `coords_status=<text>` (case-insensitive equality)
+        - `coords_conf[<|<=|>|>=]X` (numeric compare vs confidence)
     - `has_target` / `!has_target` (target non-empty)
     - `target=<text>` (case-insensitive, substring match)
 
@@ -193,6 +203,13 @@ def evaluate_waypoint_requirements(
                     if not ok:
                         return False, f"require:{raw_clause}"
                     continue
+                if k == "coords_status":
+                    ok = (v.lower() == (coords_status or "").lower())
+                    if neg:
+                        ok = not ok
+                    if not ok:
+                        return False, f"require:{raw_clause}"
+                    continue
                 return False, f"require:unknown({raw_clause})"
 
             key = _norm_cmd(clause)
@@ -202,6 +219,39 @@ def evaluate_waypoint_requirements(
                     ok = not ok
                 if not ok:
                     return False, f"require:{raw_clause}"
+                continue
+
+            def _cmp_conf(expr: str, op: str) -> Tuple[bool, str]:
+                if coords_confidence is None:
+                    return False, "unknown"
+                try:
+                    thr = float(expr.split(op, 1)[1].strip())
+                except Exception:
+                    return False, "unknown"
+                c = float(coords_confidence)
+                if op == ">":
+                    return c > thr, ""
+                if op == ">=":
+                    return c >= thr, ""
+                if op == "<":
+                    return c < thr, ""
+                if op == "<=":
+                    return c <= thr, ""
+                return False, "unknown"
+
+            matched_conf = False
+            for op in (">=", "<=", ">", "<"):
+                if key.startswith("coords_conf" + op):
+                    ok, why = _cmp_conf(clause, op)
+                    matched_conf = True
+                    if why == "unknown":
+                        return False, f"require:{raw_clause} (unknown)"
+                    if neg:
+                        ok = not ok
+                    if not ok:
+                        return False, f"require:{raw_clause}"
+                    break
+            if matched_conf:
                 continue
 
             if key == "has_target":

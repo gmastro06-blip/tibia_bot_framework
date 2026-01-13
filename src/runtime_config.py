@@ -9,14 +9,26 @@ import time
 class HealingConfig:
     enabled: bool = False
     hp_below_pct: int = 70
+    hp_recover_pct: int = 80
     mp_below_pct: int = 30
+    mp_recover_pct: int = 50
     action: str = ""
+    hp_action: str = ""
+    mp_action: str = ""
+    cooldown_s: float = 1.0
 
 
 @dataclass
 class CavebotConfig:
     enabled: bool = False
     route_path: str = "configs/route.json"
+    mode: str = "pos"  # "pos"|"steps"
+    force_steps: bool = False
+    auto_steps_enabled: bool = True
+    auto_steps_activate_level: str = "red"
+    auto_steps_recover_level: str = "amber"
+    auto_steps_activate_s: float = 1.5
+    auto_steps_recover_s: float = 2.0
 
 
 @dataclass
@@ -76,6 +88,9 @@ class TelemetrySnapshot:
     # Coords quality
     coords_status: str = ""  # "OK"|"NO_COORDS"|"BAD_JUMP"|"UNSTABLE"|""
     coords_jump: int | None = None  # manhattan jump vs last coords
+    coords_confidence: float | None = None  # provider-specific confidence (e.g., minimap)
+    coords_provider_status: str = ""  # provider-specific status text
+    coords_confidence_level: str = ""  # "green"|"amber"|"red"|""
     # Minimap-motion (EXPERIMENTAL) debug
     minimap_mode_used: str = ""  # "scroll"|"marker"|""
     minimap_response: float | None = None
@@ -183,6 +198,7 @@ class RuntimeConfig:
     _replay_force_counter: int = field(default=0, init=False, repr=False)
     _step_jump_counter: int = field(default=0, init=False, repr=False)
     _step_jump_index: int = field(default=0, init=False, repr=False)
+    _reseed_counter: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def snapshot(self) -> tuple[HealingConfig, CavebotConfig]:
@@ -191,12 +207,24 @@ class RuntimeConfig:
                 HealingConfig(
                     enabled=bool(self.healing.enabled),
                     hp_below_pct=int(self.healing.hp_below_pct),
+                    hp_recover_pct=int(getattr(self.healing, "hp_recover_pct", self.healing.hp_below_pct)),
                     mp_below_pct=int(self.healing.mp_below_pct),
+                    mp_recover_pct=int(getattr(self.healing, "mp_recover_pct", self.healing.mp_below_pct)),
                     action=str(self.healing.action),
+                    hp_action=str(getattr(self.healing, "hp_action", "")),
+                    mp_action=str(getattr(self.healing, "mp_action", "")),
+                    cooldown_s=float(getattr(self.healing, "cooldown_s", 1.0)),
                 ),
                 CavebotConfig(
                     enabled=bool(self.cavebot.enabled),
                     route_path=str(self.cavebot.route_path),
+                    mode=str(getattr(self.cavebot, "mode", "pos")),
+                    force_steps=bool(getattr(self.cavebot, "force_steps", False)),
+                    auto_steps_enabled=bool(getattr(self.cavebot, "auto_steps_enabled", True)),
+                    auto_steps_activate_level=str(getattr(self.cavebot, "auto_steps_activate_level", "red")),
+                    auto_steps_recover_level=str(getattr(self.cavebot, "auto_steps_recover_level", "amber")),
+                    auto_steps_activate_s=float(getattr(self.cavebot, "auto_steps_activate_s", 1.5)),
+                    auto_steps_recover_s=float(getattr(self.cavebot, "auto_steps_recover_s", 2.0)),
                 ),
             )
 
@@ -330,25 +358,66 @@ class RuntimeConfig:
         *,
         enabled: bool | None = None,
         hp_below_pct: int | None = None,
+        hp_recover_pct: int | None = None,
         mp_below_pct: int | None = None,
+        mp_recover_pct: int | None = None,
         action: str | None = None,
+        hp_action: str | None = None,
+        mp_action: str | None = None,
+        cooldown_s: float | None = None,
     ) -> None:
         with self._lock:
             if enabled is not None:
                 self.healing.enabled = bool(enabled)
             if hp_below_pct is not None:
                 self.healing.hp_below_pct = int(hp_below_pct)
+            if hp_recover_pct is not None:
+                self.healing.hp_recover_pct = int(hp_recover_pct)
             if mp_below_pct is not None:
                 self.healing.mp_below_pct = int(mp_below_pct)
+            if mp_recover_pct is not None:
+                self.healing.mp_recover_pct = int(mp_recover_pct)
             if action is not None:
                 self.healing.action = str(action)
+            if hp_action is not None:
+                self.healing.hp_action = str(hp_action)
+            if mp_action is not None:
+                self.healing.mp_action = str(mp_action)
+            if cooldown_s is not None:
+                self.healing.cooldown_s = float(cooldown_s)
 
-    def update_cavebot(self, *, enabled: bool | None = None, route_path: str | None = None) -> None:
+    def update_cavebot(
+        self,
+        *,
+        enabled: bool | None = None,
+        route_path: str | None = None,
+        mode: str | None = None,
+        force_steps: bool | None = None,
+        auto_steps_enabled: bool | None = None,
+        auto_steps_activate_level: str | None = None,
+        auto_steps_recover_level: str | None = None,
+        auto_steps_activate_s: float | None = None,
+        auto_steps_recover_s: float | None = None,
+    ) -> None:
         with self._lock:
             if enabled is not None:
                 self.cavebot.enabled = bool(enabled)
             if route_path is not None:
                 self.cavebot.route_path = str(route_path)
+            if mode is not None:
+                self.cavebot.mode = str(mode)
+            if force_steps is not None:
+                self.cavebot.force_steps = bool(force_steps)
+            if auto_steps_enabled is not None:
+                self.cavebot.auto_steps_enabled = bool(auto_steps_enabled)
+            if auto_steps_activate_level is not None:
+                self.cavebot.auto_steps_activate_level = str(auto_steps_activate_level)
+            if auto_steps_recover_level is not None:
+                self.cavebot.auto_steps_recover_level = str(auto_steps_recover_level)
+            if auto_steps_activate_s is not None:
+                self.cavebot.auto_steps_activate_s = float(auto_steps_activate_s)
+            if auto_steps_recover_s is not None:
+                self.cavebot.auto_steps_recover_s = float(auto_steps_recover_s)
 
     def update_simulation(
         self,
@@ -435,6 +504,16 @@ class RuntimeConfig:
             self._replay_force_counter += 1
             return int(self._replay_force_counter)
 
+    def request_reseed_minimap(self) -> int:
+        """Solicita un reseed/realineación del provider de coords (minimap)."""
+        with self._lock:
+            self._reseed_counter += 1
+            return int(self._reseed_counter)
+
+    def reseed_counter_snapshot(self) -> int:
+        with self._lock:
+            return int(self._reseed_counter)
+
     def replay_force_counter_snapshot(self) -> int:
         with self._lock:
             return int(self._replay_force_counter)
@@ -470,6 +549,9 @@ class RuntimeConfig:
         coords_provider: str | None = None,
         coords_status: str | None = None,
         coords_jump: int | None = None,
+        coords_confidence: float | None = None,
+        coords_provider_status: str | None = None,
+        coords_confidence_level: str | None = None,
         minimap_mode_used: str | None = None,
         minimap_response: float | None = None,
         minimap_delta_dx: float | None = None,
@@ -547,6 +629,15 @@ class RuntimeConfig:
                     self.telemetry.coords_jump = int(coords_jump)
                 except Exception:
                     self.telemetry.coords_jump = None
+            if coords_confidence is not None:
+                try:
+                    self.telemetry.coords_confidence = float(coords_confidence)
+                except Exception:
+                    self.telemetry.coords_confidence = None
+            if coords_provider_status is not None:
+                self.telemetry.coords_provider_status = str(coords_provider_status)
+            if coords_confidence_level is not None:
+                self.telemetry.coords_confidence_level = str(coords_confidence_level)
             if minimap_mode_used is not None:
                 self.telemetry.minimap_mode_used = str(minimap_mode_used)
             if minimap_response is not None:

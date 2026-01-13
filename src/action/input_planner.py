@@ -86,6 +86,10 @@ class InputPlanner:
             # No universal input mapping; keep a trace.
             return [PlannedInput(kind="macro", value=f"{kind}:{value}")]
 
+        if kind in {"npc_trade", "depot", "bank", "supplies"}:
+            # Higher-level service intents (still assistant-only): keep a clear trace.
+            return [PlannedInput(kind="macro", value=f"{kind}:{value}")]
+
         # Fallback.
         if kind or value:
             return [PlannedInput(kind="note", value=f"{kind}:{value}")]
