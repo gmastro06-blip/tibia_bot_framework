@@ -66,6 +66,11 @@ La UI incluye pestañas:
 - **Control**: iniciar/parar
 - **Healing**: configuración básica (se aplica en tiempo real)
 - **Cavebot**: configuración básica (se aplica en tiempo real)
+- **Rutas / Cavebot**: editor de rutas (waypoints.in) + setup (setup_*.json)
+
+Notas:
+- El botón **Minimizar** usa system tray si están disponibles `pystray` + `Pillow`; si no, solo minimiza la ventana.
+- El editor de rutas es *asistente-only*: modifica archivos, no inyecta inputs.
 
 ### UI settings (persistencia)
 

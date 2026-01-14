@@ -38,3 +38,7 @@ reports/
 
 # Stray local artifacts
 /10
+
+# Archives (should not be versioned)
+*.zip
+scripts-master/**/*.zip

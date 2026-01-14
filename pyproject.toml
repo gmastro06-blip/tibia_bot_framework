@@ -36,9 +36,9 @@ torch = {version = "^2.1.0", source = "pytorch"}
 pywin32 = "^311"
 onnxruntime-gpu = "^1.23.2"
 ultralytics = "^8.3.249"
-pytest = "^9.0.2"
 obsws-python = "^1.8.0"
 roboflow = "^1.2.11"
+pystray = "^0.19.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"

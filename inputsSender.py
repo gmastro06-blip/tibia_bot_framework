@@ -39,7 +39,11 @@ class KEYBDINPUT(ctypes.Structure):
 
 def _send_key(scan, flags):
     ki = KEYBDINPUT(0, scan, flags, 0, 0)
-    inp = INPUT(1, ctypes.cast(ctypes.pointer(ki), ctypes.c_ulonglong).value)
+    # NOTE: This module uses SendInput (real input injection). The project
+    # defaults to assistant-only mode; prefer `src/action/*` which supports a
+    # mock driver. This file is kept for reference/testing.
+    ptr = ctypes.cast(ctypes.pointer(ki), ctypes.c_void_p).value
+    inp = INPUT(1, ctypes.c_ulonglong(int(ptr or 0)))
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
 
 class KeyboardSender:
