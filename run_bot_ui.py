@@ -7,7 +7,7 @@ import threading
 import time
 import subprocess
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 
 def _add_src_to_syspath() -> None:
@@ -29,22 +29,59 @@ class BotUI:
 
         try:
             import tkinter as tk
-            from tkinter import messagebox
+            from tkinter import filedialog, messagebox, simpledialog
             from tkinter import ttk
         except Exception as e:
             raise SystemExit(f"Tkinter no esta disponible en este entorno: {e}")
 
+        # Optional system tray deps (pystray + Pillow).
+        # Keep these as Any so we can assign a module or None.
+        self._pystray: Any = None
+        self._TrayImage: Any = None
+        self._TrayImageDraw: Any = None
+
+        try:
+            import pystray  # type: ignore
+            from PIL import Image, ImageDraw
+            self._pystray = pystray
+            self._TrayImage = Image
+            self._TrayImageDraw = ImageDraw
+        except Exception:
+            self._pystray = None
+            self._TrayImage = None
+            self._TrayImageDraw = None
+
         self._tk = tk
         self._messagebox = messagebox
+        self._filedialog = filedialog
+        self._simpledialog = simpledialog
         self._ttk = ttk
 
         from main import run_bot  # import dentro para respetar sys.path
         from runtime_config import RuntimeConfig
+        from route_editor.models import SetupConfig, WaypointStep
+        from route_editor.setup_loader import load_setup, save_setup
+        from route_editor.waypoints import (
+            expand_move_macros,
+            parse_waypoints,
+            serialize_waypoints,
+            validate_waypoints,
+        )
 
         self._run_bot = run_bot
         self._config = RuntimeConfig()
         self._stop_event: threading.Event | None = None
         self._thread: threading.Thread | None = None
+
+        # keep helpers reachable in instance
+        self._WaypointStep = WaypointStep
+        self._SetupConfig = SetupConfig
+        self._load_setup = load_setup
+        self._save_setup = save_setup
+        self._parse_waypoints = parse_waypoints
+        self._serialize_waypoints = serialize_waypoints
+        self._validate_waypoints = validate_waypoints
+        self._expand_move_macros = expand_move_macros
 
         # Soak session tracking (UI-only, helps opening the latest artifacts).
         self._last_soak_run_id: str | None = None
@@ -304,6 +341,26 @@ class BotUI:
         self.cavebot_action_text = tk.StringVar(value="-")
         self.input_plan_text = tk.StringVar(value="-")
 
+        # Route/Cavebot editor state
+        self.route_steps: list = []  # list[WaypointStep]
+        self.route_path_var = tk.StringVar(value="")
+        self.route_setup_path_var = tk.StringVar(value="")
+        self.route_status_var = tk.StringVar(value="-")
+        self.route_setup_cfg: Any = None
+        self.hc_mana_name = tk.StringVar(value="")
+        self.hc_take_mana = tk.IntVar(value=0)
+        self.hc_mana_leave = tk.IntVar(value=0)
+        self.hc_cap_leave = tk.IntVar(value=0)
+        self.item_name_var = tk.StringVar(value="")
+        self.item_hotkey_var = tk.StringVar(value="")
+        self.item_use_var = tk.StringVar(value="self")
+
+        # System tray (pystray)
+        self._tray_icon = None
+        self._tray_thread: threading.Thread | None = None
+        self._tray_image = None
+        self._allow_close = False
+
         container = tk.Frame(self.root, padx=14, pady=14)
         container.pack(fill="both", expand=True)
 
@@ -315,12 +372,14 @@ class BotUI:
         tab_cavebot = tk.Frame(notebook)
         tab_tools = tk.Frame(notebook)
         tab_config = tk.Frame(notebook)
+        tab_routes = tk.Frame(notebook)
 
         notebook.add(tab_control, text="Control")
         notebook.add(tab_healing, text="Healing")
         notebook.add(tab_cavebot, text="Cavebot")
         notebook.add(tab_tools, text="Herramientas")
         notebook.add(tab_config, text="Configuracion")
+        notebook.add(tab_routes, text="Rutas / Cavebot")
 
         # --- TAB: Control ---
         tk.Label(tab_control, text="Estado:").grid(row=0, column=0, sticky="w")
@@ -328,9 +387,11 @@ class BotUI:
 
         self.start_btn = tk.Button(tab_control, text="Iniciar", width=12, command=self.start)
         self.stop_btn = tk.Button(tab_control, text="Parar", width=12, command=self.stop, state="disabled")
+        self.tray_btn = tk.Button(tab_control, text="Minimizar", width=12, command=self._minimize_to_tray)
 
         self.start_btn.grid(row=1, column=0, pady=(10, 0), sticky="w")
         self.stop_btn.grid(row=1, column=1, pady=(10, 0), sticky="e")
+        self.tray_btn.grid(row=1, column=2, pady=(10, 0), sticky="e")
 
         ctrl_info = tk.Frame(tab_control)
         ctrl_info.grid(row=2, column=0, columnspan=4, sticky="w", pady=(10, 0))
@@ -1429,6 +1490,9 @@ class BotUI:
             row=14, column=2, sticky="w", padx=(8, 0)
         )
 
+        # --- TAB: Rutas / Cavebot ---
+        self._build_routes_tab(tab_routes)
+
         # Idle alert + Overlay (derecha, debajo)
         tk.Label(cfg_right, text="Idle (alerta / anti-stuck, sin inputs)").grid(
             row=11, column=0, columnspan=3, sticky="w", pady=(10, 0)
@@ -2507,7 +2571,130 @@ class BotUI:
 
         poll_telemetry()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        try:
+            self.root.bind("<Unmap>", self._on_window_state)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Tray helpers
+    # ------------------------------------------------------------------
+    def _on_window_state(self, event=None) -> None:
+        try:
+            if self.root.state() == "iconic":
+                self._minimize_to_tray()
+        except Exception:
+            pass
+
+    def _on_window_close(self) -> None:
+        if self._allow_close:
+            self.on_close()
+            return
+        if self._minimize_to_tray():
+            return
+        self._allow_close = True
+        self.on_close()
+
+    def _minimize_to_tray(self) -> bool:
+        if self._pystray is None or self._TrayImage is None:
+            try:
+                self.root.iconify()
+            except Exception:
+                pass
+            return True
+
+        self._start_tray_icon()
+        try:
+            self.root.withdraw()
+        except Exception:
+            pass
+        try:
+            self.status_var.set("Minimizado a bandeja")
+        except Exception:
+            pass
+        return True
+
+    def _start_tray_icon(self) -> None:
+        if self._tray_icon is not None:
+            return
+        if self._pystray is None or self._TrayImage is None:
+            return
+        if self._tray_image is None:
+            self._tray_image = self._make_tray_image()
+        if self._tray_image is None:
+            return
+
+        menu = None
+        try:
+            menu = self._pystray.Menu(
+                self._pystray.MenuItem("Restaurar", lambda: self.root.after(0, self._restore_from_tray), default=True),
+                self._pystray.MenuItem("Salir", lambda: self.root.after(0, self._tray_quit)),
+            )
+        except Exception:
+            menu = None
+
+        try:
+            self._tray_icon = self._pystray.Icon("tibia_bot", self._tray_image, "Tibia Bot Framework", menu)
+        except Exception:
+            self._tray_icon = None
+            return
+
+        def _run_icon():
+            try:
+                self._tray_icon.run()
+            except Exception:
+                pass
+
+        try:
+            self._tray_thread = threading.Thread(target=_run_icon, daemon=True)
+            self._tray_thread.start()
+        except Exception:
+            self._tray_icon = None
+            self._tray_thread = None
+
+    def _stop_tray_icon(self) -> None:
+        icon = self._tray_icon
+        try:
+            if icon is not None:
+                icon.stop()
+        except Exception:
+            pass
+        self._tray_icon = None
+        self._tray_thread = None
+
+    def _restore_from_tray(self) -> None:
+        self._stop_tray_icon()
+        try:
+            self.root.deiconify()
+            self.root.state("normal")
+            self.root.focus_force()
+        except Exception:
+            pass
+        try:
+            self.status_var.set("Detenido" if not self._is_running() else "Ejecutandose")
+        except Exception:
+            pass
+
+    def _tray_quit(self) -> None:
+        self._allow_close = True
+        try:
+            self.root.after(0, self.on_close)
+        except Exception:
+            pass
+
+    def _make_tray_image(self):
+        try:
+            if self._TrayImage is None or self._TrayImageDraw is None:
+                return None
+            img = self._TrayImage.new("RGBA", (64, 64), (34, 34, 34, 0))
+            d = self._TrayImageDraw.Draw(img)
+            d.rectangle((8, 8, 56, 56), fill=(30, 144, 255, 255))
+            d.rectangle((14, 14, 50, 50), fill=(10, 10, 10, 255))
+            d.text((20, 22), "TB", fill=(255, 255, 255, 255))
+            return img
+        except Exception:
+            return None
 
     def _reset_idle_ui(self) -> None:
         try:
@@ -2769,6 +2956,445 @@ class BotUI:
         except Exception:
             pass
 
+    # ------------------------------------------------------------------
+    # Rutas / Cavebot editor
+    # ------------------------------------------------------------------
+    def _build_routes_tab(self, tab) -> None:
+        tk = self._tk
+        ttk = self._ttk
+
+        main = tk.Frame(tab, padx=10, pady=10)
+        main.pack(fill="both", expand=True)
+        main.grid_columnconfigure(0, weight=3)
+        main.grid_columnconfigure(1, weight=2)
+
+        path_row = tk.Frame(main)
+        path_row.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        tk.Label(path_row, text="Ruta carpeta:").grid(row=0, column=0, sticky="w")
+        tk.Entry(path_row, textvariable=self.route_path_var, width=48).grid(row=0, column=1, sticky="ew", padx=(6, 6))
+        tk.Button(path_row, text="Nueva", width=8, command=self._route_new).grid(row=0, column=2, padx=(0, 4))
+        tk.Button(path_row, text="Abrir", width=8, command=self._route_open).grid(row=0, column=3, padx=(0, 4))
+        tk.Button(path_row, text="Guardar", width=8, command=self._route_save).grid(row=0, column=4, padx=(0, 4))
+        tk.Button(path_row, text="Validar", width=8, command=self._route_validate).grid(row=0, column=5)
+
+        # Steps editor (left)
+        steps_frame = tk.Frame(main)
+        steps_frame.grid(row=1, column=0, sticky="nsew")
+        steps_frame.grid_rowconfigure(1, weight=1)
+        steps_frame.grid_columnconfigure(0, weight=1)
+
+        columns = ("#", "Tipo", "X", "Y", "Z", "Nombre/Accion", "Params", "Comment", "Enabled")
+        self.route_tree = ttk.Treeview(steps_frame, columns=columns, show="headings", height=14)
+        for col, w in zip(columns, [40, 90, 70, 70, 50, 140, 120, 120, 70]):
+            self.route_tree.heading(col, text=col)
+            self.route_tree.column(col, width=w, anchor="w")
+        vsb = ttk.Scrollbar(steps_frame, orient="vertical", command=self.route_tree.yview)
+        self.route_tree.configure(yscrollcommand=vsb.set)
+        self.route_tree.grid(row=1, column=0, sticky="nsew")
+        vsb.grid(row=1, column=1, sticky="ns")
+        self.route_tree.bind("<<TreeviewSelect>>", lambda _e: self._route_on_select())
+
+        # Form
+        form = tk.Frame(steps_frame)
+        form.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        self.route_kind_var = tk.StringVar(value="node")
+        self.route_x_var = tk.StringVar(value="")
+        self.route_y_var = tk.StringVar(value="")
+        self.route_z_var = tk.StringVar(value="")
+        self.route_name_var = tk.StringVar(value="")
+        self.route_params_var = tk.StringVar(value="")
+        self.route_comment_var = tk.StringVar(value="")
+        self.route_enabled_var = tk.BooleanVar(value=True)
+
+        tk.Label(form, text="Tipo").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(form, values=["label", "action", "node", "stand", "rope", "ladder", "move", "custom"], textvariable=self.route_kind_var, width=10, state="readonly").grid(row=0, column=1, sticky="w")
+        tk.Label(form, text="X").grid(row=0, column=2, sticky="w")
+        tk.Entry(form, textvariable=self.route_x_var, width=8).grid(row=0, column=3, sticky="w")
+        tk.Label(form, text="Y").grid(row=0, column=4, sticky="w")
+        tk.Entry(form, textvariable=self.route_y_var, width=8).grid(row=0, column=5, sticky="w")
+        tk.Label(form, text="Z").grid(row=0, column=6, sticky="w")
+        tk.Entry(form, textvariable=self.route_z_var, width=5).grid(row=0, column=7, sticky="w")
+
+        tk.Label(form, text="Nombre/Accion").grid(row=1, column=0, sticky="w")
+        tk.Entry(form, textvariable=self.route_name_var, width=28).grid(row=1, column=1, columnspan=3, sticky="w")
+        tk.Label(form, text="Params").grid(row=1, column=4, sticky="w")
+        tk.Entry(form, textvariable=self.route_params_var, width=18).grid(row=1, column=5, columnspan=2, sticky="w")
+        tk.Label(form, text="Comment").grid(row=2, column=0, sticky="w")
+        tk.Entry(form, textvariable=self.route_comment_var, width=46).grid(row=2, column=1, columnspan=5, sticky="w")
+        tk.Checkbutton(form, text="Enabled", variable=self.route_enabled_var).grid(row=2, column=6, sticky="w")
+
+        btn_row = tk.Frame(steps_frame)
+        btn_row.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        tk.Button(btn_row, text="Agregar", width=10, command=self._route_add_step).grid(row=0, column=0, padx=(0, 4))
+        tk.Button(btn_row, text="Insertar", width=10, command=lambda: self._route_add_step(insert=True)).grid(row=0, column=1, padx=(0, 4))
+        tk.Button(btn_row, text="Duplicar", width=10, command=self._route_duplicate_step).grid(row=0, column=2, padx=(0, 4))
+        tk.Button(btn_row, text="Subir", width=8, command=lambda: self._route_move_step(-1)).grid(row=0, column=3, padx=(0, 4))
+        tk.Button(btn_row, text="Bajar", width=8, command=lambda: self._route_move_step(1)).grid(row=0, column=4, padx=(0, 4))
+        tk.Button(btn_row, text="Eliminar", width=10, command=self._route_delete_step).grid(row=0, column=5, padx=(0, 4))
+        tk.Button(btn_row, text="Aplicar cambios", width=14, command=self._route_apply_form).grid(row=0, column=6, padx=(0, 4))
+
+        tpl_row = tk.Frame(steps_frame)
+        tpl_row.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        tk.Button(tpl_row, text="Desde posicion", width=14, command=self._route_add_from_position).grid(row=0, column=0, padx=(0, 4))
+        tk.Button(tpl_row, text="Agregar MOVE", width=12, command=self._route_add_move).grid(row=0, column=1, padx=(0, 4))
+        tk.Button(tpl_row, text="action=rope", width=12, command=lambda: self._route_template_action("rope")).grid(row=0, column=2, padx=(0, 4))
+        tk.Button(tpl_row, text="action=abre_puerta", width=16, command=lambda: self._route_template_action("abre_puerta")).grid(row=0, column=3, padx=(0, 4))
+
+        tk.Label(main, textvariable=self.route_status_var, fg="gray25").grid(row=5, column=0, sticky="w", pady=(6, 0))
+
+        # Supplies editor (right)
+        sup_frame = tk.LabelFrame(main, text="Supplies / setup_*.json", padx=8, pady=8)
+        sup_frame.grid(row=1, column=1, rowspan=4, sticky="nsew", padx=(10, 0))
+
+        tk.Label(sup_frame, text="Setup path").grid(row=0, column=0, sticky="w")
+        tk.Entry(sup_frame, textvariable=self.route_setup_path_var, width=36).grid(row=0, column=1, sticky="w")
+        tk.Button(sup_frame, text="Cargar", width=8, command=self._route_load_setup).grid(row=0, column=2, padx=(4, 0))
+        tk.Button(sup_frame, text="Guardar", width=8, command=self._route_save_setup).grid(row=0, column=3, padx=(4, 0))
+
+        tk.Label(sup_frame, text="mana_name").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(sup_frame, textvariable=self.hc_mana_name, width=18).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(sup_frame, text="take_mana").grid(row=1, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(sup_frame, textvariable=self.hc_take_mana, width=8).grid(row=1, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(sup_frame, text="mana_leave").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(sup_frame, textvariable=self.hc_mana_leave, width=8).grid(row=2, column=1, sticky="w", pady=(4, 0))
+        tk.Label(sup_frame, text="cap_leave").grid(row=2, column=2, sticky="w", pady=(4, 0))
+        tk.Entry(sup_frame, textvariable=self.hc_cap_leave, width=8).grid(row=2, column=3, sticky="w", pady=(4, 0))
+
+        tk.Label(sup_frame, text="Items (pociones/consumibles)").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self.route_items_list = tk.Listbox(sup_frame, height=8, width=28)
+        self.route_items_list.grid(row=4, column=0, columnspan=2, sticky="nw")
+        self.route_items_list.bind("<<ListboxSelect>>", lambda _e: self._route_on_item_select())
+        btn_items = tk.Frame(sup_frame)
+        btn_items.grid(row=4, column=2, columnspan=2, sticky="nw", padx=(6, 0))
+        tk.Button(btn_items, text="Agregar/Actualizar", width=16, command=self._route_add_update_item).grid(row=0, column=0, pady=(0, 4))
+        tk.Button(btn_items, text="Eliminar", width=10, command=self._route_delete_item).grid(row=1, column=0)
+
+        tk.Label(sup_frame, text="item_name").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(sup_frame, textvariable=self.item_name_var, width=20).grid(row=5, column=1, sticky="w", pady=(6, 0))
+        tk.Label(sup_frame, text="hotkey").grid(row=5, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(sup_frame, textvariable=self.item_hotkey_var, width=8).grid(row=5, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(sup_frame, text="use").grid(row=6, column=0, sticky="w", pady=(4, 0))
+        ttk.Combobox(sup_frame, values=["self", "use", "target", "tile"], textvariable=self.item_use_var, width=10, state="readonly").grid(
+            row=6, column=1, sticky="w"
+        )
+
+        self._route_refresh_tree()
+
+    def _route_new(self) -> None:
+        self.route_steps = []
+        self.route_path_var.set("")
+        self.route_status_var.set("Nueva ruta")
+        self._route_refresh_tree()
+
+    def _route_open(self) -> None:
+        try:
+            base = self._repo_root / "routes"
+            path = self._filedialog.askopenfilename(title="Abrir waypoints.in", initialdir=str(base), filetypes=[("waypoints", "waypoints.in"), ("All", "*.*")])
+        except Exception:
+            path = ""
+        if not path:
+            return
+        p = Path(path)
+        self.route_path_var.set(str(p.parent))
+        self._route_load_waypoints(p)
+
+    def _route_save(self) -> None:
+        route_dir = self.route_path_var.get().strip()
+        if not route_dir:
+            try:
+                route_dir = self._filedialog.askdirectory(title="Selecciona carpeta de ruta", initialdir=str(self._repo_root / "routes"))
+            except Exception:
+                route_dir = ""
+        if not route_dir:
+            return
+        self.route_path_var.set(route_dir)
+        wp_path = Path(route_dir) / "waypoints.in"
+        expanded, errs = self._expand_move_macros(self.route_steps)
+        if errs:
+            self.route_status_var.set(f"Errores MOVE: {errs[0]}")
+            return
+        try:
+            wp_path.parent.mkdir(parents=True, exist_ok=True)
+            wp_path.write_text(self._serialize_waypoints(expanded), encoding="utf-8")
+            self.route_status_var.set(f"Guardado {wp_path}")
+        except Exception as e:
+            self.route_status_var.set(f"Error guardando: {e}")
+
+    def _route_validate(self) -> None:
+        expanded, errs = self._expand_move_macros(self.route_steps)
+        errs += self._validate_waypoints(expanded)
+        if errs:
+            self.route_status_var.set(f"Errores: {errs[0]}")
+        else:
+            self.route_status_var.set("OK")
+
+    def _route_load_waypoints(self, path: Path) -> None:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as e:
+            self.route_status_var.set(f"No pude leer {path}: {e}")
+            return
+        parsed = self._parse_waypoints(text)
+        self.route_steps = parsed.steps
+        if parsed.errors:
+            self.route_status_var.set(f"Parse con errores: {parsed.errors[0]}")
+        else:
+            self.route_status_var.set(f"Cargado {path}")
+        # guess setup path
+        guess_setup = path.parent / "setup_ek.json"
+        if guess_setup.exists():
+            self.route_setup_path_var.set(str(guess_setup))
+        self._route_refresh_tree()
+
+    def _route_refresh_tree(self) -> None:
+        tree = getattr(self, "route_tree", None)
+        if tree is None:
+            return
+        tree.delete(*tree.get_children())
+        for idx, s in enumerate(self.route_steps, start=1):
+            params = ""
+            if s.params:
+                params = ",".join(f"{k}={v}" for k, v in s.params.items())
+            tree.insert("", "end", iid=str(idx - 1), values=(idx, s.kind, s.x or "", s.y or "", s.z or "", s.name, params, s.comment, "yes" if s.enabled else "no"))
+
+    def _route_get_selected_index(self) -> int | None:
+        tree = getattr(self, "route_tree", None)
+        if tree is None:
+            return None
+        sel = tree.selection()
+        if not sel:
+            return None
+        try:
+            return int(sel[0])
+        except Exception:
+            return None
+
+    def _route_on_select(self) -> None:
+        idx = self._route_get_selected_index()
+        if idx is None or idx >= len(self.route_steps):
+            return
+        s = self.route_steps[idx]
+        self.route_kind_var.set(s.kind)
+        self.route_x_var.set("" if s.x is None else str(s.x))
+        self.route_y_var.set("" if s.y is None else str(s.y))
+        self.route_z_var.set("" if s.z is None else str(s.z))
+        self.route_name_var.set(s.name)
+        self.route_comment_var.set(s.comment)
+        self.route_enabled_var.set(bool(s.enabled))
+        if s.params:
+            self.route_params_var.set(",".join(f"{k}={v}" for k, v in s.params.items()))
+        else:
+            self.route_params_var.set("")
+
+    def _route_apply_form(self) -> None:
+        idx = self._route_get_selected_index()
+        if idx is None or idx >= len(self.route_steps):
+            return
+        s = self.route_steps[idx]
+        s.kind = self.route_kind_var.get()
+        s.name = self.route_name_var.get()
+        s.comment = self.route_comment_var.get()
+        s.enabled = bool(self.route_enabled_var.get())
+        s.x = _to_int_or_none(self.route_x_var.get())
+        s.y = _to_int_or_none(self.route_y_var.get())
+        s.z = _to_int_or_none(self.route_z_var.get())
+        s.params = _parse_params(self.route_params_var.get())
+        self._route_refresh_tree()
+
+    def _route_add_step(self, insert: bool = False) -> None:
+        s = self._WaypointStep(
+            kind=self.route_kind_var.get(),
+            x=_to_int_or_none(self.route_x_var.get()),
+            y=_to_int_or_none(self.route_y_var.get()),
+            z=_to_int_or_none(self.route_z_var.get()),
+            name=self.route_name_var.get(),
+            params=_parse_params(self.route_params_var.get()),
+            comment=self.route_comment_var.get(),
+            enabled=bool(self.route_enabled_var.get()),
+        )
+        idx = self._route_get_selected_index()
+        if insert and idx is not None:
+            self.route_steps.insert(idx, s)
+        else:
+            self.route_steps.append(s)
+        self._route_refresh_tree()
+
+    def _route_delete_step(self) -> None:
+        idx = self._route_get_selected_index()
+        if idx is None:
+            return
+        if 0 <= idx < len(self.route_steps):
+            self.route_steps.pop(idx)
+        self._route_refresh_tree()
+
+    def _route_duplicate_step(self) -> None:
+        idx = self._route_get_selected_index()
+        if idx is None or idx >= len(self.route_steps):
+            return
+        import copy
+
+        clone = copy.deepcopy(self.route_steps[idx])
+        self.route_steps.insert(idx + 1, clone)
+        self._route_refresh_tree()
+
+    def _route_move_step(self, delta: int) -> None:
+        idx = self._route_get_selected_index()
+        if idx is None:
+            return
+        new_idx = idx + delta
+        if new_idx < 0 or new_idx >= len(self.route_steps):
+            return
+        self.route_steps[idx], self.route_steps[new_idx] = self.route_steps[new_idx], self.route_steps[idx]
+        self._route_refresh_tree()
+        try:
+            self.route_tree.selection_set(str(new_idx))
+        except Exception:
+            pass
+
+    def _route_add_from_position(self) -> None:
+        pos = self._get_current_position()
+        if pos is None:
+            try:
+                x = _to_int_or_none(self._simpledialog.askstring("X", "Coord X"))
+                y = _to_int_or_none(self._simpledialog.askstring("Y", "Coord Y"))
+                z = _to_int_or_none(self._simpledialog.askstring("Z", "Coord Z"))
+                pos = (x, y, z)
+            except Exception:
+                pos = None
+        if pos is None or pos[0] is None or pos[1] is None or pos[2] is None:
+            self.route_status_var.set("Posicion no disponible")
+            return
+        self.route_kind_var.set("node")
+        self.route_x_var.set(str(pos[0]))
+        self.route_y_var.set(str(pos[1]))
+        self.route_z_var.set(str(pos[2]))
+        self._route_add_step()
+
+    def _route_add_move(self) -> None:
+        try:
+            dir_token = self._simpledialog.askstring("MOVE", "Direccion (N/S/E/W)", initialvalue="N")
+            steps = self._simpledialog.askstring("MOVE", "Pasos", initialvalue="1")
+        except Exception:
+            return
+        if not dir_token or not steps:
+            return
+        s = self._WaypointStep(kind="move", params={"dir": dir_token.upper(), "steps": _to_int_or_none(steps) or 0})
+        self.route_steps.append(s)
+        self._route_refresh_tree()
+
+    def _route_template_action(self, action: str) -> None:
+        self.route_kind_var.set("action")
+        self.route_name_var.set(action)
+        self._route_add_step()
+
+    def _route_load_setup(self) -> None:
+        path = self.route_setup_path_var.get().strip()
+        if not path:
+            try:
+                base = Path(self.route_path_var.get() or (self._repo_root / "routes"))
+                path = self._filedialog.askopenfilename(title="Abrir setup_*.json", initialdir=str(base), filetypes=[("setup json", "*.json"), ("All", "*.*")])
+            except Exception:
+                path = ""
+        if not path:
+            return
+        self.route_setup_path_var.set(path)
+        cfg = self._load_setup(path)
+        self.route_setup_cfg = cfg
+        hc = cfg.hunt_config
+        self.hc_mana_name.set(str(hc.get("mana_name", "")))
+        self.hc_take_mana.set(int(hc.get("take_mana", 0) or 0))
+        self.hc_mana_leave.set(int(hc.get("mana_leave", 0) or 0))
+        self.hc_cap_leave.set(int(hc.get("cap_leave", 0) or 0))
+        self._route_refresh_items_list()
+        self.route_status_var.set(f"Setup cargado {path}")
+
+    def _route_save_setup(self) -> None:
+        cfg = self.route_setup_cfg
+        if cfg is None:
+            cfg = self._SetupConfig(raw={})
+            self.route_setup_cfg = cfg
+        cfg.set_hunt_field("mana_name", self.hc_mana_name.get())
+        cfg.set_hunt_field("take_mana", int(self.hc_take_mana.get() or 0))
+        cfg.set_hunt_field("mana_leave", int(self.hc_mana_leave.get() or 0))
+        cfg.set_hunt_field("cap_leave", int(self.hc_cap_leave.get() or 0))
+        # items already synced via list
+        path = self.route_setup_path_var.get().strip()
+        if not path:
+            try:
+                path = self._filedialog.asksaveasfilename(title="Guardar setup", defaultextension=".json", initialdir=str(self._repo_root / "routes"))
+            except Exception:
+                path = ""
+        if not path:
+            return
+        try:
+            self._save_setup(cfg, path)
+            self.route_status_var.set(f"Setup guardado {path}")
+        except Exception as e:
+            self.route_status_var.set(f"Error guardando setup: {e}")
+
+    def _route_refresh_items_list(self) -> None:
+        lb = getattr(self, "route_items_list", None)
+        if lb is None:
+            return
+        lb.delete(0, self._tk.END)
+        cfg = self.route_setup_cfg
+        if cfg is None:
+            return
+        for name in sorted(cfg.items.keys()):
+            lb.insert(self._tk.END, name)
+
+    def _route_on_item_select(self) -> None:
+        lb = getattr(self, "route_items_list", None)
+        if lb is None:
+            return
+        sel = lb.curselection()
+        if not sel:
+            return
+        name = lb.get(sel[0])
+        cfg = self.route_setup_cfg
+        if cfg is None:
+            return
+        item = cfg.items.get(name, {})
+        self.item_name_var.set(name)
+        self.item_hotkey_var.set(str(item.get("hotkey", "")))
+        self.item_use_var.set(str(item.get("use", "self")))
+
+    def _route_add_update_item(self) -> None:
+        name = self.item_name_var.get().strip()
+        if not name:
+            return
+        hotkey = self.item_hotkey_var.get().strip()
+        use = self.item_use_var.get().strip() or "self"
+        cfg = self.route_setup_cfg
+        if cfg is None:
+            cfg = self._SetupConfig(raw={})
+            self.route_setup_cfg = cfg
+        cfg.set_item(name, hotkey, use)
+        self._route_refresh_items_list()
+
+    def _route_delete_item(self) -> None:
+        if self.route_setup_cfg is None:
+            return
+        name = self.item_name_var.get().strip()
+        if not name:
+            return
+        self.route_setup_cfg.delete_item(name)
+        self._route_refresh_items_list()
+
+    def _get_current_position(self):
+        try:
+            tel = self._config.telemetry_snapshot()
+            if tel.pos_x is not None and tel.pos_y is not None and tel.pos_z is not None:
+                return tel.pos_x, tel.pos_y, tel.pos_z
+        except Exception:
+            return None
+        return None
+
+    # ------------------------------------------------------------------
+    # UI settings persistence
+    # ------------------------------------------------------------------
     def _save_ui_settings(self) -> None:
         p = self._ui_settings_path()
         try:
@@ -3318,6 +3944,8 @@ class BotUI:
         self._reset_cavebot_ui()
 
     def on_close(self) -> None:
+        self._allow_close = True
+        self._stop_tray_icon()
         if self._is_running():
             if not self._messagebox.askyesno("Salir", "El bot esta corriendo. Quieres pararlo y salir?"):
                 return
@@ -3342,6 +3970,42 @@ class BotUI:
                 self.root.destroy()
             except Exception:
                 pass
+
+
+# -----------------------------
+# Helpers (module-level)
+# -----------------------------
+def _to_int_or_none(val: str | None):
+    try:
+        if val is None:
+            return None
+        s = str(val).strip()
+        if s == "":
+            return None
+        return int(float(s))
+    except Exception:
+        return None
+
+
+def _parse_params(raw: str | None) -> dict:
+    params: dict[str, str | int] = {}
+    if not raw:
+        return params
+    try:
+        tokens = [t.strip() for t in str(raw).split(",") if t.strip()]
+        for tok in tokens:
+            if "=" not in tok:
+                continue
+            k, v = tok.split("=", 1)
+            k = k.strip()
+            v = v.strip()
+            if not k:
+                continue
+            iv = _to_int_or_none(v)
+            params[k] = iv if iv is not None else v
+    except Exception:
+        return params
+    return params
 
 
 if __name__ == "__main__":

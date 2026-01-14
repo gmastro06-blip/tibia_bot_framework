@@ -1,0 +1,8 @@
+# Ejemplo mínimo para el editor (Rutas / Cavebot)
+# Puedes abrir este archivo desde la UI y editarlo.
+
+label start
+node (32603, 31704, 7)
+node (32604, 31704, 7)
+action deposit
+# node (32605, 31704, 7)  # ejemplo deshabilitado

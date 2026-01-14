@@ -1,0 +1,14 @@
+{
+  "hunt_config": {
+    "mana_name": "mana potion",
+    "take_mana": 5,
+    "mana_leave": 2,
+    "cap_leave": 20
+  },
+  "items": {
+    "mana potion": {
+      "hotkey": "F1",
+      "use": "self"
+    }
+  }
+}
