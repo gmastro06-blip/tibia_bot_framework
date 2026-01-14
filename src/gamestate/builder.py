@@ -36,6 +36,9 @@ class GameState:
     minimap_marker_dpx_dy: Optional[float] = None
     coords_confidence: Optional[float] = None
     coords_provider_status: Optional[str] = None
+    # Structured provider status (for UI/telemetry)
+    # Example: {"enabled": True, "seed_ok": True, "confidence": 0.82, "last_update_ts": 123.4, "reason": "ok"}
+    coords_provider_state: Optional[Dict[str, Any]] = None
     coords_confidence_level: Optional[str] = None
     ring_equipped: Optional[bool] = None
     amulet_equipped: Optional[bool] = None
@@ -98,9 +101,9 @@ class GameStateBuilder:
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
 
-        # Coords por minimapa (EXPERIMENTAL): requiere seed y ROI minimap_content.
+        # Coords por minimapa (minimap_motion): requiere seed y ROI minimap_content.
         # No hace OCR de coords; infiere movimiento y lo acumula.
-        # Si NO hay coords visibles, el camino estable recomendado es COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps.
+        # Puede hacer fallback a steps (sin coords) u OCR según config.
         self._minimap_tracker = MinimapMotionTracker()
         self._minimap_seed: tuple[int, int, int | None] | None = None
         self._minimap_coords: tuple[int, int, int | None] | None = None
@@ -110,6 +113,9 @@ class GameStateBuilder:
         self._minimap_status: str = ""
         self._minimap_accept_streak: int = 0
         self._minimap_last_resp: float = 0.0
+        self._minimap_last_update_ts: float = 0.0
+        self._minimap_low_conf_streak: int = 0
+        self._minimap_force_disable_coords: bool = False
 
         # Battlelist stabilization buffer: row_index -> last N parsed entries
         self._battlelist_buf: Dict[int, List[Dict[str, Any]]] = {}
@@ -143,6 +149,9 @@ class GameStateBuilder:
         self._minimap_last_resp = 0.0
         self._minimap_confidence = 0.0
         self._minimap_status = "reseed"
+        self._minimap_last_update_ts = 0.0
+        self._minimap_low_conf_streak = 0
+        self._minimap_force_disable_coords = False
 
         # Battlelist is independent of minimap, but reseed is a convenient place
         # to also clear other experimental trackers if desired.
@@ -248,16 +257,22 @@ class GameStateBuilder:
         frame: np.ndarray,
         rois: Dict[str, Dict[str, float]],
         resolution: Tuple[int, int],
+        *,
+        allow_ocr: bool = True,
     ) -> tuple[int, int, int | None] | None:
-        """Infiera coords absolutas trackeando la traslación del minimapa (EXPERIMENTAL).
+        """Infiera coords absolutas trackeando la traslación del minimapa (minimap_motion).
 
         Requisitos:
         - Debe existir la ROI `minimap_content`.
         - Debe haber seed vía COORDS_SEED_X/Y[/Z] o COORDS_SEED_FILE.
 
-        Nota:
-        - Si no tienes coords visibles y quieres estabilidad, usa COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps.
+        Fallback:
+        - Si confidence < MINIMAP_FALLBACK_CONF_THRESHOLD por MINIMAP_FALLBACK_N_TICKS,
+          activa fallback según MINIMAP_FALLBACK_MODE: "steps" (sin coords) o "ocr".
         """
+
+        # Reset per-tick flag.
+        self._minimap_force_disable_coords = False
 
         if not (isinstance(rois, dict) and rois.get("minimap_content") is not None):
             self._minimap_status = "minimap_no_roi"
@@ -281,6 +296,10 @@ class GameStateBuilder:
 
             self._minimap_seed = seed
             self._minimap_coords = seed
+            try:
+                self._minimap_last_update_ts = float(time.time())
+            except Exception:
+                pass
 
         # Cortar minimapa y actualizar motion tracker.
         try:
@@ -324,20 +343,20 @@ class GameStateBuilder:
             self._minimap_accept_streak = 0
             self._minimap_confidence = min(1.0, self._minimap_last_resp / accept_resp) if accept_resp > 0 else 0.0
             self._minimap_status = "minimap_low_resp"
-            return self._minimap_coords
+            return self._minimap_apply_fallback(frame, rois, resolution, allow_ocr=allow_ocr, coords=self._minimap_coords)
 
         self._minimap_accept_streak += 1
         self._minimap_confidence = min(1.0, float(self._minimap_accept_streak) / float(min_streak))
 
         if self._minimap_accept_streak < min_streak:
             self._minimap_status = "minimap_warming"
-            return self._minimap_coords
+            return self._minimap_apply_fallback(frame, rois, resolution, allow_ocr=allow_ocr, coords=self._minimap_coords)
 
         if abs(int(dx_tiles)) > max_step_tiles or abs(int(dy_tiles)) > max_step_tiles:
             # Untrusted jump, reset streak and ignore.
             self._minimap_accept_streak = 0
             self._minimap_status = "minimap_reject_step"
-            return self._minimap_coords
+            return self._minimap_apply_fallback(frame, rois, resolution, allow_ocr=allow_ocr, coords=self._minimap_coords)
 
         x0, y0, z0 = self._minimap_coords
         x1 = int(x0) + int(dx_tiles)
@@ -345,7 +364,74 @@ class GameStateBuilder:
         self._minimap_coords = (x1, y1, z0)
         self._minimap_status = "ok"
         self._minimap_confidence = 1.0
-        return self._minimap_coords
+        try:
+            self._minimap_last_update_ts = float(time.time())
+        except Exception:
+            pass
+        return self._minimap_apply_fallback(frame, rois, resolution, allow_ocr=allow_ocr, coords=self._minimap_coords)
+
+    def _minimap_apply_fallback(
+        self,
+        frame: np.ndarray,
+        rois: Dict[str, Dict[str, float]],
+        resolution: Tuple[int, int],
+        *,
+        allow_ocr: bool,
+        coords: tuple[int, int, int | None] | None,
+    ) -> tuple[int, int, int | None] | None:
+        """Apply low-confidence fallback policy.
+
+        Returns the coordinates to publish for this tick.
+        May set `self._minimap_force_disable_coords` to request steps-mode fallback.
+        """
+
+        # Configurable thresholds
+        try:
+            thr = float(os.getenv("MINIMAP_FALLBACK_CONF_THRESHOLD", "0.40").strip() or "0.40")
+        except Exception:
+            thr = 0.40
+        try:
+            n_ticks = int(float(os.getenv("MINIMAP_FALLBACK_N_TICKS", "4").strip() or "4"))
+        except Exception:
+            n_ticks = 4
+        n_ticks = max(1, int(n_ticks))
+        mode = (os.getenv("MINIMAP_FALLBACK_MODE", "steps") or "steps").strip().lower()
+        if mode not in {"steps", "ocr"}:
+            mode = "steps"
+
+        conf = None
+        try:
+            conf = float(self._minimap_confidence)
+        except Exception:
+            conf = None
+
+        # Track consecutive low-confidence ticks
+        try:
+            if conf is not None and conf < float(thr):
+                self._minimap_low_conf_streak = int(self._minimap_low_conf_streak) + 1
+            else:
+                self._minimap_low_conf_streak = 0
+        except Exception:
+            self._minimap_low_conf_streak = 0
+
+        if int(self._minimap_low_conf_streak) < int(n_ticks):
+            return coords
+
+        # Fallback active
+        if mode == "steps":
+            self._minimap_status = "fallback_steps"
+            self._minimap_force_disable_coords = True
+            return None
+
+        # mode == "ocr"
+        self._minimap_status = "fallback_ocr"
+        if allow_ocr:
+            try:
+                return self.ocr_processor.extract_coords(frame, rois, resolution)
+            except Exception:
+                return coords
+        # If OCR is throttled, keep last minimap coords but surface status.
+        return coords
 
     @staticmethod
     def _coords_from_file() -> tuple[int, int, int | None] | None:
@@ -407,7 +493,11 @@ class GameStateBuilder:
 
         if kind in {"minimap", "map", "minimap_motion"}:
             try:
-                return self._coords_from_minimap(frame, rois, resolution), False
+                coords = self._coords_from_minimap(frame, rois, resolution, allow_ocr=bool(allow_ocr))
+                # When minimap fallback requests steps-mode, force clear coords.
+                if bool(getattr(self, "_minimap_force_disable_coords", False)):
+                    return None, True
+                return coords, False
             except Exception:
                 return None, False
 
@@ -637,6 +727,18 @@ class GameStateBuilder:
                         gamestate.coords_provider_status = status
                 except Exception:
                     gamestate.coords_provider_status = None
+
+                # Structured provider state for UI/telemetry.
+                try:
+                    gamestate.coords_provider_state = {
+                        "enabled": True,
+                        "seed_ok": bool(self._minimap_seed is not None),
+                        "confidence": gamestate.coords_confidence,
+                        "last_update_ts": float(self._minimap_last_update_ts) if float(self._minimap_last_update_ts) > 0 else None,
+                        "reason": str(self._minimap_status or ""),
+                    }
+                except Exception:
+                    gamestate.coords_provider_state = None
         except Exception:
             pass
 

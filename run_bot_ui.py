@@ -186,6 +186,30 @@ class BotUI:
             _cp_default = "ocr"
         self.coords_provider = tk.StringVar(value=_cp_default)
 
+        # Minimap-motion provider calibration (persisted in UI config; applied via env vars).
+        self.minimap_seed_x = tk.StringVar(value=(os.getenv("COORDS_SEED_X", "") or "").strip())
+        self.minimap_seed_y = tk.StringVar(value=(os.getenv("COORDS_SEED_Y", "") or "").strip())
+        self.minimap_seed_z = tk.StringVar(value=(os.getenv("COORDS_SEED_Z", "") or "").strip())
+
+        mm_fb_mode = (os.getenv("MINIMAP_FALLBACK_MODE", "steps") or "steps").strip().lower()
+        if mm_fb_mode not in {"steps", "ocr"}:
+            mm_fb_mode = "steps"
+        self.minimap_fallback_mode = tk.StringVar(value=mm_fb_mode)
+        try:
+            mm_thr = float((os.getenv("MINIMAP_FALLBACK_CONF_THRESHOLD", "0.40") or "0.40").strip() or "0.40")
+        except Exception:
+            mm_thr = 0.40
+        self.minimap_fallback_conf_threshold = tk.DoubleVar(value=float(max(0.0, min(1.0, mm_thr))))
+        try:
+            mm_n = int(float((os.getenv("MINIMAP_FALLBACK_N_TICKS", "4") or "4").strip() or "4"))
+        except Exception:
+            mm_n = 4
+        self.minimap_fallback_n_ticks = tk.IntVar(value=max(1, int(mm_n)))
+
+        # UI-only: live provider status (text + semáforo color).
+        self.coords_provider_state_text = tk.StringVar(value="-")
+        self._coords_provider_state_label = None
+
         # Cavebot stop conditions (assistant-only): low cap / low potions.
         try:
             _cap_leave_enabled = os.getenv("CAP_LEAVE_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
@@ -1066,9 +1090,39 @@ class BotUI:
         tk.Radiobutton(cb_left, text="ocr", variable=self.coords_provider, value="ocr").grid(
             row=3, column=2, sticky="w", pady=(6, 0)
         )
-        tk.Radiobutton(cb_left, text="minimap (exp)", variable=self.coords_provider, value="minimap").grid(
+        tk.Radiobutton(cb_left, text="minimap_motion", variable=self.coords_provider, value="minimap").grid(
             row=3, column=3, sticky="w", pady=(6, 0)
         )
+
+        # Live provider status (text/semáforo)
+        tk.Label(cb_left, text="Provider status:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        _lbl = tk.Label(cb_left, textvariable=self.coords_provider_state_text, width=34, anchor="w")
+        _lbl.grid(row=4, column=1, columnspan=3, sticky="w", pady=(6, 0))
+        try:
+            self._coords_provider_state_label = _lbl
+        except Exception:
+            pass
+
+        # Minimap calibration (seed) + fallback policy (persisted in UI config)
+        tk.Label(cb_left, text="Minimap seed X/Y/Z:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(cb_left, textvariable=self.minimap_seed_x, width=6).grid(row=5, column=1, sticky="w", pady=(6, 0))
+        tk.Entry(cb_left, textvariable=self.minimap_seed_y, width=6).grid(row=5, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(cb_left, textvariable=self.minimap_seed_z, width=6).grid(row=5, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(cb_left, text="Minimap fallback:").grid(row=6, column=0, sticky="w", pady=(4, 0))
+        ttk.Combobox(
+            cb_left,
+            textvariable=self.minimap_fallback_mode,
+            values=["steps", "ocr"],
+            width=8,
+            state="readonly",
+        ).grid(row=6, column=1, sticky="w", pady=(4, 0))
+        tk.Label(cb_left, text="conf<").grid(row=6, column=2, sticky="e", pady=(4, 0))
+        tk.Entry(cb_left, textvariable=self.minimap_fallback_conf_threshold, width=6).grid(
+            row=6, column=3, sticky="w", pady=(4, 0)
+        )
+        tk.Label(cb_left, text="N ticks").grid(row=7, column=2, sticky="e", pady=(2, 0))
+        tk.Entry(cb_left, textvariable=self.minimap_fallback_n_ticks, width=6).grid(row=7, column=3, sticky="w", pady=(2, 0))
 
         def _start_cavebot_ui() -> None:
             try:
@@ -1106,10 +1160,10 @@ class BotUI:
                 pass
 
         tk.Button(cb_left, text="Iniciar cavebot", width=14, command=_start_cavebot_ui).grid(
-            row=4, column=0, sticky="w", pady=(10, 0)
+            row=8, column=0, sticky="w", pady=(10, 0)
         )
         tk.Button(cb_left, text="Detener cavebot", width=14, command=_stop_cavebot_ui).grid(
-            row=4, column=1, sticky="w", padx=(8, 0), pady=(10, 0)
+            row=8, column=1, sticky="w", padx=(8, 0), pady=(10, 0)
         )
 
         tk.Label(cb_right, text="Paso:").grid(row=0, column=0, sticky="w")
@@ -1364,8 +1418,8 @@ class BotUI:
         tk.Label(
             cfg_left,
             text=(
-                "Tip estable (sin coords visibles): usa COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps "
-                "(ver ./scripts/profile_no_coords_steps.ps1). Minimap es experimental; ver README."
+                "Tip estable (sin coords visibles): usa CAVEBOT_MODE=steps. "
+                "Para minimap_motion: define seed X/Y (y opcional Z) y una policy de fallback."
             ),
             wraplength=320,
             justify="left",
@@ -1914,6 +1968,60 @@ class BotUI:
                 self.hp_text.set(hp_str)
                 self.mp_text.set(mp_str)
                 self.cap_text.set(cap_str)
+
+                # Coords provider status (selection + readiness)
+                try:
+                    prov = str(getattr(tel, "coords_provider", "") or "")
+                    state = getattr(tel, "coords_provider_state", None)
+                    if isinstance(state, dict) and state:
+                        enabled = bool(state.get("enabled", True))
+                        seed_ok = bool(state.get("seed_ok", False))
+                        reason = str(state.get("reason", "") or "")
+                        conf = state.get("confidence", None)
+                        conf_s = "-"
+                        color = "gray"
+                        try:
+                            if conf is not None:
+                                conf_f = float(conf)
+                                conf_s = f"{conf_f:.2f}"
+                                if conf_f >= 0.7:
+                                    color = "green"
+                                elif conf_f >= 0.4:
+                                    color = "orange"
+                                else:
+                                    color = "red"
+                        except Exception:
+                            conf_s = "-"
+                            color = "gray"
+
+                        seed_s = "OK" if seed_ok else "NO"
+                        en_s = "ON" if enabled else "OFF"
+                        msg = f"{prov or '-'} {en_s} seed={seed_s} conf={conf_s} {reason}".strip()
+                        self.coords_provider_state_text.set(msg)
+                        try:
+                            if self._coords_provider_state_label is not None:
+                                self._coords_provider_state_label.config(fg=color)
+                        except Exception:
+                            pass
+                    else:
+                        # Fallback to legacy flat fields
+                        status = str(getattr(tel, "coords_provider_status", "") or "")
+                        conf = getattr(tel, "coords_confidence", None)
+                        conf_s = ""
+                        try:
+                            if conf is not None:
+                                conf_s = f" conf={float(conf):.2f}"
+                        except Exception:
+                            conf_s = ""
+                        msg = f"{prov or '-'} {status}{conf_s}".strip() or "-"
+                        self.coords_provider_state_text.set(msg)
+                        try:
+                            if self._coords_provider_state_label is not None:
+                                self._coords_provider_state_label.config(fg="gray")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
 
                 parts = []
                 # Coords confidence (estructurado desde el core)
@@ -2833,6 +2941,30 @@ class BotUI:
                     cp = str(cb.get("coords_provider") or "").strip().lower()
                     if cp in {"auto", "ocr", "minimap", "disabled"}:
                         self.coords_provider.set(cp)
+
+                # Minimap calibration + fallback policy
+                if "minimap_seed_x" in cb:
+                    self.minimap_seed_x.set(str(cb.get("minimap_seed_x") or "").strip())
+                if "minimap_seed_y" in cb:
+                    self.minimap_seed_y.set(str(cb.get("minimap_seed_y") or "").strip())
+                if "minimap_seed_z" in cb:
+                    self.minimap_seed_z.set(str(cb.get("minimap_seed_z") or "").strip())
+                if "minimap_fallback_mode" in cb:
+                    m = str(cb.get("minimap_fallback_mode") or "").strip().lower()
+                    if m in {"steps", "ocr"}:
+                        self.minimap_fallback_mode.set(m)
+                if "minimap_fallback_conf_threshold" in cb:
+                    try:
+                        v = float(cb.get("minimap_fallback_conf_threshold") or 0.0)
+                        self.minimap_fallback_conf_threshold.set(max(0.0, min(1.0, v)))
+                    except Exception:
+                        pass
+                if "minimap_fallback_n_ticks" in cb:
+                    try:
+                        v = int(float(cb.get("minimap_fallback_n_ticks") or 1))
+                        self.minimap_fallback_n_ticks.set(max(1, v))
+                    except Exception:
+                        pass
                 if "loop" in cb:
                     self.cavebot_loop.set(bool(cb.get("loop")))
 
@@ -3431,6 +3563,12 @@ class BotUI:
                     "route_path": str(self.cavebot_route_path.get()),
                     "mode": str(self.cavebot_mode.get()),
                     "coords_provider": str(self.coords_provider.get()),
+                    "minimap_seed_x": str(self.minimap_seed_x.get()).strip(),
+                    "minimap_seed_y": str(self.minimap_seed_y.get()).strip(),
+                    "minimap_seed_z": str(self.minimap_seed_z.get()).strip(),
+                    "minimap_fallback_mode": str(self.minimap_fallback_mode.get()).strip().lower(),
+                    "minimap_fallback_conf_threshold": float(self.minimap_fallback_conf_threshold.get()),
+                    "minimap_fallback_n_ticks": int(self.minimap_fallback_n_ticks.get()),
                     "loop": bool(self.cavebot_loop.get()),
                     "stop_on_low_cap": bool(self.cavebot_stop_on_low_cap.get()),
                     "cap_threshold": int(self.cavebot_cap_threshold.get()),
@@ -3759,6 +3897,44 @@ class BotUI:
                 os.environ.pop("COORDS_PROVIDER", None)
             else:
                 os.environ["COORDS_PROVIDER"] = cp
+        except Exception:
+            pass
+
+        # Apply minimap calibration/fallback (only when provider is minimap).
+        try:
+            if str(self.coords_provider.get() or "").strip().lower() == "minimap":
+                sx = str(self.minimap_seed_x.get() or "").strip()
+                sy = str(self.minimap_seed_y.get() or "").strip()
+                sz = str(self.minimap_seed_z.get() or "").strip()
+                if sx:
+                    os.environ["COORDS_SEED_X"] = sx
+                else:
+                    os.environ.pop("COORDS_SEED_X", None)
+                if sy:
+                    os.environ["COORDS_SEED_Y"] = sy
+                else:
+                    os.environ.pop("COORDS_SEED_Y", None)
+                if sz:
+                    os.environ["COORDS_SEED_Z"] = sz
+                else:
+                    os.environ.pop("COORDS_SEED_Z", None)
+
+                mode = str(self.minimap_fallback_mode.get() or "steps").strip().lower()
+                if mode not in {"steps", "ocr"}:
+                    mode = "steps"
+                os.environ["MINIMAP_FALLBACK_MODE"] = mode
+                os.environ["MINIMAP_FALLBACK_CONF_THRESHOLD"] = str(float(self.minimap_fallback_conf_threshold.get()))
+                os.environ["MINIMAP_FALLBACK_N_TICKS"] = str(max(1, int(self.minimap_fallback_n_ticks.get())))
+            else:
+                for k in [
+                    "COORDS_SEED_X",
+                    "COORDS_SEED_Y",
+                    "COORDS_SEED_Z",
+                    "MINIMAP_FALLBACK_MODE",
+                    "MINIMAP_FALLBACK_CONF_THRESHOLD",
+                    "MINIMAP_FALLBACK_N_TICKS",
+                ]:
+                    os.environ.pop(k, None)
         except Exception:
             pass
 

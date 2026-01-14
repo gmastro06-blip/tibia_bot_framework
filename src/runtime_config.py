@@ -93,6 +93,7 @@ class TelemetrySnapshot:
     coords_jump: int | None = None  # manhattan jump vs last coords
     coords_confidence: float | None = None  # provider-specific confidence (e.g., minimap)
     coords_provider_status: str = ""  # provider-specific status text
+    coords_provider_state: dict | None = None  # structured provider status (minimap_motion)
     coords_confidence_level: str = ""  # "green"|"amber"|"red"|""
     # Minimap-motion (EXPERIMENTAL) debug
     minimap_mode_used: str = ""  # "scroll"|"marker"|""
@@ -248,6 +249,12 @@ class RuntimeConfig:
 
     def telemetry_snapshot(self) -> TelemetrySnapshot:
         with self._lock:
+            cps = None
+            try:
+                if isinstance(getattr(self.telemetry, "coords_provider_state", None), dict):
+                    cps = dict(getattr(self.telemetry, "coords_provider_state") or {})
+            except Exception:
+                cps = None
             return TelemetrySnapshot(
                 ts=float(self.telemetry.ts),
                 hp_current=self.telemetry.hp_current,
@@ -263,6 +270,10 @@ class RuntimeConfig:
                 coords_provider=str(getattr(self.telemetry, "coords_provider", "")),
                 coords_status=str(getattr(self.telemetry, "coords_status", "")),
                 coords_jump=getattr(self.telemetry, "coords_jump", None),
+                coords_confidence=getattr(self.telemetry, "coords_confidence", None),
+                coords_provider_status=str(getattr(self.telemetry, "coords_provider_status", "")),
+                coords_provider_state=cps,
+                coords_confidence_level=str(getattr(self.telemetry, "coords_confidence_level", "")),
                 minimap_mode_used=str(getattr(self.telemetry, "minimap_mode_used", "")),
                 minimap_response=getattr(self.telemetry, "minimap_response", None),
                 minimap_delta_dx=getattr(self.telemetry, "minimap_delta_dx", None),
@@ -580,6 +591,7 @@ class RuntimeConfig:
         coords_jump: int | None = None,
         coords_confidence: float | None = None,
         coords_provider_status: str | None = None,
+        coords_provider_state: dict | None = None,
         coords_confidence_level: str | None = None,
         minimap_mode_used: str | None = None,
         minimap_response: float | None = None,
@@ -669,6 +681,11 @@ class RuntimeConfig:
                     self.telemetry.coords_confidence = None
             if coords_provider_status is not None:
                 self.telemetry.coords_provider_status = str(coords_provider_status)
+            if coords_provider_state is not None:
+                try:
+                    self.telemetry.coords_provider_state = dict(coords_provider_state)
+                except Exception:
+                    self.telemetry.coords_provider_state = None
             if coords_confidence_level is not None:
                 self.telemetry.coords_confidence_level = str(coords_confidence_level)
             if minimap_mode_used is not None:

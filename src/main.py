@@ -1229,7 +1229,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             coords_confidence_level = str(getattr(gamestate, "coords_confidence_level", "") or "")
 
-            # Downgrade minimap provider when confidence is low (prevents jittery coords).
+            # Minimap provider confidence hint (builder handles hard fallback).
             try:
                 if coords_provider_minimap:
                     conf = getattr(gamestate, "coords_confidence", None)
@@ -1267,13 +1267,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         msg = ""
                         if coords_status == "NO_MINIMAP_ROI":
                             msg = (
-                                "⚠️  minimap (experimental): falta ROI 'minimap_content' (ajusta ROIS_CONFIG). "
-                                "Si no tienes coords visibles: COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps"
+                                "⚠️  minimap_motion: falta ROI 'minimap_content' (ajusta ROIS_CONFIG). "
+                                "Si no tienes coords visibles: usa CAVEBOT_MODE=steps"
                             )
                         elif coords_status == "NO_SEED":
                             msg = (
-                                "⚠️  minimap (experimental): falta seed (COORDS_SEED_X/COORDS_SEED_Y o COORDS_SEED_FILE). "
-                                "Si no tienes coords visibles: COORDS_PROVIDER=disabled + CAVEBOT_MODE=steps"
+                                "⚠️  minimap_motion: falta seed (COORDS_SEED_X/COORDS_SEED_Y o COORDS_SEED_FILE). "
+                                "Si no tienes coords visibles: usa CAVEBOT_MODE=steps"
                             )
                         if msg:
                             try:
@@ -1658,21 +1658,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pos = None
 
-                    # Confidence gating for minimap provider: block moves when signal is weak.
+                    # NOTE: Hard fallback (steps/OCR) is implemented in GameStateBuilder.
+                    # Here we only surface a soft warning via coords_status.
                     try:
                         if coords_provider_minimap:
                             coords_confidence = getattr(gamestate, "coords_confidence", None)
-                            block_thr = float(os.getenv("MINIMAP_CONFIDENCE_BLOCK", "0.3") or 0.3)
-                            if coords_confidence is not None and float(coords_confidence) < block_thr:
+                            warn_thr = float(os.getenv("MINIMAP_CONFIDENCE_WARN", "0.5") or 0.5)
+                            if coords_confidence is not None and float(coords_confidence) < warn_thr:
                                 coords_status = "LOW_CONF"
-                                pos = None
-                                if runtime_config is not None:
-                                    try:
-                                        runtime_config.update_telemetry(
-                                            note=f"⛔ minimap coords low confidence ({float(coords_confidence):.2f})"
-                                        )
-                                    except Exception:
-                                        pass
                     except Exception:
                         pass
 
@@ -1861,36 +1854,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 except Exception:
                     heal_committed = True
 
-                if bt_runner is not None and ActionRequest is not None:
-                    target_cls = ""
-                    target_conf = None
-                    try:
-                        if last_target is not None:
-                            target_cls = str(getattr(last_target, "cls", "") or "")
-                            target_conf = float(getattr(last_target, "confidence", 0.0) or 0.0)
-                    except Exception:
-                        target_cls = ""
-                        target_conf = None
+                def _inline_planner() -> list[ActionRequest]:
+                    out: list[ActionRequest] = []
 
-                    reqs = bt_runner.tick(
-                        sig=sig,
-                        healing_cfg=healing_cfg,
-                        target_cls=target_cls,
-                        target_conf=target_conf,
-                        cavebot_next=cavebot_next,
-                        cavebot_action=cavebot_action,
-                        commit_flag=bool(commit_flag),
-                        eat_food=bool(eat_food_now),
-                        heal_hp=bool(getattr(heal_dec, "heal_hp", False)),
-                        heal_mp=bool(getattr(heal_dec, "heal_mp", False)),
-                    )
-                else:
-                    # Fallback: inline planner.
+                    # Fallback: inline planner (pre-BT behavior).
                     try:
                         if last_target is not None and ActionRequest is not None:
                             tcls = str(getattr(last_target, "cls", "") or "").strip().lower()
                             if tcls:
-                                reqs.append(ActionRequest(kind="target", value=tcls, note="preview"))
+                                out.append(ActionRequest(kind="target", value=tcls, note="preview"))
                     except Exception:
                         pass
 
@@ -1899,21 +1871,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         if getattr(heal_dec, "heal_hp", False):
                             act_hp = (getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
                             if ActionRequest is not None:
-                                reqs.append(ActionRequest(kind="heal", value=act_hp, note=heal_note))
+                                out.append(ActionRequest(kind="heal", value=act_hp, note=heal_note))
                         if getattr(heal_dec, "heal_mp", False):
                             act_mp = (getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
                             if ActionRequest is not None:
-                                reqs.append(ActionRequest(kind="heal", value=act_mp, note=heal_note))
+                                out.append(ActionRequest(kind="heal", value=act_mp, note=heal_note))
 
                     if cavebot_next in {"north", "south", "east", "west"}:
                         note = "committed" if commit_flag else "preview"
                         if ActionRequest is not None:
-                            reqs.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
+                            out.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
 
                     # Waypoint 'action' string can request loot/tools/trade/etc.
                     try:
                         if cavebot_action:
-                            reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
+                            out.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
                     except Exception:
                         pass
 
@@ -1921,7 +1893,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     try:
                         if eat_food_now:
                             if ActionRequest is not None:
-                                reqs.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
+                                out.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
                     except Exception:
                         pass
 
@@ -1935,10 +1907,61 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             ):
                                 sim_inputs_last_ts = time.time()
                                 if ActionRequest is not None:
-                                    reqs.append(ActionRequest(kind="keyboard_sim", value="heal_hotkey", note="sim"))
-                                    reqs.append(ActionRequest(kind="minimap_click_sim", value="center_tile", note="sim"))
+                                    out.append(ActionRequest(kind="keyboard_sim", value="heal_hotkey", note="sim"))
+                                    out.append(ActionRequest(kind="minimap_click_sim", value="center_tile", note="sim"))
                         except Exception:
                             pass
+
+                    return out
+
+                # BehaviorTreeRunner is the default planner when enabled.
+                if bt_runner is not None and ActionRequest is not None:
+                    from decision.action_planner import plan_action_requests
+
+                    target_cls = ""
+                    target_conf = None
+                    try:
+                        if last_target is not None:
+                            target_cls = str(getattr(last_target, "cls", "") or "")
+                            target_conf = float(getattr(last_target, "confidence", 0.0) or 0.0)
+                    except Exception:
+                        target_cls = ""
+                        target_conf = None
+
+                    bl_target = ""
+                    bl_conf = None
+                    try:
+                        top = getattr(gamestate, "battlelist_top_names", None)
+                        if isinstance(top, list) and top:
+                            bl_target = str(top[0] or "").strip().lower()
+                        bl_conf = getattr(gamestate, "battlelist_confidence", None)
+                        if bl_conf is not None:
+                            bl_conf = float(bl_conf)
+                    except Exception:
+                        bl_target = ""
+                        bl_conf = None
+
+                    # Fallback policy: exception OR empty output => inline planner.
+                    reqs, _src = plan_action_requests(
+                        bt_enabled=True,
+                        bt_runner=bt_runner,
+                        fallback=_inline_planner,
+                        sig=sig,
+                        healing_cfg=healing_cfg,
+                        heal_hp=bool(getattr(heal_dec, "heal_hp", False)),
+                        heal_mp=bool(getattr(heal_dec, "heal_mp", False)),
+                        battlelist_target=bl_target,
+                        battlelist_conf=bl_conf,
+                        target_cls=target_cls,
+                        target_conf=target_conf,
+                        cavebot_next=cavebot_next,
+                        cavebot_action=cavebot_action,
+                        commit_flag=bool(commit_flag),
+                        eat_food=bool(eat_food_now),
+                        fallback_on_empty=True,
+                    )
+                else:
+                    reqs = _inline_planner()
 
                 if reqs:
                     try:
@@ -2268,6 +2291,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         minimap_marker_dpx_dy=getattr(gamestate, "minimap_marker_dpx_dy", None),
                         coords_confidence=getattr(gamestate, "coords_confidence", None),
                         coords_provider_status=getattr(gamestate, "coords_provider_status", ""),
+                        coords_provider_state=getattr(gamestate, "coords_provider_state", None),
                         coords_confidence_level=getattr(gamestate, "coords_confidence_level", ""),
                         ring_equipped=ring_equipped,
                         amulet_equipped=amulet_equipped,

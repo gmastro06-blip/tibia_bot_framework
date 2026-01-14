@@ -17,6 +17,8 @@ class BTInputs:
     healing_cfg: Any
     heal_hp: bool
     heal_mp: bool
+    battlelist_target: str
+    battlelist_conf: float | None
     target_cls: str
     target_conf: float | None
     cavebot_next: str
@@ -33,19 +35,31 @@ class _BB:
     out_requests = "bt_out_requests"
 
 
-class _ResetPlan(py_trees.behaviour.Behaviour):
+class EnsureUIHealthy(py_trees.behaviour.Behaviour):
     def __init__(self) -> None:
-        super().__init__(name="ResetPlan")
+        super().__init__(name="EnsureUIHealthy")
         self.bb = py_trees.blackboard.Blackboard()
 
     def update(self) -> py_trees.common.Status:
+        # Always reset planned requests each tick (prevents stale accumulation).
         self.bb.set(_BB.out_requests, [])
         return py_trees.common.Status.SUCCESS
 
 
-class _PlanHealing(py_trees.behaviour.Behaviour):
+class EnsureSafe(py_trees.behaviour.Behaviour):
     def __init__(self) -> None:
-        super().__init__(name="PlanHealing")
+        super().__init__(name="EnsureSafe")
+        self.bb = py_trees.blackboard.Blackboard()
+
+    def update(self) -> py_trees.common.Status:
+        # Policy hook (future): allow gating committed actions based on signals.
+        # Today this is a no-op to preserve existing semantics.
+        return py_trees.common.Status.SUCCESS
+
+
+class HealIfNeeded(py_trees.behaviour.Behaviour):
+    def __init__(self) -> None:
+        super().__init__(name="HealIfNeeded")
         self.bb = py_trees.blackboard.Blackboard()
 
     def update(self) -> py_trees.common.Status:
@@ -103,9 +117,9 @@ class _PlanCavebotMove(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.SUCCESS
 
 
-class _PlanTarget(py_trees.behaviour.Behaviour):
+class AcquireTargetFromBattlelist(py_trees.behaviour.Behaviour):
     def __init__(self) -> None:
-        super().__init__(name="PlanTarget")
+        super().__init__(name="AcquireTargetFromBattlelist")
         self.bb = py_trees.blackboard.Blackboard()
 
     @staticmethod
@@ -129,11 +143,16 @@ class _PlanTarget(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.SUCCESS
 
         try:
-            cls = str(getattr(inp, "target_cls", "") or "").strip().lower()
+            # Prefer battlelist target when available.
+            bl = str(getattr(inp, "battlelist_target", "") or "").strip().lower()
+            cls = bl
+            conf = getattr(inp, "battlelist_conf", None)
             if not cls or cls == "none":
-                return py_trees.common.Status.SUCCESS
+                cls = str(getattr(inp, "target_cls", "") or "").strip().lower()
+                conf = getattr(inp, "target_conf", None)
+                if not cls or cls == "none":
+                    return py_trees.common.Status.SUCCESS
 
-            conf = getattr(inp, "target_conf", None)
             if conf is not None and float(conf) < float(self._min_conf()):
                 return py_trees.common.Status.SUCCESS
 
@@ -144,6 +163,12 @@ class _PlanTarget(py_trees.behaviour.Behaviour):
             pass
 
         return py_trees.common.Status.SUCCESS
+
+
+class NavigateToWaypoint(_PlanCavebotMove):
+    def __init__(self) -> None:
+        super().__init__()
+        self.name = "NavigateToWaypoint"
 
 
 class _PlanBeepOnTargetChange(py_trees.behaviour.Behaviour):
@@ -437,11 +462,12 @@ class BehaviorTreeRunner:
     def __init__(self) -> None:
         root = py_trees.composites.Sequence(name="BT", memory=False)
         root.add_children([
-            _ResetPlan(),
-            _PlanHealing(),
-            _PlanTarget(),
+            EnsureUIHealthy(),
+            EnsureSafe(),
+            HealIfNeeded(),
+            AcquireTargetFromBattlelist(),
             _PlanBeepOnTargetChange(),
-            _PlanCavebotMove(),
+            NavigateToWaypoint(),
             _PlanWaypointAction(),
             _PlanFood(),
         ])
@@ -460,6 +486,8 @@ class BehaviorTreeRunner:
         healing_cfg: Any,
         heal_hp: bool = False,
         heal_mp: bool = False,
+        battlelist_target: str = "",
+        battlelist_conf: float | None = None,
         target_cls: str,
         target_conf: float | None,
         cavebot_next: str,
@@ -474,6 +502,8 @@ class BehaviorTreeRunner:
                 healing_cfg=healing_cfg,
                 heal_hp=bool(heal_hp),
                 heal_mp=bool(heal_mp),
+                battlelist_target=str(battlelist_target or ""),
+                battlelist_conf=(float(battlelist_conf) if battlelist_conf is not None else None),
                 target_cls=str(target_cls or ""),
                 target_conf=(float(target_conf) if target_conf is not None else None),
                 cavebot_next=str(cavebot_next or ""),
