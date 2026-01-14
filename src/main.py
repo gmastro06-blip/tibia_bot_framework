@@ -15,6 +15,7 @@ from queue import Queue, Empty
 import time
 import json
 from queue_utils import put_latest
+from queue_health import put_latest_health
 from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
@@ -225,19 +226,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         - If it still can't enqueue (race), drops the new item.
         """
 
-        def on_oldest() -> None:
-            if drop_oldest_key:
-                _h_inc(drop_oldest_key)
-
-        def on_new() -> None:
-            if drop_new_key:
-                _h_inc(drop_new_key)
-
         try:
-            put_latest(q, item, on_drop_oldest=on_oldest, on_drop_new=on_new)
+            put_latest_health(
+                q,
+                item,
+                inc=_h_inc,
+                drop_oldest_key=drop_oldest_key,
+                drop_new_key=drop_new_key,
+            )
         except Exception:
             # Be fail-safe: if anything goes wrong, count as new-drop.
-            on_new()
+            if drop_new_key:
+                _h_inc(drop_new_key)
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
