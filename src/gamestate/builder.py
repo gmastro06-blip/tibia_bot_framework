@@ -9,8 +9,9 @@ from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio
 from vision.obstacles import compute_viewport_tile_offsets
-from vision.presence import is_hungry_hsv, is_nonempty_icon
+from vision.presence import is_hungry_hsv, is_nonempty_icon, detect_status_icons
 from vision.minimap_motion import MinimapMotionTracker
+from vision import battlelist
 
 @dataclass
 class GameState:
@@ -38,12 +39,22 @@ class GameState:
     coords_confidence_level: Optional[str] = None
     ring_equipped: Optional[bool] = None
     amulet_equipped: Optional[bool] = None
+    paralyzed: Optional[bool] = None
+    haste_active: Optional[bool] = None
+    utamo_active: Optional[bool] = None
     hungry: Optional[bool] = None
     # Señales derivadas (útiles para thresholds/decisiones, aunque no haya OCR perfecto)
     hp_pct: Optional[float] = None
     mp_pct: Optional[float] = None
     roboflow_boxes: Optional[List[Dict[str, Any]]] = None
     viewport_tile_offsets: Optional[List[Tuple[int, int]]] = None
+
+    # Battlelist (assistant-only observability)
+    battlelist_entries: Optional[List[Dict[str, Any]]] = None
+    battlelist_n_rows: Optional[int] = None
+    battlelist_n_valid: Optional[int] = None
+    battlelist_top_names: Optional[List[str]] = None
+    battlelist_confidence: Optional[float] = None
 
     def __str__(self) -> str:
         rf_n = len(self.roboflow_boxes) if self.roboflow_boxes else 0
@@ -58,7 +69,8 @@ class GameState:
             pos = ""
         return (
             f"HP: {self.hp_current}/{self.hp_max}, MP: {self.mp_current}/{self.mp_max}, "
-            f"Cap: {self.cap_current}{pos}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, hungry: {self.hungry}, RF: {rf_n}"
+            f"Cap: {self.cap_current}{pos}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, "
+            f"paralyzed: {self.paralyzed}, haste: {self.haste_active}, utamo: {self.utamo_active}, hungry: {self.hungry}, RF: {rf_n}"
         )
 
 class GameStateBuilder:
@@ -99,6 +111,25 @@ class GameStateBuilder:
         self._minimap_accept_streak: int = 0
         self._minimap_last_resp: float = 0.0
 
+        # Battlelist stabilization buffer: row_index -> last N parsed entries
+        self._battlelist_buf: Dict[int, List[Dict[str, Any]]] = {}
+
+        # Status icons (paralyze/haste/utamo): debounce across K frames.
+        try:
+            self._status_persist_k = int(float(os.getenv("STATUS_ICON_PERSIST_K", "3").strip() or "3"))
+        except Exception:
+            self._status_persist_k = 3
+        self._status_persist_k = max(1, min(20, int(self._status_persist_k)))
+        try:
+            self._status_match_thr = float(os.getenv("STATUS_ICON_MATCH_THRESHOLD", "0.65").strip() or "0.65")
+        except Exception:
+            self._status_match_thr = 0.65
+        self._status_match_thr = float(max(0.0, min(1.0, self._status_match_thr)))
+
+        self._status_state: Dict[str, bool] = {"paralyzed": False, "haste_active": False, "utamo_active": False}
+        self._status_on_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
+        self._status_off_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
+
     def reseed_minimap(self) -> None:
         """Resetea el tracker de minimapa y obliga a pedir seed de nuevo."""
 
@@ -112,6 +143,10 @@ class GameStateBuilder:
         self._minimap_last_resp = 0.0
         self._minimap_confidence = 0.0
         self._minimap_status = "reseed"
+
+        # Battlelist is independent of minimap, but reseed is a convenient place
+        # to also clear other experimental trackers if desired.
+
 
     @staticmethod
     def _coords_provider_kind() -> str:
@@ -607,6 +642,11 @@ class GameStateBuilder:
 
         # (C) Equipment + status icons (best-effort, depends on calibrated ROIs)
         try:
+            # Default: unknown until we can detect.
+            gamestate.paralyzed = None
+            gamestate.haste_active = None
+            gamestate.utamo_active = None
+
             # Prefer dedicated ROIs if present.
             if isinstance(rois, dict):
                 if rois.get("ring_slot") is not None:
@@ -623,11 +663,104 @@ class GameStateBuilder:
                 elif rois.get("states_icons") is not None:
                     sx, sy, sw, sh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["states_icons"])
                     crop = frame[sy : sy + sh, sx : sx + sw]
+
+                    # Status icons (template matching, optional templates).
+                    try:
+                        confs = detect_status_icons(crop)
+                    except Exception:
+                        confs = {}
+
+                    if confs:
+                        # Debounce to reduce flicker: require K consecutive frames
+                        # to toggle the state on/off.
+                        k = int(getattr(self, "_status_persist_k", 3) or 3)
+                        thr = float(getattr(self, "_status_match_thr", 0.65) or 0.65)
+
+                        for key in ("paralyzed", "haste_active", "utamo_active"):
+                            try:
+                                detected = float(confs.get(key, 0.0) or 0.0) >= thr
+                            except Exception:
+                                detected = False
+
+                            if detected:
+                                self._status_on_streak[key] = int(self._status_on_streak.get(key, 0) or 0) + 1
+                                self._status_off_streak[key] = 0
+                                if int(self._status_on_streak[key]) >= int(k):
+                                    self._status_state[key] = True
+                            else:
+                                self._status_off_streak[key] = int(self._status_off_streak.get(key, 0) or 0) + 1
+                                self._status_on_streak[key] = 0
+                                if int(self._status_off_streak[key]) >= int(k):
+                                    self._status_state[key] = False
+
+                        gamestate.paralyzed = bool(self._status_state.get("paralyzed", False))
+                        gamestate.haste_active = bool(self._status_state.get("haste_active", False))
+                        gamestate.utamo_active = bool(self._status_state.get("utamo_active", False))
+
                     # Tunables via env vars
                     min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.012"))
                     low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
                     high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
                     gamestate.hungry = bool(is_hungry_hsv(crop, min_pct=min_pct, low_h=low_h, high_h=high_h))
+        except Exception:
+            pass
+
+        # (D) Battlelist rows (best-effort, depends on calibrated ROIs)
+        try:
+            # Always set fields every tick (even if empty/missing) to satisfy UI/telemetry assumptions.
+            gamestate.battlelist_entries = []
+            gamestate.battlelist_n_rows = 0
+            gamestate.battlelist_n_valid = 0
+            gamestate.battlelist_top_names = []
+            gamestate.battlelist_confidence = 0.0
+
+            if isinstance(rois, dict) and rois.get("battlelist_rows") is not None:
+                bx, by, bw, bh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["battlelist_rows"])
+                crop = frame[by : by + bh, bx : bx + bw]
+
+                rows = battlelist.extract_rows(crop)
+                parsed = [battlelist.parse_row(rimg, i) for i, rimg in enumerate(rows)]
+                stable = battlelist.stabilize(self._battlelist_buf, parsed, window_n=10)
+
+                # Global confidence = avg_conf_valid * pct_valid
+                valid = []
+                for e in stable:
+                    try:
+                        name_norm = str(e.get("name_norm", "") or "").strip()
+                        conf = float(e.get("conf", 0.0) or 0.0)
+                        if name_norm and conf > 0.0:
+                            valid.append(e)
+                    except Exception:
+                        continue
+
+                n_rows = int(len(stable))
+                n_valid = int(len(valid))
+                avg_conf = 0.0
+                if n_valid:
+                    try:
+                        avg_conf = float(sum(float(v.get("conf", 0.0) or 0.0) for v in valid) / float(n_valid))
+                    except Exception:
+                        avg_conf = 0.0
+                pct_valid = (float(n_valid) / float(n_rows)) if n_rows else 0.0
+                global_conf = float(avg_conf * pct_valid)
+
+                # Top names: stable order, first occurrences
+                top_names: list[str] = []
+                for e in valid:
+                    try:
+                        disp = str(e.get("name_raw", "") or e.get("name_display", "") or "").strip()
+                        if not disp:
+                            continue
+                        if disp not in top_names:
+                            top_names.append(disp)
+                    except Exception:
+                        continue
+
+                gamestate.battlelist_entries = stable
+                gamestate.battlelist_n_rows = n_rows
+                gamestate.battlelist_n_valid = n_valid
+                gamestate.battlelist_top_names = top_names[:10]
+                gamestate.battlelist_confidence = global_conf
         except Exception:
             pass
 

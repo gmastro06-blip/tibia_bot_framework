@@ -13,6 +13,12 @@ Framework de bot en tiempo real para Tibia-like MMORPGs usando un pipeline threa
 poetry install
 ```
 
+### Dependencias (source of truth)
+
+- `pyproject.toml` + `poetry.lock` son la fuente de verdad.
+- `requirements.txt` es solo un snapshot de conveniencia (por ejemplo para tooling externo).
+- Para regenerarlo: `poetry export -f requirements.txt --without-hashes -o requirements.txt`
+
 ## Ejecutar el bot
 
 ```bash
@@ -116,6 +122,14 @@ poetry run python tools/soak_timeline_report.py
 ```
 
 Por defecto auto-elige el último `logs/replay_soak/*`, `logs/debug_overlay_soak/*` y `logs/telemetry_soak_*.jsonl` (y si no, cae a `logs/replay/`, `logs/debug_overlay/`, `logs/telemetry.jsonl`). Output: `logs/soak_timeline.html`.
+
+### KPI report (JSONL)
+
+Para un resumen rápido (FPS de telemetría, latencias promedio, drops):
+
+```bash
+poetry run python -m tools.report_kpis logs/telemetry.jsonl
+```
 
 Filtros útiles:
 
@@ -453,6 +467,7 @@ Knobs útiles:
 - `OVERLAY_ROIS='coords_ocr,minimap_content,hp_low_bar,mp_low_bar'` (CSV)
 - `OVERLAY_TILE_PX='32'` (o `TIBIA_TILE_PX`)
 - `OVERLAY_INTERVAL_S='1.0'`
+- `BATTLELIST_N_ROWS='10'` (default 10): cuántas filas asume el extractor al “partir” la ROI `battlelist_rows` para OCR (ajústalo si ves más/menos filas en tu battlelist).
 
 ## Captura de pantalla (multi-monitor)
 

@@ -125,8 +125,8 @@ def test_run_bot_end_to_end_smoke(monkeypatch, capsys) -> None:
     )
 
 
-def test_run_bot_publishes_simulated_states_to_telemetry(monkeypatch) -> None:
-    """Regression: simulation flags should surface via telemetry."""
+def test_run_bot_publishes_states_from_gamestate_to_telemetry(monkeypatch) -> None:
+    """Regression: status flags should surface via telemetry when GameState provides them."""
 
     import threading
     import time
@@ -151,6 +151,11 @@ def test_run_bot_publishes_simulated_states_to_telemetry(monkeypatch) -> None:
             self.hp_max = hp_max
             self.mp_current = mp_cur
             self.mp_max = mp_max
+            # Status flags (now sourced from vision/GameState, not simulation).
+            self.paralyzed = True
+            self.haste_active = False
+            self.utamo_active = True
+            self.hungry = True
 
     class FakeBuilder:
         def update_from_frame(self, frame, rois, resolution):

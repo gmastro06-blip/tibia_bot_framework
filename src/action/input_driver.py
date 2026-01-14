@@ -31,6 +31,19 @@ class InputDriver(Protocol):
         ...
 
 
+def is_committed(action: ActionRequest) -> bool:
+    """Return True only for actions explicitly marked as committed.
+
+    The bot runs in assistant mode by default. When OS input injection is enabled,
+    we must never execute preview actions.
+    """
+
+    try:
+        return str(getattr(action, "note", "") or "").strip().lower() == "committed"
+    except Exception:
+        return False
+
+
 class MockInputDriver:
     """A safe input driver that only records actions (no OS/game input)."""
 
@@ -83,6 +96,10 @@ class WindowsKeyboardDriver:
             return False
 
     def send(self, action: ActionRequest) -> bool:
+        # Defense-in-depth: never inject OS input unless explicitly committed.
+        if not is_committed(action):
+            return False
+
         kind = (action.kind or "").strip().lower()
         val = (action.value or "").strip()
 

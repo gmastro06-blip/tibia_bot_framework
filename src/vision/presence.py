@@ -5,6 +5,25 @@ from typing import Optional
 import numpy as np
 
 
+def detect_status_icons(crop: Optional[np.ndarray]) -> dict[str, float]:
+    """Best-effort status icons detector.
+
+    This is a thin wrapper over `vision.status_icons.detect_status_icons()` to keep
+    'presence' as the central place for lightweight HUD/icon presence checks.
+
+    Returns a dict{status_name: confidence}. Empty dict means "no detection possible".
+    """
+
+    if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
+        return {}
+    try:
+        from vision.status_icons import detect_status_icons as _detect
+
+        return dict(_detect(crop) or {})
+    except Exception:
+        return {}
+
+
 def _to_gray(img: np.ndarray) -> np.ndarray:
     if img.ndim == 2:
         return img

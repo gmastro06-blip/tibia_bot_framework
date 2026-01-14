@@ -55,6 +55,7 @@ class OverlayExporter:
         blocked_offsets: Optional[Sequence[Tuple[int, int]]] = None,
         target_label: str = "",
         info_lines: Optional[Sequence[str]] = None,
+        battlelist_lines: Optional[Sequence[str]] = None,
         roi_rects: Optional[Sequence[Tuple[str, Tuple[int, int, int, int]]]] = None,
     ) -> None:
         if not self.cfg.enabled:
@@ -222,6 +223,24 @@ class OverlayExporter:
             for s in lines[:12]:
                 draw_label(s, x=10, y=yy)
                 yy += 22
+
+            # Battlelist block (first 5 rows). Rendered below the main info stack.
+            if battlelist_lines:
+                bl: List[str] = []
+                for s in battlelist_lines:
+                    try:
+                        ss = str(s)
+                        if ss:
+                            bl.append(ss)
+                    except Exception:
+                        continue
+                if bl:
+                    yy += 10
+                    draw_label("battlelist:", x=10, y=yy, fg=(255, 255, 255), bg=(20, 20, 20))
+                    yy += 22
+                    for s in bl[:5]:
+                        draw_label(s, x=10, y=yy, fg=(255, 255, 255), bg=(20, 20, 20))
+                        yy += 22
         except Exception:
             pass
 

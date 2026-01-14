@@ -9,7 +9,7 @@ from route_editor.models import WaypointStep, WaypointParseResult
 _LINE_RE = re.compile(r"^(?P<cmd>[a-zA-Z_]+)\s*(?P<rest>.*)$")
 _COORD_RE = re.compile(r"^\(\s*(?P<x>-?\d+)\s*,\s*(?P<y>-?\d+)\s*,\s*(?P<z>-?\d+)\s*\)$")
 
-_VALID_CMDS = {"label", "action", "node", "stand", "rope", "ladder"}
+_VALID_CMDS = {"label", "action", "call", "load", "cond", "node", "stand", "rope", "ladder"}
 
 
 @dataclass
@@ -48,11 +48,27 @@ def parse_waypoints(text: str) -> WaypointParseResult:
             errors.append(f"L{idx}: comando desconocido '{cmd}'")
             continue
 
-        if cmd in {"label", "action"}:
+        if cmd in {"label", "action", "call", "load"}:
             if not rest:
                 errors.append(f"L{idx}: falta nombre para {cmd}")
                 continue
             steps.append(WaypointStep(kind=cmd, name=rest, enabled=enabled))
+            continue
+
+        if cmd == "cond":
+            parts = [p for p in rest.split() if p]
+            if len(parts) < 3:
+                errors.append("L{}: cond requiere: cond <var> <label_true> <label_false>".format(idx))
+                continue
+            var_name, label_true, label_false = parts[0], parts[1], parts[2]
+            steps.append(
+                WaypointStep(
+                    kind="cond",
+                    name=var_name,
+                    params={"label_true": label_true, "label_false": label_false},
+                    enabled=enabled,
+                )
+            )
             continue
 
         coord_match = _COORD_RE.match(rest)
@@ -71,9 +87,16 @@ def serialize_waypoints(steps: Iterable[WaypointStep]) -> str:
     out_lines: List[str] = []
     for step in steps:
         prefix = "# " if not step.enabled else ""
-        if step.kind in {"label", "action"}:
+        if step.kind in {"label", "action", "call", "load"}:
             token = step.name.strip()
             out_lines.append(f"{prefix}{step.kind} {token}")
+        elif step.kind == "cond":
+            var_name = step.name.strip()
+            label_true = str(step.params.get("label_true", "")).strip()
+            label_false = str(step.params.get("label_false", "")).strip()
+            if not var_name or not label_true or not label_false:
+                raise ValueError("cond missing var/labels")
+            out_lines.append(f"{prefix}cond {var_name} {label_true} {label_false}")
         elif step.kind in {"node", "stand", "rope", "ladder"}:
             if step.x is None or step.y is None or step.z is None:
                 raise ValueError(f"step {step.kind} missing coords")
@@ -139,9 +162,16 @@ def validate_waypoints(steps: Iterable[WaypointStep]) -> List[str]:
     cursor = _Cursor()
     for idx, s in enumerate(steps, start=1):
         k = s.kind.lower()
-        if k in {"label", "action"}:
+        if k in {"label", "action", "call", "load"}:
             if not s.name.strip():
                 errors.append(f"step {idx}: {k} sin nombre")
+        elif k == "cond":
+            if not s.name.strip():
+                errors.append(f"step {idx}: cond sin var")
+            if not str(s.params.get("label_true", "")).strip():
+                errors.append(f"step {idx}: cond sin label_true")
+            if not str(s.params.get("label_false", "")).strip():
+                errors.append(f"step {idx}: cond sin label_false")
         elif k in {"node", "stand", "rope", "ladder"}:
             if s.x is None or s.y is None or s.z is None:
                 errors.append(f"step {idx}: {k} sin coords")

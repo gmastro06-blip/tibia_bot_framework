@@ -76,23 +76,23 @@ def evaluate_signals(
             low_mp = None
             healing_trigger = False
 
-    # Estados no detectados todavía: usar simulación si está habilitada.
-    paralyzed: bool | None = None
-    haste_active: bool | None = None
-    utamo_active: bool | None = None
-    hungry: bool | None = None
-
-    # If vision provided a real hungry flag, use it (unless simulation overrides).
+    # Estados detectados por visión (HUD/icons). No se simulan acá.
+    try:
+        paralyzed = getattr(gamestate, "paralyzed", None)
+    except Exception:
+        paralyzed = None
+    try:
+        haste_active = getattr(gamestate, "haste_active", None)
+    except Exception:
+        haste_active = None
+    try:
+        utamo_active = getattr(gamestate, "utamo_active", None)
+    except Exception:
+        utamo_active = None
     try:
         hungry = getattr(gamestate, "hungry", None)
     except Exception:
         hungry = None
-
-    if simulation_cfg is not None and bool(getattr(simulation_cfg, "enabled", False)):
-        paralyzed = bool(getattr(simulation_cfg, "paralyzed", False))
-        haste_active = bool(getattr(simulation_cfg, "haste_active", False))
-        utamo_active = bool(getattr(simulation_cfg, "utamo_active", False))
-        hungry = bool(getattr(simulation_cfg, "hungry", False))
 
     return SignalResult(
         hp_current=hp_current,

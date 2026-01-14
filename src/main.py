@@ -14,6 +14,7 @@ import threading
 from queue import Queue, Empty
 import time
 import json
+from queue_utils import put_latest
 from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
@@ -178,9 +179,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         "decision_ok": 0.0,
         "decision_ex": 0.0,
         "drop_frame_queue": 0.0,
+        "drop_frame_queue_new": 0.0,
         "drop_gs_queue": 0.0,
+        "drop_gs_queue_new": 0.0,
         "drop_replay_queue": 0.0,
+        "drop_replay_queue_new": 0.0,
         "drop_jsonl_queue": 0.0,
+        "drop_jsonl_queue_new": 0.0,
         "capture_ms_last": 0.0,
         "vision_ms_last": 0.0,
         "decision_ms_last": 0.0,
@@ -207,16 +212,32 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             return dict(health)
 
-    def _put_drop_oldest(q: Queue, item, *, drop_key: str | None = None) -> None:
-        """Put non-blocking; if full, drop one oldest and try again."""
-        try:
-            q.put_nowait(item)
-            return
-        except Exception:
-            pass
+    def _put_drop_oldest(
+        q: Queue,
+        item,
+        *,
+        drop_oldest_key: str | None = None,
+        drop_new_key: str | None = None,
+    ) -> None:
+        """Put non-blocking with *latest-wins* semantics.
 
-        if drop_key:
-            _h_inc(drop_key)
+        - When full, drops exactly one oldest item and retries once.
+        - If it still can't enqueue (race), drops the new item.
+        """
+
+        def on_oldest() -> None:
+            if drop_oldest_key:
+                _h_inc(drop_oldest_key)
+
+        def on_new() -> None:
+            if drop_new_key:
+                _h_inc(drop_new_key)
+
+        try:
+            put_latest(q, item, on_drop_oldest=on_oldest, on_drop_new=on_new)
+        except Exception:
+            # Be fail-safe: if anything goes wrong, count as new-drop.
+            on_new()
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
@@ -248,6 +269,35 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 )
         except Exception:
             return "", False, 0.0, ""
+
+    # Cross-thread safety policy: if OS input injection is enabled, fail-closed
+    # on critical anomalies (stale pipeline/dead threads/missing signals).
+    input_mgr_lock = threading.Lock()
+    input_mgr_state: dict[str, object] = {
+        "mgr": None,
+        "injection_enabled": False,
+        "disabled_reason": "",
+    }
+
+    def _im_set(mgr, injection_enabled: bool, disabled_reason: str = "") -> None:
+        try:
+            with input_mgr_lock:
+                input_mgr_state["mgr"] = mgr
+                input_mgr_state["injection_enabled"] = bool(injection_enabled)
+                input_mgr_state["disabled_reason"] = str(disabled_reason or "")
+        except Exception:
+            pass
+
+    def _im_snapshot():
+        try:
+            with input_mgr_lock:
+                return (
+                    input_mgr_state.get("mgr"),
+                    bool(input_mgr_state.get("injection_enabled", False)),
+                    str(input_mgr_state.get("disabled_reason", "") or ""),
+                )
+        except Exception:
+            return None, False, ""
 
     # Inicializar componentes
     # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
@@ -357,7 +407,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     rois_loaded, source_resolution = load_roi_config(resolution)
                     rois_loaded["_source_resolution"] = source_resolution
                     rois = rois_loaded
-                _put_drop_oldest(frame_queue, frame, drop_key="drop_frame_queue")
+                _put_drop_oldest(
+                    frame_queue,
+                    frame,
+                    drop_oldest_key="drop_frame_queue",
+                    drop_new_key="drop_frame_queue_new",
+                )
             else:
                 _h_inc("capture_none")
 
@@ -527,7 +582,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             "telemetry": tel_payload,
                             "forced": bool(force),
                         }
-                        _put_drop_oldest(replay_write_q, ("replay", (out_dir, crops, payload)), drop_key="drop_replay_queue")
+                        _put_drop_oldest(
+                            replay_write_q,
+                            ("replay", (out_dir, crops, payload)),
+                            drop_oldest_key="drop_replay_queue",
+                            drop_new_key="drop_replay_queue_new",
+                        )
                 except Exception:
                     pass
 
@@ -695,6 +755,31 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
+                    # Battlelist summary (first 5 rows) for overlay debugging.
+                    battlelist_lines = None
+                    try:
+                        entries = getattr(gamestate, "battlelist_entries", None)
+                        if isinstance(entries, list) and entries:
+                            lines = []
+                            for e in entries[:5]:
+                                try:
+                                    name = str(e.get("name_display") or e.get("name_raw") or "").strip()
+                                    if not name:
+                                        continue
+                                    conf = e.get("conf", None)
+                                    if conf is None:
+                                        lines.append(name)
+                                    else:
+                                        try:
+                                            lines.append(f"{name} {float(conf):.2f}")
+                                        except Exception:
+                                            lines.append(name)
+                                except Exception:
+                                    continue
+                            battlelist_lines = lines
+                    except Exception:
+                        battlelist_lines = None
+
                     overlay.maybe_export(
                         frame,
                         viewport_rect=viewport_rect,
@@ -703,12 +788,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         target_label=target_label,
                         info_lines=info_lines,
                         roi_rects=roi_rects,
+                        battlelist_lines=battlelist_lines,
                     )
                 except Exception:
                     pass
 
                 try:
-                    _put_drop_oldest(gs_queue, gamestate, drop_key="drop_gs_queue")
+                    _put_drop_oldest(
+                        gs_queue,
+                        gamestate,
+                        drop_oldest_key="drop_gs_queue",
+                        drop_new_key="drop_gs_queue_new",
+                    )
                 except Exception:
                     pass
 
@@ -893,7 +984,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         # Safe action sink (records what we'd do, no real input injection).
         try:
-            from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver
+            from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver, is_committed
+            from action.input_manager import InputManager
+            from fail_closed import fail_closed
 
             mock_driver = MockInputDriver(max_items=500)
             driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
@@ -921,10 +1014,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 )
             else:
                 input_driver = mock_driver
+
+            input_mgr = InputManager(
+                driver=input_driver,
+                fallback=mock_driver,
+                injection_enabled=bool(isinstance(input_driver, WindowsKeyboardDriver)),
+            )
+            _im_set(input_mgr, bool(input_mgr.injection_enabled), "")
         except Exception:
             ActionRequest = None  # type: ignore[assignment]
             mock_driver = None
             input_driver = None
+            input_mgr = None
 
         # Simulation-only auto-input generator (logs-only, no real injection).
         sim_inputs_auto = os.getenv("SIM_INPUTS_AUTO", "1").strip().lower() not in {"0", "false", "no"}
@@ -951,6 +1052,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         except Exception:
             food_interval_s = 0.0
         food_trigger = PeriodicTrigger(interval_s=max(0.0, food_interval_s))
+
+        critical_missing_since: float | None = None
 
         while not stop_event.is_set():
             loop_t0 = time.time()
@@ -1025,6 +1128,37 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 sig = evaluate_signals(gamestate, healing_cfg, sim_cfg)
             except Exception:
                 sig = None
+
+            # Fail-closed safety: if OS injection is enabled, stop on missing critical signals.
+            try:
+                mgr, inj_enabled, _reason = _im_snapshot()
+                if inj_enabled and mgr is not None:
+                    # Treat total lack of HP/MP as a critical vision failure.
+                    missing = False
+                    try:
+                        if sig is None:
+                            missing = True
+                        else:
+                            missing = (sig.hp_current is None and sig.mp_current is None)
+                    except Exception:
+                        missing = True
+
+                    if missing:
+                        if critical_missing_since is None:
+                            critical_missing_since = time.time()
+                        else:
+                            if (time.time() - float(critical_missing_since)) >= 2.0:
+                                fail_closed(
+                                    stop_event=stop_event,
+                                    input_manager=mgr,
+                                    reason="CRITICAL_SIGNALS_MISSING",
+                                    set_stop=True,
+                                )
+                                _im_set(mgr, False, "CRITICAL_SIGNALS_MISSING")
+                    else:
+                        critical_missing_since = None
+            except Exception:
+                pass
 
             heal_dec = healing_ctrl.update(sig, healing_cfg)
 
@@ -1907,10 +2041,24 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         input_plan_str = ""
 
-                    if input_driver is not None:
+                    # Route side-effects via InputManager (central policy).
+                    send_sink = input_mgr if input_mgr is not None else input_driver
+                    if send_sink is not None:
                         for r in reqs:
                             try:
-                                input_driver.send(r)
+                                # Strict safety gate: never send preview actions to an OS-injecting driver.
+                                try:
+                                    if isinstance(input_driver, WindowsKeyboardDriver) and not is_committed(r):
+                                        continue
+                                except Exception:
+                                    pass
+                                try:
+                                    if input_mgr is not None:
+                                        input_mgr.send(r)
+                                    else:
+                                        send_sink.send(r)
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
             except Exception:
@@ -2150,6 +2298,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         nav_astar_found=nav_astar_found,
                         nav_astar_path_len=nav_astar_path_len,
                         nav_astar_visited=nav_astar_visited,
+                        battlelist_n_rows=getattr(gamestate, "battlelist_n_rows", None),
+                        battlelist_n_valid=getattr(gamestate, "battlelist_n_valid", None),
+                        battlelist_top_names=list(getattr(gamestate, "battlelist_top_names", None) or []),
+                        battlelist_confidence=getattr(gamestate, "battlelist_confidence", None),
                         action_request=action_req_str,
                         action_committed=action_committed,
                         input_plan=input_plan_str,
@@ -2187,7 +2339,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         def emit(kind: str, data: dict) -> None:
                             try:
-                                _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, {"kind": kind, **data})))
+                                _put_drop_oldest(
+                                    jsonl_write_q,
+                                    ("jsonl", (log_out_file, {"kind": kind, **data})),
+                                    drop_oldest_key="drop_jsonl_queue",
+                                    drop_new_key="drop_jsonl_queue_new",
+                                )
                             except Exception:
                                 pass
 
@@ -2309,6 +2466,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_step_idx": getattr(tel, "cavebot_step_idx", None),
                         "cavebot_step_next_idx": getattr(tel, "cavebot_step_next_idx", None),
                         "cavebot_step_total": getattr(tel, "cavebot_step_total", None),
+                        "battlelist_n_rows": getattr(tel, "battlelist_n_rows", None),
+                        "battlelist_n_valid": getattr(tel, "battlelist_n_valid", None),
+                        "battlelist_top_names": getattr(tel, "battlelist_top_names", None),
+                        "battlelist_confidence": getattr(tel, "battlelist_confidence", None),
                         "action_request": getattr(tel, "action_request", ""),
                         "action_committed": bool(getattr(tel, "action_committed", False)),
                         "action_ts": None,
@@ -2373,6 +2534,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_step_idx": cavebot_step_idx,
                         "cavebot_step_next_idx": cavebot_step_next_idx,
                         "cavebot_step_total": cavebot_step_total,
+                        "battlelist_n_rows": getattr(gamestate, "battlelist_n_rows", None),
+                        "battlelist_n_valid": getattr(gamestate, "battlelist_n_valid", None),
+                        "battlelist_top_names": list(getattr(gamestate, "battlelist_top_names", None) or []),
+                        "battlelist_confidence": getattr(gamestate, "battlelist_confidence", None),
                         "cavebot_blocked": bool(cavebot_blocked),
                         "cavebot_block_reason": str(cavebot_block_reason or ""),
                         "action_request": action_req_str,
@@ -2399,7 +2564,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         pass
 
                 if log_enabled and jsonl.should_log(enabled=log_enabled, interval_ms=log_interval_ms):
-                    _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, tel_event)))
+                    _put_drop_oldest(
+                        jsonl_write_q,
+                        ("jsonl", (log_out_file, tel_event)),
+                        drop_oldest_key="drop_jsonl_queue",
+                        drop_new_key="drop_jsonl_queue_new",
+                    )
             except Exception:
                 pass
 
@@ -2458,6 +2628,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     thread_map: dict[str, threading.Thread] = {}
 
     def watchdog_thread() -> None:
+        try:
+            from fail_closed import fail_closed
+        except Exception:
+            fail_closed = None
+
         check_s = 1.0
         try:
             check_s = max(0.2, float(os.getenv("WATCHDOG_INTERVAL_S", "1").strip() or "1"))
@@ -2467,8 +2642,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             stale_gs_s = float(os.getenv("WATCHDOG_STALE_GS_S", "5").strip() or "5")
         except Exception:
             stale_gs_s = 5.0
-        stop_on_dead = os.getenv("WATCHDOG_STOP_ON_THREAD_DEAD", "1").strip().lower() not in {"0", "false", "no"}
-        stop_on_stale = os.getenv("WATCHDOG_STOP_ON_STALE", "0").strip().lower() in {"1", "true", "yes"}
+        raw_stop_on_dead = os.getenv("WATCHDOG_STOP_ON_THREAD_DEAD", "1")
+        raw_stop_on_stale = os.getenv("WATCHDOG_STOP_ON_STALE", "")
+
+        def _parse_bool(raw: str, *, default: bool) -> bool:
+            r = (raw or "").strip().lower()
+            if r == "":
+                return bool(default)
+            return r in {"1", "true", "yes", "y", "on"}
 
         last_warn_ts = 0.0
         last_health_emit_ts = 0.0
@@ -2480,6 +2661,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         while not stop_event.is_set():
             now = time.time()
+
+            mgr, inj_enabled, _inj_reason = _im_snapshot()
+            stop_on_dead = _parse_bool(raw_stop_on_dead, default=True)
+            # Default fail-closed when injection is enabled.
+            stop_on_stale = _parse_bool(raw_stop_on_stale, default=bool(inj_enabled))
 
             # Thread liveness
             dead: list[str] = []
@@ -2577,6 +2763,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pass
 
+                # Fail-closed: disable OS injection on anomalies.
+                try:
+                    if inj_enabled and mgr is not None and fail_closed is not None:
+                        reason = "WATCHDOG_DEAD_THREADS" if dead else "WATCHDOG_STALE_GS"
+                        # Stop by default on stale pipeline when injection is enabled.
+                        must_stop = bool((dead and stop_on_dead) or ((gs_age is not None and gs_age >= stale_gs_s) and stop_on_stale))
+                        fail_closed(stop_event=stop_event, input_manager=mgr, reason=reason, set_stop=must_stop)
+                        _im_set(mgr, False, reason)
+                except Exception:
+                    pass
+
                 if dead and stop_on_dead:
                     stop_event.set()
                 elif (gs_age is not None and gs_age >= stale_gs_s) and stop_on_stale:
@@ -2622,7 +2819,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             "decision_ms_last": float(snap.get("decision_ms_last", 0.0)),
                             "capture_latency_ms": float(getattr(capture, "latency_ms", 0.0) or 0.0),
                         }
-                        _put_drop_oldest(jsonl_write_q, ("jsonl", (log_out_file, event)), drop_key="drop_jsonl_queue")
+                        _put_drop_oldest(
+                            jsonl_write_q,
+                            ("jsonl", (log_out_file, event)),
+                            drop_oldest_key="drop_jsonl_queue",
+                            drop_new_key="drop_jsonl_queue_new",
+                        )
             except Exception:
                 pass
 

@@ -14,6 +14,10 @@ class FakeGS:
     mp_max: int | None = None
     hp_pct: float | None = None
     mp_pct: float | None = None
+    paralyzed: bool | None = None
+    haste_active: bool | None = None
+    utamo_active: bool | None = None
+    hungry: bool | None = None
 
 
 def test_evaluate_signals_derives_pct_when_missing() -> None:
@@ -41,10 +45,20 @@ def test_evaluate_signals_uses_precomputed_pct() -> None:
     assert sig.low_mp is False
 
 
-def test_evaluate_signals_simulation_overrides_states_when_enabled() -> None:
-    gs = FakeGS(hp_current=100, hp_max=100, mp_current=100, mp_max=100)
+def test_evaluate_signals_reads_real_status_fields() -> None:
+    gs = FakeGS(
+        hp_current=100,
+        hp_max=100,
+        mp_current=100,
+        mp_max=100,
+        paralyzed=True,
+        haste_active=False,
+        utamo_active=True,
+        hungry=True,
+    )
     healing = HealingConfig(enabled=False)
-    sim = SimulationConfig(enabled=True, paralyzed=True, haste_active=False, utamo_active=True, hungry=True)
+    # Even if simulation is enabled, signals must consume the real gamestate fields.
+    sim = SimulationConfig(enabled=True, paralyzed=False, haste_active=True, utamo_active=False, hungry=False)
 
     sig = evaluate_signals(gs, healing, sim)
     assert sig.paralyzed is True
@@ -53,11 +67,9 @@ def test_evaluate_signals_simulation_overrides_states_when_enabled() -> None:
     assert sig.hungry is True
 
 
-def test_evaluate_signals_simulation_disabled_yields_unknown_states() -> None:
+def test_evaluate_signals_missing_status_fields_yields_unknown() -> None:
     gs = FakeGS(hp_current=100, hp_max=100, mp_current=100, mp_max=100)
-    sim = SimulationConfig(enabled=False, paralyzed=True, haste_active=True, utamo_active=True, hungry=True)
-
-    sig = evaluate_signals(gs, None, sim)
+    sig = evaluate_signals(gs, None, SimulationConfig(enabled=True, paralyzed=True, haste_active=True, utamo_active=True, hungry=True))
     assert sig.paralyzed is None
     assert sig.haste_active is None
     assert sig.utamo_active is None

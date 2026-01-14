@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import importlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +27,8 @@ class Waypoint:
     type: Optional[str] = None
     comment: Optional[str] = None
     raw_line: Optional[str] = None
+    # Preserve unknown fields for roundtrip stability.
+    extras: Dict[str, Any] = field(default_factory=dict)
 
 
 
@@ -64,6 +66,22 @@ def load_route(path: str) -> List[Waypoint]:
     for item in data:
         if not isinstance(item, dict):
             continue
+
+        known_keys = {
+            "x",
+            "y",
+            "z",
+            "name",
+            "action",
+            "label",
+            "call",
+            "load",
+            "conditional_jump",
+            "type",
+            "comment",
+            "raw_line",
+        }
+        extras: Dict[str, Any] = {k: v for k, v in item.items() if k not in known_keys}
         x = item.get("x")
         y = item.get("y")
         z = item.get("z")
@@ -105,7 +123,41 @@ def load_route(path: str) -> List[Waypoint]:
                 type=str(typ) if typ is not None else None,
                 comment=str(comment) if comment is not None else None,
                 raw_line=str(raw_line) if raw_line is not None else None,
+                extras=extras,
             )
         )
 
     return out
+
+
+def save_route(path: str, route: List[Waypoint]) -> None:
+    """Guarda una ruta JSON preservando campos desconocidos (extras)."""
+
+    p = Path(path)
+    items: List[Dict[str, Any]] = []
+    for wp in route:
+        d: Dict[str, Any] = {}
+        try:
+            if wp.extras:
+                d.update(dict(wp.extras))
+        except Exception:
+            pass
+
+        if bool(getattr(wp, "has_xy", True)):
+            d["x"] = int(wp.x)
+            d["y"] = int(wp.y)
+        if wp.z is not None:
+            d["z"] = int(wp.z)
+
+        for key in ["name", "action", "label", "call", "load", "type", "comment", "raw_line"]:
+            val = getattr(wp, key, None)
+            if val is not None:
+                d[key] = val
+
+        cj = getattr(wp, "conditional_jump", None)
+        if cj is not None:
+            d["conditional_jump"] = cj
+
+        items.append(d)
+
+    p.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")

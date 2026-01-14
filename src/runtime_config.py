@@ -117,6 +117,11 @@ class TelemetrySnapshot:
     haste_active: bool | None = None
     utamo_active: bool | None = None
     hungry: bool | None = None
+    # Battlelist (assistant-only observability)
+    battlelist_n_rows: int | None = None
+    battlelist_n_valid: int | None = None
+    battlelist_top_names: list[str] | None = None
+    battlelist_confidence: float | None = None
     target: str = ""
     recommendation: str = ""
     cavebot_next: str = ""
@@ -278,6 +283,12 @@ class RuntimeConfig:
                 haste_active=self.telemetry.haste_active,
                 utamo_active=self.telemetry.utamo_active,
                 hungry=self.telemetry.hungry,
+                battlelist_n_rows=getattr(self.telemetry, "battlelist_n_rows", None),
+                battlelist_n_valid=getattr(self.telemetry, "battlelist_n_valid", None),
+                battlelist_top_names=list(getattr(self.telemetry, "battlelist_top_names", None) or [])
+                if getattr(self.telemetry, "battlelist_top_names", None) is not None
+                else None,
+                battlelist_confidence=getattr(self.telemetry, "battlelist_confidence", None),
                 target=str(self.telemetry.target),
                 recommendation=str(self.telemetry.recommendation),
                 cavebot_next=str(self.telemetry.cavebot_next),
@@ -590,6 +601,10 @@ class RuntimeConfig:
         haste_active: bool | None = None,
         utamo_active: bool | None = None,
         hungry: bool | None = None,
+        battlelist_n_rows: int | None = None,
+        battlelist_n_valid: int | None = None,
+        battlelist_top_names: list[str] | None = None,
+        battlelist_confidence: float | None = None,
         target: str | None = None,
         recommendation: str | None = None,
         cavebot_next: str | None = None,
@@ -723,6 +738,26 @@ class RuntimeConfig:
                 self.telemetry.utamo_active = bool(utamo_active)
             if hungry is not None:
                 self.telemetry.hungry = bool(hungry)
+            if battlelist_n_rows is not None:
+                try:
+                    self.telemetry.battlelist_n_rows = int(battlelist_n_rows)
+                except Exception:
+                    self.telemetry.battlelist_n_rows = None
+            if battlelist_n_valid is not None:
+                try:
+                    self.telemetry.battlelist_n_valid = int(battlelist_n_valid)
+                except Exception:
+                    self.telemetry.battlelist_n_valid = None
+            if battlelist_top_names is not None:
+                try:
+                    self.telemetry.battlelist_top_names = [str(x) for x in list(battlelist_top_names) if str(x)]
+                except Exception:
+                    self.telemetry.battlelist_top_names = None
+            if battlelist_confidence is not None:
+                try:
+                    self.telemetry.battlelist_confidence = float(battlelist_confidence)
+                except Exception:
+                    self.telemetry.battlelist_confidence = None
             if target is not None:
                 self.telemetry.target = str(target)
             if recommendation is not None:
