@@ -9,9 +9,9 @@ import os
 from mss import mss
 
 try:
-    from input_focus_guard import update_client_state
+    from input_focus_guard import update_capture_target_state
 except Exception:  # pragma: no cover
-    update_client_state = None  # type: ignore[assignment]
+    update_capture_target_state = None  # type: ignore[assignment]
 
 class DXGICapture:
     def __init__(
@@ -30,14 +30,21 @@ class DXGICapture:
         # Client discovery (hwnd can exist even when background/maximized).
         self.client_hwnd: int = int(self.hwnd or 0)
         self.client_title: str = ""
+        self.target_found: bool = False
+        self.target_reason: str = ""
+        self.capture_target: str = "auto"
+        self.capture_backend: str = "dxgi"
         self.capture_bounds: Optional[tuple[int, int, int, int]] = None
         self.capture_state: str = ""
+        # Best-effort: which monitor we believe we captured from.
+        # (MSS indexes: 1..n for individual monitors, 0 is the combined virtual screen)
+        self.capture_monitor_index: Optional[int] = None
         self.force_monitor = force_monitor
         # Si el caller fuerza un monitor, por defecto permitimos fallback (útil para el bot).
         # Herramientas de calibración suelen preferir "estricto" para no cambiar de monitor
-        # y producir ROIs incorrectas.
-        env_strict = os.getenv("CAPTURE_STRICT_FORCE_MONITOR", "").strip().lower() in {"1", "true", "yes"}
-        self.strict_force_monitor = bool(strict_force_monitor or env_strict)
+        # y producir ROIs incorrectas. En el bot (runtime), NO activamos esto por env
+        # para evitar quedarnos sin captura si el índice forzado no existe.
+        self.strict_force_monitor = bool(strict_force_monitor)
         self.fps = 0.0
         self.latency_ms = 0.0
         self.dropped = 0
@@ -71,12 +78,29 @@ class DXGICapture:
         win32gui.EnumWindows(enum_handler, hwnds)
         return hwnds[0] if hwnds else 0
 
-    def capture_fullscreen(self) -> Optional[np.ndarray]:
-        """Captura toda la pantalla usando MSS como fallback, priorizando el monitor con Tibia"""
+    def capture_fullscreen(self, preferred_monitor: Optional[int] = None) -> Optional[np.ndarray]:
+        """Captura toda la pantalla usando MSS como fallback.
+
+        Prioridad:
+        1) monitor preferido (si es válido)
+        2) monitor donde está la ventana del cliente (si se puede inferir)
+        3) monitores 1..n
+        4) monitor 0 (virtual combinado)
+        """
         try:
             with mss() as sct:
                 # Determinar el orden de prioridad de monitores
                 monitor_indices = []
+
+                # Prefer explicit preferred monitor.
+                try:
+                    pm = int(preferred_monitor) if preferred_monitor is not None else None
+                except Exception:
+                    pm = None
+                if pm is not None and 0 <= pm < len(sct.monitors):
+                    # Prefer individual monitor indices when possible.
+                    if pm != 0:
+                        monitor_indices.append(pm)
 
                 # Primero, intentar el monitor donde está la ventana de Tibia (si se encontró)
                 tibia_monitor = self.find_window_monitor()
@@ -106,6 +130,7 @@ class DXGICapture:
                             monitor_info = f"{monitor.get('width', 'unknown')}x{monitor.get('height', 'unknown')}"
                             if self._verbose:
                                 print(f"Captura de pantalla completa exitosa en monitor {i} ({monitor_info}): {frame.shape}")
+                            self.capture_monitor_index = int(i)
                             return frame
                         else:
                             if self._verbose:
@@ -119,20 +144,36 @@ class DXGICapture:
 
                 if self._verbose:
                     print("No se pudo capturar en ningún monitor")
+                self.capture_monitor_index = None
                 return None
 
         except Exception as e:
             print(f"Fallback MSS falló completamente: {e}")
             return None
 
-    def find_window_monitor(self) -> Optional[int]:
-        """Encuentra el monitor donde está ubicada la ventana de Tibia"""
-        if not self.hwnd:
+    def find_window_monitor(self, hwnd: Optional[int] = None) -> Optional[int]:
+        """Encuentra el monitor donde está ubicada la ventana del cliente."""
+
+        try:
+            h = int(hwnd or 0)
+        except Exception:
+            h = 0
+        if not h:
+            try:
+                h = int(self.client_hwnd or 0)
+            except Exception:
+                h = 0
+        if not h:
+            try:
+                h = int(self.hwnd or 0)
+            except Exception:
+                h = 0
+        if not h:
             return None
 
         try:
             # Obtener las coordenadas de la ventana
-            rect = win32gui.GetWindowRect(self.hwnd)
+            rect = win32gui.GetWindowRect(int(h))
             window_x, window_y = rect[0], rect[1]
             window_width, window_height = rect[2] - rect[0], rect[3] - rect[1]
             if self._verbose:
@@ -237,19 +278,31 @@ class DXGICapture:
         return best_monitor
 
     def capture(self) -> Optional[np.ndarray]:
-        # Always refresh client snapshot (best-effort) so we can monitor even
-        # when the client is not foreground and/or gets recreated.
+        frame: Optional[np.ndarray] = None
+        # Always refresh capture target snapshot (best-effort) so we can monitor
+        # even when the client is not foreground and/or gets recreated.
         try:
-            if callable(update_client_state):
-                st = update_client_state()
-                self.client_hwnd = int(getattr(st, "hwnd", 0) or 0)
-                self.client_title = str(getattr(st, "title", "") or "")
-                self.capture_bounds = getattr(st, "bounds", None)
-                if bool(getattr(st, "is_minimized", False)):
+            if callable(update_capture_target_state):
+                st = update_capture_target_state()
+                self.capture_backend = str(getattr(st, "capture_backend", "dxgi") or "dxgi")
+                self.capture_target = str(getattr(st, "capture_target", "auto") or "auto")
+                self.client_hwnd = int(getattr(st, "target_hwnd", 0) or 0)
+                self.client_title = str(getattr(st, "target_title", "") or "")
+                self.capture_bounds = getattr(st, "target_bounds", None)
+                self.target_found = bool(getattr(st, "target_found", False))
+                self.target_reason = str(getattr(st, "reason", "") or "")
+                if bool(getattr(st, "target_is_minimized", False)):
                     self.capture_state = "minimized"
+                    self.capture_monitor_index = None
                     return None
         except Exception:
             pass
+
+        # Best-effort: infer monitor index from current client hwnd.
+        try:
+            self.capture_monitor_index = self.find_window_monitor(self.client_hwnd)
+        except Exception:
+            self.capture_monitor_index = None
 
         # Prefer window-crop capture when we have bounds.
         try:
@@ -266,7 +319,10 @@ class DXGICapture:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
                         # Window crops can be smaller than full monitors.
                         if frame is not None and frame.size > 0 and frame.shape[1] >= 80 and frame.shape[0] >= 80:
-                            self.capture_state = "window_crop"
+                            if self.capture_monitor_index is not None:
+                                self.capture_state = f"window_crop@mon{int(self.capture_monitor_index)}"
+                            else:
+                                self.capture_state = "window_crop"
                             return frame
         except Exception:
             # Fall back to monitor/fullscreen capture.
@@ -278,19 +334,23 @@ class DXGICapture:
                 print(f"Forzando captura en monitor {self.force_monitor}")
             frame = self.capture_specific_monitor(self.force_monitor)
             if frame is not None:
-                self.capture_state = "monitor_forced"
+                self.capture_monitor_index = int(self.force_monitor)
+                self.capture_state = f"monitor_forced@mon{int(self.force_monitor)}"
                 return frame
             if self.strict_force_monitor:
                 # No hacer fallback a otros monitores: evita que tools (ROI/minimap) capturen otra pantalla.
                 if self._verbose:
                     print("Monitor forzado falló (modo estricto); devolviendo None")
                 self.capture_state = "monitor_forced_failed"
+                self.capture_monitor_index = int(self.force_monitor)
                 return None
             if self._verbose:
                 print("Monitor forzado falló; usando búsqueda en todos los monitores")
 
-        self.capture_state = "fullscreen"
-        return self.capture_fullscreen()
+        # Prefer the inferred window monitor (if available) for fullscreen capture.
+        pref = self.capture_monitor_index
+        self.capture_state = f"fullscreen@mon{int(pref)}" if pref is not None else "fullscreen"
+        return self.capture_fullscreen(preferred_monitor=pref)
 
     def capture_window(self) -> Optional[np.ndarray]:
         """Captura la ventana específica usando BitBlt"""

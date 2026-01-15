@@ -40,11 +40,13 @@ def draw_roi(img: Any, name: str, roi: Tuple[int, int, int, int], color: Tuple[i
 
 
 def main() -> None:
-    force_monitor_raw = os.getenv("FORCE_MONITOR", "2").strip()
-    try:
-        force_monitor = int(force_monitor_raw)
-    except Exception:
-        force_monitor = 2
+    force_monitor_raw = os.getenv("FORCE_MONITOR", "").strip()
+    force_monitor = None
+    if force_monitor_raw:
+        try:
+            force_monitor = int(force_monitor_raw)
+        except Exception:
+            force_monitor = None
 
     out_dir = Path("debug_images_real")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +68,8 @@ def main() -> None:
     rois["_source_resolution"] = source_resolution
 
     # Guardar frame base
-    full_path = out_dir / f"dxgi_full_{ts}_m{force_monitor}_{resolution[0]}x{resolution[1]}.png"
+    m_tag = "auto" if force_monitor is None else f"m{force_monitor}"
+    full_path = out_dir / f"dxgi_full_{ts}_{m_tag}_{resolution[0]}x{resolution[1]}.png"
     cv2.imwrite(str(full_path), frame)
     print(f"Guardado: {full_path}")
 
@@ -91,7 +94,7 @@ def main() -> None:
         color = colors.get(name, (120, 255, 120))
         draw_roi(overlay, name, roi_px, color)
 
-    overlay_path = out_dir / f"dxgi_overlay_{ts}_m{force_monitor}_{resolution[0]}x{resolution[1]}.png"
+    overlay_path = out_dir / f"dxgi_overlay_{ts}_{m_tag}_{resolution[0]}x{resolution[1]}.png"
     cv2.imwrite(str(overlay_path), overlay)
     print(f"Guardado: {overlay_path}")
 
@@ -101,7 +104,7 @@ def main() -> None:
             continue
         x, y, w, h = ocr._roi_to_px(frame, rois, resolution, rois[name])
         crop = frame[y : y + h, x : x + w]
-        crop_path = out_dir / f"dxgi_crop_{name}_{ts}_m{force_monitor}.png"
+        crop_path = out_dir / f"dxgi_crop_{name}_{ts}_{m_tag}.png"
         cv2.imwrite(str(crop_path), crop)
         print(f"Guardado: {crop_path} ({w}x{h})")
 

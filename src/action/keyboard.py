@@ -72,6 +72,18 @@ SCANCODES = {
     "DOWN": 0x50,
     "LEFT": 0x4B,
     "RIGHT": 0x4D,
+
+    # Navigation/edit keys (extended)
+    "PGUP": 0x49,
+    "PAGEUP": 0x49,
+    "PGDN": 0x51,
+    "PAGEDOWN": 0x51,
+    "HOME": 0x47,
+    "END": 0x4F,
+    "INS": 0x52,
+    "INSERT": 0x52,
+    "DEL": 0x53,
+    "DELETE": 0x53,
 }
 
 
@@ -80,6 +92,16 @@ EXTENDED_KEYS = {
     "DOWN",
     "LEFT",
     "RIGHT",
+    "PGUP",
+    "PAGEUP",
+    "PGDN",
+    "PAGEDOWN",
+    "HOME",
+    "END",
+    "INS",
+    "INSERT",
+    "DEL",
+    "DELETE",
 }
 
 class KEYBDINPUT(ctypes.Structure):

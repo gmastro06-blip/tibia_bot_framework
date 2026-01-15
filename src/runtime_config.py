@@ -123,6 +123,21 @@ class AssistantConfig:
 
 
 @dataclass
+class AutoTargetConfig:
+    enabled: bool = False
+    follow_on_enable: bool = True
+    follow_distance_tiles: int = 1
+    retarget_if_lost_ms: int = 800
+    retarget_if_hp_zero: bool = True
+    prefer_nearest: bool = True
+    whitelist: list[str] = field(default_factory=list)
+    blacklist: list[str] = field(default_factory=list)
+    # battlelist.py exposes a stabilized confidence (vote share), not raw OCR.
+    # Default low so AutoTarget works out-of-the-box.
+    min_confidence: float = 0.1
+
+
+@dataclass
 class ReplayConfig:
     """Configuración para guardar replays (ROI crops + JSON) periódicamente."""
 
@@ -192,6 +207,11 @@ class TelemetrySnapshot:
     battlelist_top_names: list[str] | None = None
     battlelist_confidence: float | None = None
     target: str = ""
+    # AutoTarget (assistant-only)
+    autotarget_enabled: bool | None = None
+    autotarget_current_target: str = ""
+    autotarget_follow_active: bool | None = None
+    autotarget_last_retarget_reason: str = ""
     recommendation: str = ""
     cavebot_next: str = ""
     cavebot_waypoint: str = ""
@@ -239,6 +259,14 @@ class TelemetrySnapshot:
     client_is_foreground: bool | None = None
     client_is_minimized: bool | None = None
     client_is_maximized: bool | None = None
+    # Capture target window (Win32) + capture backend selection
+    capture_backend: str = ""  # dxgi|obs_websocket|virtualcam|...
+    capture_target: str = "auto"  # auto|obs_projector|client
+    target_title: str = ""
+    target_hwnd: int | None = None
+    target_bounds: list[int] | None = None  # [l,t,r,b]
+    target_found: bool | None = None
+    target_reason: str = ""
     capture_state: str = ""  # window_crop|fullscreen|minimized|...
     capture_bounds: list[int] | None = None  # [l,t,r,b]
     input_block_reason: str = ""  # focus-guard reason or other block reason
@@ -309,6 +337,7 @@ class RuntimeConfig:
     cavebot: CavebotConfig = field(default_factory=CavebotConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     assistant: AssistantConfig = field(default_factory=AssistantConfig)
+    autotarget: AutoTargetConfig = field(default_factory=AutoTargetConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
@@ -356,6 +385,20 @@ class RuntimeConfig:
                 haste_active=bool(self.simulation.haste_active),
                 utamo_active=bool(self.simulation.utamo_active),
                 hungry=bool(self.simulation.hungry),
+            )
+
+    def autotarget_snapshot(self) -> AutoTargetConfig:
+        with self._lock:
+            return AutoTargetConfig(
+                enabled=bool(getattr(self.autotarget, "enabled", False)),
+                follow_on_enable=bool(getattr(self.autotarget, "follow_on_enable", True)),
+                follow_distance_tiles=int(getattr(self.autotarget, "follow_distance_tiles", 1) or 1),
+                retarget_if_lost_ms=int(getattr(self.autotarget, "retarget_if_lost_ms", 800) or 800),
+                retarget_if_hp_zero=bool(getattr(self.autotarget, "retarget_if_hp_zero", True)),
+                prefer_nearest=bool(getattr(self.autotarget, "prefer_nearest", True)),
+                whitelist=list(getattr(self.autotarget, "whitelist", None) or []),
+                blacklist=list(getattr(self.autotarget, "blacklist", None) or []),
+                min_confidence=float(getattr(self.autotarget, "min_confidence", 0.1) or 0.1),
             )
 
     def telemetry_snapshot(self) -> TelemetrySnapshot:
@@ -420,6 +463,10 @@ class RuntimeConfig:
                 else None,
                 battlelist_confidence=getattr(self.telemetry, "battlelist_confidence", None),
                 target=str(self.telemetry.target),
+                autotarget_enabled=getattr(self.telemetry, "autotarget_enabled", None),
+                autotarget_current_target=str(getattr(self.telemetry, "autotarget_current_target", "") or ""),
+                autotarget_follow_active=getattr(self.telemetry, "autotarget_follow_active", None),
+                autotarget_last_retarget_reason=str(getattr(self.telemetry, "autotarget_last_retarget_reason", "") or ""),
                 recommendation=str(self.telemetry.recommendation),
                 cavebot_next=str(self.telemetry.cavebot_next),
                 cavebot_waypoint=str(self.telemetry.cavebot_waypoint),
@@ -698,6 +745,46 @@ class RuntimeConfig:
             if minimap_hotkey is not None:
                 self.assistant.minimap_hotkey = str(minimap_hotkey)
 
+    def update_autotarget(
+        self,
+        *,
+        enabled: bool | None = None,
+        follow_on_enable: bool | None = None,
+        follow_distance_tiles: int | None = None,
+        retarget_if_lost_ms: int | None = None,
+        whitelist: list[str] | None = None,
+        blacklist: list[str] | None = None,
+        min_confidence: float | None = None,
+    ) -> None:
+        with self._lock:
+            if enabled is not None:
+                self.autotarget.enabled = bool(enabled)
+            if follow_on_enable is not None:
+                self.autotarget.follow_on_enable = bool(follow_on_enable)
+            if follow_distance_tiles is not None:
+                self.autotarget.follow_distance_tiles = max(0, int(follow_distance_tiles))
+            if retarget_if_lost_ms is not None:
+                self.autotarget.retarget_if_lost_ms = max(50, int(retarget_if_lost_ms))
+            if whitelist is not None:
+                out: list[str] = []
+                for s in list(whitelist or []):
+                    t = str(s).strip()
+                    if t:
+                        out.append(t)
+                self.autotarget.whitelist = out
+            if blacklist is not None:
+                out2: list[str] = []
+                for s in list(blacklist or []):
+                    t = str(s).strip()
+                    if t:
+                        out2.append(t)
+                self.autotarget.blacklist = out2
+            if min_confidence is not None:
+                try:
+                    self.autotarget.min_confidence = float(min_confidence)
+                except Exception:
+                    pass
+
     def update_replay(
         self,
         *,
@@ -821,6 +908,10 @@ class RuntimeConfig:
         battlelist_top_names: list[str] | None = None,
         battlelist_confidence: float | None = None,
         target: str | None = None,
+        autotarget_enabled: bool | None = None,
+        autotarget_current_target: str | None = None,
+        autotarget_follow_active: bool | None = None,
+        autotarget_last_retarget_reason: str | None = None,
         recommendation: str | None = None,
         cavebot_next: str | None = None,
         cavebot_waypoint: str | None = None,
@@ -856,6 +947,13 @@ class RuntimeConfig:
         client_is_maximized: bool | None = None,
         capture_state: str | None = None,
         capture_bounds: list[int] | None = None,
+        capture_backend: str | None = None,
+        capture_target: str | None = None,
+        target_title: str | None = None,
+        target_hwnd: int | None = None,
+        target_bounds: list[int] | None = None,
+        target_found: bool | None = None,
+        target_reason: str | None = None,
         input_block_reason: str | None = None,
     ) -> None:
         with self._lock:
@@ -992,6 +1090,14 @@ class RuntimeConfig:
                     self.telemetry.battlelist_confidence = None
             if target is not None:
                 self.telemetry.target = str(target)
+            if autotarget_enabled is not None:
+                self.telemetry.autotarget_enabled = bool(autotarget_enabled)
+            if autotarget_current_target is not None:
+                self.telemetry.autotarget_current_target = str(autotarget_current_target)
+            if autotarget_follow_active is not None:
+                self.telemetry.autotarget_follow_active = bool(autotarget_follow_active)
+            if autotarget_last_retarget_reason is not None:
+                self.telemetry.autotarget_last_retarget_reason = str(autotarget_last_retarget_reason)
             if recommendation is not None:
                 self.telemetry.recommendation = str(recommendation)
             if cavebot_next is not None:
@@ -1092,6 +1198,26 @@ class RuntimeConfig:
                 self.telemetry.client_is_minimized = bool(client_is_minimized)
             if client_is_maximized is not None:
                 self.telemetry.client_is_maximized = bool(client_is_maximized)
+            if capture_backend is not None:
+                self.telemetry.capture_backend = str(capture_backend)
+            if capture_target is not None:
+                self.telemetry.capture_target = str(capture_target)
+            if target_title is not None:
+                self.telemetry.target_title = str(target_title)
+            if target_hwnd is not None:
+                try:
+                    self.telemetry.target_hwnd = int(target_hwnd)
+                except Exception:
+                    self.telemetry.target_hwnd = None
+            if target_bounds is not None:
+                try:
+                    self.telemetry.target_bounds = [int(x) for x in list(target_bounds)][:4]
+                except Exception:
+                    self.telemetry.target_bounds = None
+            if target_found is not None:
+                self.telemetry.target_found = bool(target_found)
+            if target_reason is not None:
+                self.telemetry.target_reason = str(target_reason)
             if capture_state is not None:
                 self.telemetry.capture_state = str(capture_state)
             if capture_bounds is not None:

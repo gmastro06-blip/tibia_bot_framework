@@ -307,6 +307,34 @@ class BotUI:
         self.asst_target_hotkey = tk.StringVar(value=os.getenv("TARGET_HOTKEY", "").strip())
         self.asst_minimap_hotkey = tk.StringVar(value=os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
 
+        # AutoTarget (assistant-only)
+        self.autotarget_enabled = tk.BooleanVar(value=False)
+        self.autotarget_follow_on_enable = tk.BooleanVar(value=True)
+        self.autotarget_follow_distance_tiles = tk.IntVar(value=1)
+        self.autotarget_retarget_lost_ms = tk.IntVar(value=800)
+        self.autotarget_whitelist_text = tk.StringVar(value="")
+        self.autotarget_blacklist_text = tk.StringVar(value="")
+
+        # Text widgets are created later; keep placeholders here.
+        self._autotarget_whitelist_box = None
+        self._autotarget_blacklist_box = None
+
+        # Initialize from RuntimeConfig if supported.
+        try:
+            at = getattr(self._config, "autotarget_snapshot", None)
+            if callable(at):
+                cfg = at()
+                self.autotarget_enabled.set(bool(getattr(cfg, "enabled", False)))
+                self.autotarget_follow_on_enable.set(bool(getattr(cfg, "follow_on_enable", True)))
+                self.autotarget_follow_distance_tiles.set(int(getattr(cfg, "follow_distance_tiles", 1) or 1))
+                self.autotarget_retarget_lost_ms.set(int(getattr(cfg, "retarget_if_lost_ms", 800) or 800))
+                wl = list(getattr(cfg, "whitelist", None) or [])
+                bl = list(getattr(cfg, "blacklist", None) or [])
+                self.autotarget_whitelist_text.set("\n".join([str(x).strip() for x in wl if str(x).strip()]))
+                self.autotarget_blacklist_text.set("\n".join([str(x).strip() for x in bl if str(x).strip()]))
+        except Exception:
+            pass
+
         # Live input mode (OS injection) must be explicitly armed.
         _asst_titles = ["TibiaClone", "MyClient"]
         _asst_armed = False
@@ -325,6 +353,9 @@ class BotUI:
 
         self.asst_live_input_armed = tk.BooleanVar(value=bool(_asst_armed))
         self.asst_allowed_window_titles = tk.StringVar(value=",".join([str(x).strip() for x in _asst_titles if str(x).strip()]))
+        self.asst_auto_arm_on_cavebot_start = tk.BooleanVar(value=False)
+        self.asst_auto_arm_no_confirm = tk.BooleanVar(value=False)
+        self._last_cavebot_enabled = bool(self.cavebot_enabled.get())
 
         # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot via env vars.
         try:
@@ -382,6 +413,13 @@ class BotUI:
         )
         self.overlay_preset = tk.StringVar(value="Custom")
         self.telemetry_preset = tk.StringVar(value="Custom")
+
+        # Debug Panel preview (reads logs/debug_panel.png written by the bot).
+        self.debug_panel_show = tk.BooleanVar(value=False)
+        self._debug_panel_win: Any = None
+        self._debug_panel_label: Any = None
+        self._debug_panel_photo: Any = None
+        self._debug_panel_last_mtime = 0.0
 
         # ROI config override (applied at bot start via env var)
         self.rois_config_override = tk.StringVar(value=os.getenv("ROIS_CONFIG", "").strip())
@@ -1522,9 +1560,70 @@ class BotUI:
             row=5, column=1, sticky="w", pady=(4, 0)
         )
 
+        # AutoTarget controls (assistant-only).
+        at_frame = tk.LabelFrame(cfg_right, text="AutoTarget", padx=8, pady=6)
+        at_frame.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        tk.Checkbutton(at_frame, text="AutoTarget ON", variable=self.autotarget_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Checkbutton(at_frame, text="Follow al activar", variable=self.autotarget_follow_on_enable).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        tk.Label(at_frame, text="Follow distance (tiles)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(
+            at_frame,
+            from_=0,
+            to=10,
+            increment=1,
+            textvariable=self.autotarget_follow_distance_tiles,
+            width=6,
+        ).grid(row=2, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(at_frame, text="Retarget if lost (ms)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            at_frame,
+            from_=50,
+            to=10000,
+            increment=50,
+            textvariable=self.autotarget_retarget_lost_ms,
+            width=6,
+        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(at_frame, text="Whitelist (1 por linea)").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        wl_box = tk.Text(at_frame, width=28, height=4)
+        wl_box.grid(row=5, column=0, columnspan=2, sticky="w")
+        try:
+            init_wl = str(self.autotarget_whitelist_text.get() or "").strip()
+            if init_wl:
+                wl_box.insert("1.0", init_wl)
+        except Exception:
+            pass
+        self._autotarget_whitelist_box = wl_box
+
+        tk.Label(at_frame, text="Blacklist (1 por linea)").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        bl_box = tk.Text(at_frame, width=28, height=4)
+        bl_box.grid(row=7, column=0, columnspan=2, sticky="w")
+        try:
+            init_bl = str(self.autotarget_blacklist_text.get() or "").strip()
+            if init_bl:
+                bl_box.insert("1.0", init_bl)
+        except Exception:
+            pass
+        self._autotarget_blacklist_box = bl_box
+
+        # Bind to live sync (function is defined later in __init__).
+        try:
+            wl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
+            wl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
+            bl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
+            bl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
+        except Exception:
+            pass
+
         # Live input guardrails (must not shift the rest of the layout).
         live_frame = tk.LabelFrame(cfg_right, text="Live input safety", padx=8, pady=6)
-        live_frame.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        live_frame.grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         def _confirm_arm_live() -> None:
             try:
@@ -1564,15 +1663,34 @@ class BotUI:
             command=_confirm_arm_live,
         ).grid(row=0, column=0, columnspan=2, sticky="w")
 
-        tk.Label(live_frame, text="Allowed window titles (comma)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        # Optional: arm live input automatically when cavebot starts.
+        tk.Checkbutton(
+            live_frame,
+            text="Auto-ARM al iniciar cavebot",
+            variable=self.asst_auto_arm_on_cavebot_start,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        tk.Checkbutton(
+            live_frame,
+            text="Auto-ARM sin confirmación",
+            variable=self.asst_auto_arm_no_confirm,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        # Expose confirmation hook for use by cavebot auto-arm.
+        try:
+            self._confirm_arm_live = _confirm_arm_live
+        except Exception:
+            pass
+
+        tk.Label(live_frame, text="Allowed window titles (comma)").grid(row=3, column=0, sticky="w", pady=(6, 0))
         tk.Entry(live_frame, textvariable=self.asst_allowed_window_titles, width=34).grid(
-            row=1, column=1, sticky="w", pady=(6, 0)
+            row=3, column=1, sticky="w", pady=(6, 0)
         )
 
         tk.Label(
             live_frame,
             text="Tip: usa 'TibiaClone Harness' para pruebas controladas",
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         def open_live_input_harness() -> None:
             try:
@@ -1685,11 +1803,11 @@ class BotUI:
         ).grid(row=4, column=1, sticky="w", pady=(6, 0))
 
         tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=7, column=0, columnspan=2, sticky="w"
+            row=8, column=0, columnspan=2, sticky="w"
         )
-        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=8, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=9, column=0, sticky="w", pady=(4, 0))
         tk.Spinbox(cfg_right, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
-            row=8, column=1, sticky="w", pady=(4, 0)
+            row=9, column=1, sticky="w", pady=(4, 0)
         )
 
         tk.Label(cfg_right, text="Replay out_dir").grid(row=9, column=0, sticky="w", pady=(4, 0))
@@ -1894,6 +2012,12 @@ class BotUI:
         tk.Button(cfg_right, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
             row=24, column=1, sticky="w", pady=(6, 0)
         )
+        tk.Checkbutton(
+            cfg_right,
+            text="Mostrar Debug Panel",
+            variable=self.debug_panel_show,
+            command=self._toggle_debug_panel_preview,
+        ).grid(row=24, column=2, columnspan=2, sticky="w", pady=(6, 0))
 
         def open_latest_soak() -> None:
             try:
@@ -2120,6 +2244,42 @@ class BotUI:
                 force_steps=False,
             )
 
+            # Auto-arm live input on cavebot start (optional).
+            try:
+                cur_enabled = bool(self.cavebot_enabled.get())
+                prev_enabled = bool(getattr(self, "_last_cavebot_enabled", False))
+                self._last_cavebot_enabled = cur_enabled
+                if cur_enabled and (not prev_enabled) and bool(self.asst_auto_arm_on_cavebot_start.get()):
+                    if not bool(self.asst_live_input_armed.get()):
+                        if bool(self.asst_auto_arm_no_confirm.get()):
+                            try:
+                                m = str(self.asst_input_mode.get() or "log").strip().lower()
+                            except Exception:
+                                m = "log"
+                            if m not in {"keyboard", "wininput"}:
+                                try:
+                                    self.asst_input_mode.set("keyboard")
+                                except Exception:
+                                    pass
+                            self.asst_live_input_armed.set(True)
+                        else:
+                            self.asst_live_input_armed.set(True)
+                            try:
+                                fn = getattr(self, "_confirm_arm_live", None)
+                                if callable(fn):
+                                    fn()
+                            except Exception:
+                                pass
+                # Auto-disarm when cavebot stops (falling edge), if auto-arm is enabled.
+                if (not cur_enabled) and prev_enabled and bool(self.asst_auto_arm_on_cavebot_start.get()):
+                    try:
+                        if bool(self.asst_live_input_armed.get()):
+                            self.asst_live_input_armed.set(False)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # Keep env vars in sync so core pieces that read os.getenv() each tick
             # can react without restarting.
             try:
@@ -2257,6 +2417,49 @@ class BotUI:
                 allowed_window_titles=list(allowed_titles),
             )
 
+        def sync_autotarget(*_args):
+            upd = getattr(self._config, "update_autotarget", None)
+            if not callable(upd):
+                return
+
+            def _read_lines(box, fallback: str) -> list[str]:
+                text = fallback
+                try:
+                    if box is not None:
+                        raw = box.get("1.0", "end")
+                        text = str(raw or "")
+                except Exception:
+                    text = fallback
+
+                out: list[str] = []
+                for line in str(text or "").splitlines():
+                    s = str(line).strip()
+                    if not s:
+                        continue
+                    out.append(s)
+                return out
+
+            wl_txt = str(self.autotarget_whitelist_text.get() or "")
+            bl_txt = str(self.autotarget_blacklist_text.get() or "")
+            wl = _read_lines(getattr(self, "_autotarget_whitelist_box", None), wl_txt)
+            bl = _read_lines(getattr(self, "_autotarget_blacklist_box", None), bl_txt)
+
+            # Keep UI vars in sync (useful when Text widgets are edited).
+            try:
+                self.autotarget_whitelist_text.set("\n".join(wl))
+                self.autotarget_blacklist_text.set("\n".join(bl))
+            except Exception:
+                pass
+
+            upd(
+                enabled=bool(self.autotarget_enabled.get()),
+                follow_on_enable=bool(self.autotarget_follow_on_enable.get()),
+                follow_distance_tiles=int(self.autotarget_follow_distance_tiles.get()),
+                retarget_if_lost_ms=int(self.autotarget_retarget_lost_ms.get()),
+                whitelist=list(wl),
+                blacklist=list(bl),
+            )
+
         def sync_replay_and_logging(*_args):
             self._config.update_replay(
                 enabled=bool(self.replay_enabled.get()),
@@ -2315,8 +2518,20 @@ class BotUI:
             self.asst_minimap_hotkey,
             self.asst_live_input_armed,
             self.asst_allowed_window_titles,
+            self.asst_auto_arm_on_cavebot_start,
+            self.asst_auto_arm_no_confirm,
         ]:
             v.trace_add("write", sync_assistant)
+        for v in [
+            self.autotarget_enabled,
+            self.autotarget_follow_on_enable,
+            self.autotarget_follow_distance_tiles,
+            self.autotarget_retarget_lost_ms,
+        ]:
+            try:
+                v.trace_add("write", sync_autotarget)
+            except Exception:
+                pass
         for v in [
             self.replay_enabled,
             self.replay_interval_ms,
@@ -2332,6 +2547,7 @@ class BotUI:
         sync_cavebot()
         sync_simulation()
         sync_assistant()
+        sync_autotarget()
         sync_replay_and_logging()
 
         def poll_telemetry() -> None:  # pyright: ignore[reportGeneralTypeIssues]
@@ -3538,6 +3754,16 @@ class BotUI:
                         self.asst_live_input_armed.set(bool(a.get("live_input_armed")))
                     except Exception:
                         self.asst_live_input_armed.set(False)
+                if "auto_arm_on_cavebot_start" in a:
+                    try:
+                        self.asst_auto_arm_on_cavebot_start.set(bool(a.get("auto_arm_on_cavebot_start")))
+                    except Exception:
+                        self.asst_auto_arm_on_cavebot_start.set(False)
+                if "auto_arm_no_confirm" in a:
+                    try:
+                        self.asst_auto_arm_no_confirm.set(bool(a.get("auto_arm_no_confirm")))
+                    except Exception:
+                        self.asst_auto_arm_no_confirm.set(False)
                 if "allowed_window_titles" in a:
                     try:
                         raw = a.get("allowed_window_titles")
@@ -4117,6 +4343,8 @@ class BotUI:
                     "target_hotkey": str(self.asst_target_hotkey.get()),
                     "minimap_hotkey": str(self.asst_minimap_hotkey.get()),
                     "live_input_armed": bool(self.asst_live_input_armed.get()),
+                    "auto_arm_on_cavebot_start": bool(self.asst_auto_arm_on_cavebot_start.get()),
+                    "auto_arm_no_confirm": bool(self.asst_auto_arm_no_confirm.get()),
                     "allowed_window_titles": [
                         s.strip() for s in str(self.asst_allowed_window_titles.get() or "").split(",") if s.strip()
                     ],
@@ -4249,6 +4477,125 @@ class BotUI:
             self.heal_hp_action.set("")
             self.heal_mp_action.set("")
             self.heal_cooldown_s.set(1.0)
+        except Exception:
+            pass
+
+    def _debug_panel_png_path(self) -> Path:
+        try:
+            return (self._repo_root / "logs" / "debug_panel.png").resolve()
+        except Exception:
+            return Path("logs") / "debug_panel.png"
+
+    def _toggle_debug_panel_preview(self) -> None:
+        """Open/close a small preview window for logs/debug_panel.png."""
+
+        try:
+            show = bool(self.debug_panel_show.get())
+        except Exception:
+            show = False
+
+        if not show:
+            try:
+                if self._debug_panel_win is not None:
+                    try:
+                        self._debug_panel_win.destroy()
+                    except Exception:
+                        pass
+            finally:
+                self._debug_panel_win = None
+                self._debug_panel_label = None
+                self._debug_panel_photo = None
+                self._debug_panel_last_mtime = 0.0
+            return
+
+        # Create window
+        try:
+            if self._debug_panel_win is None:
+                win = self._tk.Toplevel(self.root)
+                win.title("Debug Panel")
+                win.resizable(False, False)
+
+                def on_close() -> None:
+                    try:
+                        self.debug_panel_show.set(False)
+                    except Exception:
+                        pass
+                    try:
+                        self._toggle_debug_panel_preview()
+                    except Exception:
+                        pass
+
+                win.protocol("WM_DELETE_WINDOW", on_close)
+
+                lbl = self._tk.Label(win, text="(waiting for logs/debug_panel.png)")
+                lbl.pack(padx=10, pady=10)
+
+                self._debug_panel_win = win
+                self._debug_panel_label = lbl
+                self._debug_panel_last_mtime = 0.0
+
+            # Kick refresh loop
+            self._refresh_debug_panel_preview()
+        except Exception:
+            # Fail-safe: revert toggle
+            try:
+                self.debug_panel_show.set(False)
+            except Exception:
+                pass
+
+    def _refresh_debug_panel_preview(self) -> None:
+        try:
+            if self._debug_panel_win is None or self._debug_panel_label is None:
+                return
+            try:
+                if not bool(self.debug_panel_show.get()):
+                    return
+            except Exception:
+                return
+
+            p = self._debug_panel_png_path()
+            try:
+                mtime = float(p.stat().st_mtime)
+            except Exception:
+                mtime = 0.0
+
+            if mtime > 0.0 and mtime != float(self._debug_panel_last_mtime or 0.0):
+                self._debug_panel_last_mtime = float(mtime)
+                self._load_debug_panel_image(p)
+        finally:
+            # Continue polling while window is open
+            try:
+                if self._debug_panel_win is not None:
+                    self._debug_panel_win.after(200, self._refresh_debug_panel_preview)
+            except Exception:
+                pass
+
+    def _load_debug_panel_image(self, p: Path) -> None:
+        if self._debug_panel_label is None:
+            return
+
+        # Prefer PIL (better PNG handling), fallback to Tk PhotoImage.
+        try:
+            try:
+                from PIL import Image, ImageTk  # type: ignore
+
+                img = Image.open(str(p))
+                photo_pil: Any = ImageTk.PhotoImage(img)
+                self._debug_panel_photo = photo_pil
+                self._debug_panel_label.configure(image=photo_pil, text="")
+                return
+            except Exception:
+                pass
+
+            try:
+                tk_img = self._tk.PhotoImage(file=str(p))
+                self._debug_panel_photo = tk_img
+                self._debug_panel_label.configure(image=tk_img, text="")
+                return
+            except Exception:
+                pass
+
+            self._debug_panel_label.configure(text=f"No pude cargar: {p}")
         except Exception:
             pass
 

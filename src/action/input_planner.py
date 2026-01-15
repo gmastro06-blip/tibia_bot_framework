@@ -82,6 +82,15 @@ class InputPlanner:
                 value = _env("ASSIST_EAT_FOOD", value)
             return [PlannedInput(kind="hotkey", value=value or kind)]
 
+        if kind == "target":
+            # Target selection hotkey (commonly "next target").
+            # Value may carry the desired target name for UI/telemetry; the
+            # actual hotkey is configured externally.
+            hk = _env("TARGET_HOTKEY", "")
+            if hk:
+                return [PlannedInput(kind="hotkey", value=hk)]
+            return [PlannedInput(kind="note", value="target")]
+
         if kind in {"trade", "waypoint_action"}:
             # No universal input mapping; keep a trace.
             return [PlannedInput(kind="macro", value=f"{kind}:{value}")]

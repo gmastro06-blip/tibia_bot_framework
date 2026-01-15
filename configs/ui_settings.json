@@ -11,18 +11,18 @@
     "rois": "coords_ocr,minimap_content,hp_top_ocr,mp_top_ocr,hp_low_bar,mp_low_bar,states_icons,equipment_slots,battlelist_rows"
   },
   "healing": {
-    "enabled": false,
-    "hp_below_pct": 70,
+    "enabled": true,
+    "hp_below_pct": 90,
     "hp_recover_pct": 80,
     "mp_below_pct": 30,
     "mp_recover_pct": 50,
     "action": "",
-    "hp_action": "",
+    "hp_action": "F2",
     "mp_action": "",
     "cooldown_s": 1.0
   },
   "cavebot": {
-    "enabled": false,
+    "enabled": true,
     "route_path": "configs/route.json",
     "mode": "steps",
     "coords_provider": "disabled",
@@ -52,13 +52,16 @@
   },
   "assistant": {
     "enabled": true,
-    "confirm_actions": true,
+    "confirm_actions": false,
     "sound_alerts": true,
-    "input_mode": "log",
-    "target_hotkey": "",
+    "input_mode": "keyboard",
+    "target_hotkey": "PGDN",
     "minimap_hotkey": "",
-    "live_input_armed": false,
+    "live_input_armed": true,
+    "auto_arm_on_cavebot_start": true,
+    "auto_arm_no_confirm": true,
     "allowed_window_titles": [
+      "Tibia",
       "TibiaClone",
       "MyClient"
     ]

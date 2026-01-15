@@ -13,13 +13,16 @@ Defaults are designed to work out-of-the-box (no manual config).
 """
 
 from dataclasses import dataclass
+import os
 import time
 from typing import Iterable, Optional
 
 import win_window
 
 
-DEFAULT_ALLOWED_WINDOW_TITLES: list[str] = ["Tibia"]
+# Prefer the common Tibia client title prefix.
+# Keeping both makes it work for variants (e.g., OTClient) while prioritizing the exact pattern.
+DEFAULT_ALLOWED_WINDOW_TITLES: list[str] = ["Tibia -", "Tibia"]
 DEFAULT_DENIED_TITLES_CONTAINS: list[str] = [
     "Chrome",
     "Discord",
@@ -49,6 +52,24 @@ class ClientWindowState:
 _client_state = ClientWindowState()
 
 
+@dataclass
+class CaptureTargetState:
+    capture_backend: str = ""  # dxgi|obs_websocket|virtualcam|...
+    capture_target: str = "auto"  # auto|obs_projector|client
+    target_hwnd: int = 0
+    target_title: str = ""
+    target_class_name: str = ""
+    target_is_minimized: bool = False
+    target_is_maximized: bool = False
+    target_bounds: tuple[int, int, int, int] | None = None
+    target_found: bool = False
+    reason: str = ""
+    ts: float = 0.0
+
+
+_capture_target_state = CaptureTargetState()
+
+
 def set_client_hwnd(hwnd: int) -> None:
     """Set the current client HWND snapshot (best-effort)."""
 
@@ -75,6 +96,223 @@ def _norm_list(xs: Iterable[str] | None) -> list[str]:
     return out
 
 
+def _env_capture_target() -> str:
+    try:
+        v = (os.getenv("CAPTURE_TARGET", "auto") or "auto").strip().lower() or "auto"
+    except Exception:
+        v = "auto"
+    if v in {"projector", "obs", "obs_projector"}:
+        return "obs_projector"
+    if v in {"client", "game", "tibia"}:
+        return "client"
+    return "auto"
+
+
+def _env_capture_title_hints() -> list[str]:
+    raw = (os.getenv("CAPTURE_TITLE_HINTS", "") or "").strip()
+    if not raw:
+        return []
+    # Accept comma or pipe separated lists.
+    parts: list[str] = []
+    for sep in [",", "|"]:
+        if sep in raw:
+            parts = [p.strip() for p in raw.split(sep)]
+            break
+    if not parts:
+        parts = [raw]
+    return [p for p in parts if p]
+
+
+def _bounds_area(bounds: tuple[int, int, int, int] | None) -> int:
+    try:
+        if bounds is None:
+            return 0
+        l, t, r, b = bounds
+        return max(0, int(r) - int(l)) * max(0, int(b) - int(t))
+    except Exception:
+        return 0
+
+
+def _is_obs_projector_title(title: str, *, extra_hints: list[str]) -> bool:
+    t = (title or "").strip().lower()
+    if not t:
+        return False
+
+    # Primary patterns (case-insensitive):
+    # - "OBS" + "Projector" / "Proyector"
+    # - "Fullscreen Projector" / "Windowed Projector"
+    # - "Projector ("
+    if ("obs" in t) and ("projector" in t or "proyector" in t):
+        return True
+
+    # OBS uses projector titles that sometimes omit the word "OBS".
+    # Spanish examples:
+    #   "Proyector en ventana (Fuente) - Tibia_Fuente"
+    #   "Proyector a pantalla completa (Escena) - ..."
+    if ("projector" in t or "proyector" in t) and (
+        "fullscreen" in t
+        or "windowed" in t
+        or "en ventana" in t
+        or "a pantalla completa" in t
+        or "pantalla completa" in t
+        or "projector (" in t
+    ):
+        return True
+
+    if "fullscreen projector" in t or "windowed projector" in t:
+        return True
+    if "projector (" in t:
+        return True
+
+    # Optional extra hints
+    for h in extra_hints:
+        try:
+            if str(h).strip() and str(h).strip().lower() in t:
+                return True
+        except Exception:
+            continue
+
+    return False
+
+
+def _choose_largest_hwnd(cands: list[int]) -> int | None:
+    best_hwnd: int | None = None
+    best_area = 0
+    for hwnd in cands:
+        try:
+            b = win_window.get_best_bounds(int(hwnd))
+            a = _bounds_area(b)
+            if a > best_area:
+                best_area = a
+                best_hwnd = int(hwnd)
+        except Exception:
+            continue
+    return best_hwnd
+
+
+def find_obs_projector_hwnd_anywhere(*, extra_hints: list[str] | None = None) -> int | None:
+    """Find an OBS projector window HWND among visible windows."""
+
+    win_window.set_dpi_awareness()
+    hints = _norm_list(extra_hints)
+
+    cands: list[int] = []
+    for hwnd in win_window.enum_top_level_windows():
+        try:
+            title = win_window.get_window_title(hwnd)
+            if _is_obs_projector_title(title, extra_hints=hints):
+                cands.append(int(hwnd))
+        except Exception:
+            continue
+    best = _choose_largest_hwnd(cands)
+    return int(best) if best else None
+
+
+def choose_capture_target_hwnd(*, capture_target: str, extra_title_hints: list[str] | None = None) -> tuple[int, str]:
+    """Choose the capture target window.
+
+    Returns: (hwnd, reason)
+    """
+
+    target = (capture_target or "auto").strip().lower() or "auto"
+    hints = _norm_list(extra_title_hints)
+
+    if target in {"auto", "obs_projector"}:
+        hwnd = find_obs_projector_hwnd_anywhere(extra_hints=hints)
+        if hwnd:
+            return int(hwnd), "obs_projector"
+        if target == "obs_projector":
+            return 0, "obs_projector_not_found"
+
+    # Fallback to client (Tibia)
+    hwnd = find_client_hwnd_anywhere()
+    if hwnd:
+        return int(hwnd), "client"
+    return 0, "client_not_found"
+
+
+def update_capture_target_state() -> CaptureTargetState:
+    """Recompute and store the current capture target window snapshot."""
+
+    capture_backend = (os.getenv("CAPTURE_BACKEND", "dxgi") or "dxgi").strip().lower() or "dxgi"
+    target = _env_capture_target()
+    hints = _env_capture_title_hints()
+
+    hwnd, reason = choose_capture_target_hwnd(capture_target=target, extra_title_hints=hints)
+
+    st = CaptureTargetState()
+    st.capture_backend = str(capture_backend)
+    st.capture_target = str(target)
+    st.target_hwnd = int(hwnd or 0)
+    st.reason = str(reason or "")
+    st.target_found = bool(st.target_hwnd)
+    st.ts = time.time()
+
+    if st.target_hwnd:
+        try:
+            st.target_title = win_window.get_window_title(st.target_hwnd)
+        except Exception:
+            st.target_title = ""
+        try:
+            st.target_class_name = win_window.get_window_class(st.target_hwnd)
+        except Exception:
+            st.target_class_name = ""
+        try:
+            st.target_is_minimized = bool(win_window.is_minimized(st.target_hwnd))
+        except Exception:
+            st.target_is_minimized = False
+        try:
+            st.target_is_maximized = bool(win_window.is_maximized(st.target_hwnd))
+        except Exception:
+            st.target_is_maximized = False
+        try:
+            st.target_bounds = win_window.get_best_bounds(st.target_hwnd)
+        except Exception:
+            st.target_bounds = None
+
+    try:
+        _capture_target_state.capture_backend = st.capture_backend
+        _capture_target_state.capture_target = st.capture_target
+        _capture_target_state.target_hwnd = st.target_hwnd
+        _capture_target_state.target_title = st.target_title
+        _capture_target_state.target_class_name = st.target_class_name
+        _capture_target_state.target_is_minimized = st.target_is_minimized
+        _capture_target_state.target_is_maximized = st.target_is_maximized
+        _capture_target_state.target_bounds = st.target_bounds
+        _capture_target_state.target_found = st.target_found
+        _capture_target_state.reason = st.reason
+        _capture_target_state.ts = st.ts
+    except Exception:
+        pass
+
+    return st
+
+
+def get_capture_target_snapshot() -> CaptureTargetState:
+    try:
+        return CaptureTargetState(**_capture_target_state.__dict__)
+    except Exception:
+        return _capture_target_state
+
+
+def format_capture_target_overlay_line() -> str:
+    st = get_capture_target_snapshot()
+    tgt = str(st.capture_target or "auto")
+    hwnd = int(st.target_hwnd or 0)
+    found = int(bool(hwnd))
+    title = (st.target_title or "").strip() or "<not found>"
+    b = st.target_bounds
+    b_s = ""
+    try:
+        if b is not None:
+            b_s = f" bounds=({int(b[0])},{int(b[1])},{int(b[2])},{int(b[3])})"
+    except Exception:
+        b_s = ""
+    reason = (st.reason or "").strip()
+    r_s = f" reason={reason}" if reason else ""
+    return f"capture_target={tgt} found={found} hwnd={hwnd} title={title}{b_s}{r_s}"
+
+
 def _score_window(
     *,
     title: str,
@@ -96,6 +334,14 @@ def _score_window(
             return -999
 
     score = 0
+
+    # Strong preference for the canonical title prefix used by Tibia clients.
+    # Example: "Tibia - Nombre del usuario"
+    if t_low.startswith("tibia -"):
+        score += 12
+    elif "tibia -" in t_low:
+        score += 8
+
     for good in allowed_titles:
         if good and str(good).lower() in t_low:
             score += 5

@@ -28,12 +28,14 @@ from decision.waypoint_actions import build_requests_from_waypoint_action, evalu
 from decision.service_flow import expand_service_requests
 from decision.auto_steps import AutoStepFallback
 from decision.healing import HealingController
+from decision.auto_targeting import AutoTargetingController
 from navigation.route import load_route
 from navigation.navigator import Navigator
 from navigation.step_navigator import StepNavigator
 
 from telemetry.replay import ReplayRecorder, crop_named_rois, default_replay_roi_names, env_replay_enabled
 from telemetry.overlay_export import OverlayExporter, overlay_config_from_env
+from telemetry.debug_panel import DebugPanelExporter, debug_panel_config_from_env
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 from vision.anchor_tracker import AnchorTracker
@@ -141,7 +143,7 @@ def load_roi_config(resolution: tuple) -> tuple:
         return default_rois, [2048, 1076]
 
 
-def build_capture_backend(*, force_monitor: int):
+def build_capture_backend(*, force_monitor: int | None):
     """Build capture backend instance based on environment.
 
     Env vars:
@@ -156,7 +158,7 @@ def build_capture_backend(*, force_monitor: int):
 
     capture_backend = (os.getenv("CAPTURE_BACKEND", "dxgi") or "dxgi").strip().lower()
     if capture_backend in {"", "default", "dxgi", "win", "window"}:
-        return DXGICapture(force_monitor=int(force_monitor))
+        return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
 
     if capture_backend in {"obs", "obs_websocket", "obsws"}:
         try:
@@ -183,7 +185,7 @@ def build_capture_backend(*, force_monitor: int):
             print("⚠️  OBS capture no conectó; fallback a DXGI")
         except Exception as e:
             print(f"⚠️  OBS capture no disponible ({e}); fallback a DXGI")
-        return DXGICapture(force_monitor=int(force_monitor))
+        return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
 
     if capture_backend in {"virtualcam", "cam", "webcam"}:
         try:
@@ -200,10 +202,10 @@ def build_capture_backend(*, force_monitor: int):
             print("⚠️  VirtualCam no conectó; fallback a DXGI")
         except Exception as e:
             print(f"⚠️  VirtualCam no disponible ({e}); fallback a DXGI")
-        return DXGICapture(force_monitor=int(force_monitor))
+        return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
 
     print(f"⚠️  CAPTURE_BACKEND desconocido '{capture_backend}'; usando DXGI")
-    return DXGICapture(force_monitor=int(force_monitor))
+    return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
 
 
 def main() -> None:
@@ -428,18 +430,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             return None, False, ""
 
     # Inicializar componentes
-    # Preferimos monitor 2 por defecto (proyector), pero mantenemos fallback:
-    # si ese monitor falla, DXGICapture captura buscando en todos los monitores.
+    # Captura: si FORCE_MONITOR no está configurado, auto-detecta el monitor
+    # donde está la ventana del cliente (y hace fallback por MSS si hace falta).
     force_monitor_raw = os.getenv("FORCE_MONITOR", "").strip()
-    force_monitor = 2
+    force_monitor: int | None = None
     if force_monitor_raw:
         try:
             force_monitor = int(force_monitor_raw)
         except Exception:
-            force_monitor = 2
-        print(f"🖥️  FORCE_MONITOR activo: {force_monitor}")
+            force_monitor = None
+        if force_monitor is not None:
+            print(f"🖥️  FORCE_MONITOR activo: {force_monitor}")
+        else:
+            print("🖥️  FORCE_MONITOR inválido; usando auto-detección")
     else:
-        print("🖥️  FORCE_MONITOR no configurado; usando monitor 2 por defecto")
+        print("🖥️  FORCE_MONITOR no configurado; usando auto-detección")
 
     capture = build_capture_backend(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
@@ -449,6 +454,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     replay = ReplayRecorder()
     overlay = OverlayExporter(overlay_config_from_env())
+    debug_panel = DebugPanelExporter(debug_panel_config_from_env())
     jsonl = JsonlLogger()
     jsonl_writer = JsonlWriter()
 
@@ -667,6 +673,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 "cavebot_next": tel.cavebot_next,
                                 "cavebot_waypoint": tel.cavebot_waypoint,
                                 "cavebot_action": tel.cavebot_action,
+                                # Battlelist observability (critical for AutoTarget debugging)
+                                "battlelist_n_rows": getattr(tel, "battlelist_n_rows", None),
+                                "battlelist_n_valid": getattr(tel, "battlelist_n_valid", None),
+                                "battlelist_top_names": getattr(tel, "battlelist_top_names", None),
+                                "battlelist_confidence": getattr(tel, "battlelist_confidence", None),
                                 "action_request": getattr(tel, "action_request", ""),
                                 "action_requests": getattr(tel, "action_requests", None) or [],
                                 "action_committed": bool(getattr(tel, "action_committed", False)),
@@ -674,7 +685,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 "note": tel.note,
                             }
                         else:
-                            tel_payload = {}
+                            # Headless/env replay: still include key observability
+                            # fields directly from gamestate so AutoTarget can be
+                            # debugged without the UI.
+                            tel_payload = {
+                                "hp_pct": getattr(gamestate, "hp_pct", None),
+                                "mp_pct": getattr(gamestate, "mp_pct", None),
+                                "paralyzed": getattr(gamestate, "paralyzed", None),
+                                "haste_active": getattr(gamestate, "haste_active", None),
+                                "utamo_active": getattr(gamestate, "utamo_active", None),
+                                "hungry": getattr(gamestate, "hungry", None),
+                                # Battlelist observability (critical for AutoTarget debugging)
+                                "battlelist_n_rows": getattr(gamestate, "battlelist_n_rows", None),
+                                "battlelist_n_valid": getattr(gamestate, "battlelist_n_valid", None),
+                                "battlelist_top_names": getattr(gamestate, "battlelist_top_names", None),
+                                "battlelist_confidence": getattr(gamestate, "battlelist_confidence", None),
+                            }
 
                         # Always attach latest action request for end-to-end correlation.
                         try:
@@ -873,6 +899,26 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
+                    # AutoTarget status (for overlay observability).
+                    try:
+                        if runtime_config is not None:
+                            tel = runtime_config.telemetry_snapshot()
+                            at_on = getattr(tel, "autotarget_enabled", None)
+                            at_tgt = str(getattr(tel, "autotarget_current_target", "") or "")
+                            at_follow = getattr(tel, "autotarget_follow_active", None)
+                            at_reason = str(getattr(tel, "autotarget_last_retarget_reason", "") or "")
+                            if at_on is not None:
+                                line = f"autotarget={'ON' if bool(at_on) else 'OFF'}"
+                                if at_tgt:
+                                    line = f"{line} target={at_tgt}"
+                                if at_follow is not None:
+                                    line = f"{line} follow={int(bool(at_follow))}"
+                                if at_reason:
+                                    line = f"{line} reason={at_reason}"
+                                info_lines.append(line)
+                    except Exception:
+                        pass
+
                     # Action correlation (planned vs committed), from decision thread.
                     try:
                         ar, ac, _ats, ip, a_src, _ars = _a_snapshot()
@@ -949,7 +995,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     # Client window status line (HWND discovery + focus/injection guard).
                     client_line = ""
                     try:
-                        from input_focus_guard import format_client_overlay_line, update_client_state
+                        from input_focus_guard import (
+                            format_capture_target_overlay_line,
+                            format_client_overlay_line,
+                            update_client_state,
+                        )
 
                         try:
                             if callable(update_client_state):
@@ -973,6 +1023,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             injection_state=inj_state,
                             injection_reason=inj_reason,
                         )
+
+                        # Capture target (OBS projector/client) selection line.
+                        try:
+                            cap_line = format_capture_target_overlay_line()
+                            if cap_line:
+                                info_lines.append(cap_line)
+                        except Exception:
+                            pass
                     except Exception:
                         client_line = ""
 
@@ -986,6 +1044,46 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         info_lines=info_lines,
                         roi_rects=roi_rects,
                         battlelist_lines=battlelist_lines,
+                    )
+                except Exception:
+                    pass
+
+                # Debug Panel (single PNG overwrite) - opt-in via env.
+                try:
+                    status_line = ""
+                    try:
+                        if runtime_config is not None:
+                            st = runtime_config.assistant_status_snapshot()
+                            if st is not None:
+                                status_line = f"INJECTION: {st.injection_state} ({st.injection_reason})"
+                    except Exception:
+                        status_line = ""
+
+                    try:
+                        gx = getattr(gamestate, "pos_x", None)
+                        gy = getattr(gamestate, "pos_y", None)
+                        gz = getattr(gamestate, "pos_z", None)
+                        cp = getattr(gamestate, "coords_provider", "") or ""
+                        conf = getattr(gamestate, "coords_confidence", None)
+                        lvl = getattr(gamestate, "coords_confidence_level", "") or ""
+                        pos_s = "pos=(?,?)"
+                        if gx is not None and gy is not None:
+                            if gz is None:
+                                pos_s = f"pos=({int(gx)},{int(gy)})"
+                            else:
+                                pos_s = f"pos=({int(gx)},{int(gy)},{int(gz)})"
+                        coords_line = f"{pos_s} provider={cp} conf={'' if conf is None else f'{float(conf):.2f}'} {lvl}".strip()
+                    except Exception:
+                        coords_line = ""
+
+                    debug_panel.maybe_export(
+                        status_line=str(status_line or ""),
+                        coords_line=str(coords_line or ""),
+                        response=getattr(gamestate, "minimap_response", None),
+                        dx_tiles=getattr(gamestate, "minimap_delta_dx", None),
+                        dy_tiles=getattr(gamestate, "minimap_delta_dy", None),
+                        acc_dx=getattr(gamestate, "minimap_acc_dx", None),
+                        acc_dy=getattr(gamestate, "minimap_acc_dy", None),
                     )
                 except Exception:
                     pass
@@ -1156,6 +1254,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         )
         auto_steps_active = False
         healing_ctrl = HealingController()
+        auto_target_ctrl = AutoTargetingController()
+        autotarget_last_enabled = False
+        autotarget_last_target = ""
+        autotarget_last_follow = False
+        autotarget_last_reason = ""
         last_event_target = ""
         last_event_reco = ""
         last_event_wp = ""
@@ -1592,6 +1695,36 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 pass
 
             heal_dec = healing_ctrl.update(sig, healing_cfg)
+
+            # AutoTargeting: update internal state every tick, but do not emit
+            # actions when healing has a trigger (priority HEALING > TARGETING).
+            at_cfg = None
+            try:
+                if runtime_config is not None:
+                    at_cfg = runtime_config.autotarget_snapshot()
+            except Exception:
+                at_cfg = None
+
+            at_actions = []
+            try:
+                at_actions = auto_target_ctrl.tick(
+                    gamestate,
+                    now=time.time(),
+                    cfg=at_cfg,
+                    block_actions=bool(getattr(heal_dec, "heal_hp", False) or getattr(heal_dec, "heal_mp", False)),
+                )
+            except Exception:
+                at_actions = []
+
+            # AutoTarget telemetry (UI/overlay) - always publish current state.
+            try:
+                st = auto_target_ctrl.snapshot()
+                autotarget_last_enabled = bool(getattr(at_cfg, "enabled", False)) if at_cfg is not None else False
+                autotarget_last_target = str(getattr(st, "current_target_name", "") or "")
+                autotarget_last_follow = bool(getattr(st, "follow_active", False))
+                autotarget_last_reason = str(getattr(auto_target_ctrl, "last_retarget_reason", "") or "")
+            except Exception:
+                pass
 
             # Anti-stuck inputs-free: track last position change and compute idle duration.
             note_out = ""
@@ -2345,10 +2478,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pass
 
+                        # --- 1.5) AutoTargeting (after healing, before cavebot) ---
+                        try:
+                            if at_actions:
+                                out.extend(list(at_actions))
+                        except Exception:
+                            pass
+
                         # --- 2) Targeting (2nd priority) ---
                         try:
-                            if str(target_str or "").strip() and str(target_str).strip().lower() != "none":
-                                out.append(ActionRequest(kind="target", value=str(target_str), note="preview"))
+                            # When AutoTarget is enabled, avoid emitting the detector-based
+                            # targeting hotkey to prevent conflicting target flips.
+                            at_enabled = bool(getattr(at_cfg, "enabled", False)) if at_cfg is not None else False
+                            if not at_enabled:
+                                if str(target_str or "").strip() and str(target_str).strip().lower() != "none":
+                                    out.append(ActionRequest(kind="target", value=str(target_str), note="preview"))
                         except Exception:
                             pass
 
@@ -2453,6 +2597,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     "heal",
                     "mana",
                     "target",
+                    "set_target",
+                    "clear_target",
+                    "follow_target",
+                    "stop_follow",
                     "move",
                     "tool",
                     "loot",
@@ -2492,6 +2640,42 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 # Expand services AFTER committing (purely assistant-side expansion).
                 try:
                     reqs = expand_service_requests(reqs)
+                except Exception:
+                    pass
+
+                # Enforce priority ordering: HEALING > TARGETING(AutoTarget) > CAVEBOT.
+                # Also ensure AutoTarget overrides detector-based `target` hotkey.
+                try:
+                    at_enabled = bool(getattr(at_cfg, "enabled", False)) if at_cfg is not None else False
+                except Exception:
+                    at_enabled = False
+
+                try:
+                    if at_enabled:
+                        # If AutoTarget can't produce a target (e.g., battlelist OCR empty),
+                        # allow the detector-based targeting hotkey as a fallback.
+                        try:
+                            st_at = auto_target_ctrl.snapshot()
+                            at_has_target = bool(str(getattr(st_at, "current_target_name", "") or "").strip())
+                        except Exception:
+                            at_has_target = False
+                        at_has_actions = bool(at_actions)
+
+                        if at_has_target or at_has_actions:
+                            reqs = [
+                                r
+                                for r in (reqs or [])
+                                if str(getattr(r, "kind", "") or "").strip().lower() != "target"
+                            ]
+                except Exception:
+                    pass
+
+                try:
+                    if at_actions:
+                        heal_k = {"heal", "mana"}
+                        heal_part = [r for r in reqs if str(getattr(r, "kind", "") or "").strip().lower() in heal_k]
+                        rest = [r for r in reqs if str(getattr(r, "kind", "") or "").strip().lower() not in heal_k]
+                        reqs = list(heal_part) + list(at_actions) + list(rest)
                 except Exception:
                     pass
 
@@ -2964,6 +3148,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         action_committed=action_committed,
                         action_source=str(action_source or ""),
                         input_plan=input_plan_str,
+                        autotarget_enabled=autotarget_last_enabled,
+                        autotarget_current_target=autotarget_last_target,
+                        autotarget_follow_active=autotarget_last_follow,
+                        autotarget_last_retarget_reason=autotarget_last_reason,
                         injection_state=(injection_state_tick or None),
                         injection_reason=(injection_reason_tick or None),
                         client_hwnd=client_hwnd,
@@ -2971,6 +3159,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         client_is_foreground=client_is_foreground,
                         client_is_minimized=client_is_minimized,
                         client_is_maximized=client_is_maximized,
+                        capture_backend=(str(getattr(capture, "capture_backend", "") or "") or None),
+                        capture_target=(str(getattr(capture, "capture_target", "") or "") or None),
+                        target_title=(str(getattr(capture, "client_title", "") or "") or None),
+                        target_hwnd=(int(getattr(capture, "client_hwnd", 0) or 0) or None),
+                        target_bounds=(
+                            [int(x) for x in list(getattr(capture, "capture_bounds", None) or [])][:4]
+                            if getattr(capture, "capture_bounds", None) is not None
+                            else None
+                        ),
+                        target_found=(bool(getattr(capture, "target_found", False)) if hasattr(capture, "target_found") else None),
+                        target_reason=(str(getattr(capture, "target_reason", "") or "") or None),
                         capture_state=(capture_state or None),
                         capture_bounds=capture_bounds,
                         input_block_reason=(input_block_reason or None),
@@ -3168,6 +3367,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "battlelist_n_valid": getattr(tel, "battlelist_n_valid", None),
                         "battlelist_top_names": getattr(tel, "battlelist_top_names", None),
                         "battlelist_confidence": getattr(tel, "battlelist_confidence", None),
+                        "autotarget_enabled": getattr(tel, "autotarget_enabled", None),
+                        "autotarget_current_target": getattr(tel, "autotarget_current_target", ""),
+                        "autotarget_follow_active": getattr(tel, "autotarget_follow_active", None),
+                        "autotarget_last_retarget_reason": getattr(tel, "autotarget_last_retarget_reason", ""),
                         "action_request": getattr(tel, "action_request", ""),
                         "action_requests": getattr(tel, "action_requests", None) or [],
                         "action_committed": bool(getattr(tel, "action_committed", False)),
