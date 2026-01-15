@@ -946,12 +946,43 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         battlelist_lines = None
 
+                    # Client window status line (HWND discovery + focus/injection guard).
+                    client_line = ""
+                    try:
+                        from input_focus_guard import format_client_overlay_line, update_client_state
+
+                        try:
+                            if callable(update_client_state):
+                                update_client_state()
+                        except Exception:
+                            pass
+
+                        inj_state = ""
+                        inj_reason = ""
+                        try:
+                            if runtime_config is not None:
+                                st = runtime_config.assistant_status_snapshot()
+                                if st is not None:
+                                    inj_state = str(getattr(st, "injection_state", "") or "")
+                                    inj_reason = str(getattr(st, "injection_reason", "") or "")
+                        except Exception:
+                            inj_state = ""
+                            inj_reason = ""
+
+                        client_line = format_client_overlay_line(
+                            injection_state=inj_state,
+                            injection_reason=inj_reason,
+                        )
+                    except Exception:
+                        client_line = ""
+
                     overlay.maybe_export(
                         frame,
                         viewport_rect=viewport_rect,
                         boxes=boxes,
                         blocked_offsets=blocked,
                         target_label=target_label,
+                        client_line=client_line,
                         info_lines=info_lines,
                         roi_rects=roi_rects,
                         battlelist_lines=battlelist_lines,
@@ -1154,7 +1185,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver, is_committed
             from action.input_manager import InputManager
             from fail_closed import fail_closed
-            from input_guard import is_target_window_active
+            from input_focus_guard import get_client_hwnd, is_allowed_to_inject, update_client_state
 
             mock_driver = MockInputDriver(max_items=500)
             driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
@@ -1211,7 +1242,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             mock_driver = None
             input_driver = None
             input_mgr = None
-            is_target_window_active = None  # type: ignore[assignment]
+            get_client_hwnd = None  # type: ignore[assignment]
+            is_allowed_to_inject = None  # type: ignore[assignment]
+            update_client_state = None  # type: ignore[assignment]
 
         # Track applied assistant input settings (UI can change these at runtime).
         applied_input_mode = str(driver_name or "log").strip().lower() if "driver_name" in locals() else "log"
@@ -1441,8 +1474,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             live_active = bool(asst_input_mode == "keyboard" and live_input_armed)
             target_window_active = False
             try:
-                if live_active and is_target_window_active is not None:
-                    target_window_active = bool(is_target_window_active(list(allowed_titles)))
+                # Refresh client snapshot (best-effort) even when the client is background.
+                if callable(update_client_state):
+                    update_client_state()
+
+                if live_active and callable(get_client_hwnd) and callable(is_allowed_to_inject):
+                    ch = int(get_client_hwnd() or 0)
+                    ok, _reason = is_allowed_to_inject(ch)
+                    target_window_active = bool(ok)
             except Exception:
                 target_window_active = False
 
@@ -1459,6 +1498,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         last_advance_seen = int(cur_adv)
             except Exception:
                 advance_pulse = False
+
+            # Commit policy (global): allow committing one action per pulse.
+            # IMPORTANT: this is intentionally decoupled from cavebot step
+            # advancement so that healing can be committed even when cavebot is
+            # disabled or blocked.
+            commit_flag = bool(advance_pulse) if bool(needs_confirm) else bool(auto_commit)
 
             # Log de cambios de toggles (para ver que aplica en tiempo real)
             lines, last_healing_enabled, last_cavebot_enabled = _toggle_transition_lines(
@@ -1960,12 +2005,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         if (not cavebot_finished) and should_advance:
                             decision = step_navigator.decide(gamestate=gamestate, config=cavebot_cfg)
 
-                        # Only mark as "committed" when gated (confirm-actions or live input) and user advanced.
-                        if needs_confirm:
-                            commit_flag = bool(should_advance)
-                        else:
-                            commit_flag = bool(auto_commit)
-
                         if decision.reached_waypoint and decision.waypoint is not None:
                             wp = decision.waypoint
                             label = wp.name or f"({wp.x},{wp.y})"
@@ -2210,18 +2249,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 cavebot_next = f"reached {label}"
                         except Exception:
                             pass
-
-            # Apply auto-commit in pos-mode too (when enabled), but never override confirm-actions UI gating.
-            try:
-                if cavebot_next in {"north", "south", "east", "west"}:
-                    if needs_confirm:
-                        if advance_pulse:
-                            commit_flag = True
-                    else:
-                        if auto_commit:
-                            commit_flag = True
-            except Exception:
-                pass
 
             # Assistant-only recovery: if we have trusted coords and haven't moved
             # for a while *while cavebot wants to move*, suggest a sidestep.
@@ -2817,6 +2844,62 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Publicar telemetría para UI (si existe RuntimeConfig)
             if runtime_config is not None and sig is not None:
                 try:
+                    # Client + capture diagnostics (best-effort; never break bot).
+                    client_hwnd = None
+                    client_title = None
+                    client_is_foreground = None
+                    client_is_minimized = None
+                    client_is_maximized = None
+                    try:
+                        st = None
+                        if callable(update_client_state):
+                            st = update_client_state(
+                                allowed_window_titles=(allowed_titles if isinstance(allowed_titles, list) and allowed_titles else None)
+                            )
+                        if st is not None:
+                            try:
+                                client_hwnd = int(getattr(st, "hwnd", 0) or 0)
+                            except Exception:
+                                client_hwnd = None
+                            try:
+                                client_title = str(getattr(st, "title", "") or "")
+                            except Exception:
+                                client_title = None
+                            try:
+                                client_is_foreground = bool(getattr(st, "is_foreground", False))
+                            except Exception:
+                                client_is_foreground = None
+                            try:
+                                client_is_minimized = bool(getattr(st, "is_minimized", False))
+                            except Exception:
+                                client_is_minimized = None
+                            try:
+                                client_is_maximized = bool(getattr(st, "is_maximized", False))
+                            except Exception:
+                                client_is_maximized = None
+                    except Exception:
+                        pass
+
+                    capture_state = ""
+                    capture_bounds = None
+                    try:
+                        capture_state = str(getattr(capture, "capture_state", "") or "")
+                    except Exception:
+                        capture_state = ""
+                    try:
+                        cb = getattr(capture, "capture_bounds", None)
+                        if cb is not None:
+                            capture_bounds = [int(cb[0]), int(cb[1]), int(cb[2]), int(cb[3])]
+                    except Exception:
+                        capture_bounds = None
+
+                    input_block_reason = None
+                    try:
+                        if input_mgr is not None:
+                            input_block_reason = str(getattr(input_mgr, "last_block_reason", "") or "")
+                    except Exception:
+                        input_block_reason = None
+
                     runtime_config.update_telemetry(
                         hp_current=sig.hp_current,
                         hp_max=sig.hp_max,
@@ -2883,6 +2966,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         input_plan=input_plan_str,
                         injection_state=(injection_state_tick or None),
                         injection_reason=(injection_reason_tick or None),
+                        client_hwnd=client_hwnd,
+                        client_title=client_title,
+                        client_is_foreground=client_is_foreground,
+                        client_is_minimized=client_is_minimized,
+                        client_is_maximized=client_is_maximized,
+                        capture_state=(capture_state or None),
+                        capture_bounds=capture_bounds,
+                        input_block_reason=(input_block_reason or None),
                         note=note_out if note_out else None,
                         stuck_reason=stuck_reason_tick,
                         stuck_idle_s=stuck_idle_s_tick,

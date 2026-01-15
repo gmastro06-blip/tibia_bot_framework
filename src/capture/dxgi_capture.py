@@ -8,6 +8,11 @@ import time
 import os
 from mss import mss
 
+try:
+    from input_focus_guard import update_client_state
+except Exception:  # pragma: no cover
+    update_client_state = None  # type: ignore[assignment]
+
 class DXGICapture:
     def __init__(
         self,
@@ -22,6 +27,11 @@ class DXGICapture:
         else:
             self.title_partials = [p for p in title_partial if p]
         self.hwnd = self.find_window()
+        # Client discovery (hwnd can exist even when background/maximized).
+        self.client_hwnd: int = int(self.hwnd or 0)
+        self.client_title: str = ""
+        self.capture_bounds: Optional[tuple[int, int, int, int]] = None
+        self.capture_state: str = ""
         self.force_monitor = force_monitor
         # Si el caller fuerza un monitor, por defecto permitimos fallback (útil para el bot).
         # Herramientas de calibración suelen preferir "estricto" para no cambiar de monitor
@@ -227,21 +237,59 @@ class DXGICapture:
         return best_monitor
 
     def capture(self) -> Optional[np.ndarray]:
+        # Always refresh client snapshot (best-effort) so we can monitor even
+        # when the client is not foreground and/or gets recreated.
+        try:
+            if callable(update_client_state):
+                st = update_client_state()
+                self.client_hwnd = int(getattr(st, "hwnd", 0) or 0)
+                self.client_title = str(getattr(st, "title", "") or "")
+                self.capture_bounds = getattr(st, "bounds", None)
+                if bool(getattr(st, "is_minimized", False)):
+                    self.capture_state = "minimized"
+                    return None
+        except Exception:
+            pass
+
+        # Prefer window-crop capture when we have bounds.
+        try:
+            if self.capture_bounds is not None:
+                l, t, r, b = self.capture_bounds
+                w = max(1, int(r) - int(l))
+                h = max(1, int(b) - int(t))
+                # Sanity bounds: avoid absurd sizes.
+                if w >= 80 and h >= 80:
+                    with mss() as sct:
+                        shot = sct.grab({"left": int(l), "top": int(t), "width": int(w), "height": int(h)})
+                        frame = np.frombuffer(shot.bgra, dtype=np.uint8)
+                        frame = frame.reshape((shot.height, shot.width, 4))
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
+                        # Window crops can be smaller than full monitors.
+                        if frame is not None and frame.size > 0 and frame.shape[1] >= 80 and frame.shape[0] >= 80:
+                            self.capture_state = "window_crop"
+                            return frame
+        except Exception:
+            # Fall back to monitor/fullscreen capture.
+            pass
+
         # Prefer forced monitor when provided, but fall back to scanning all monitors.
         if self.force_monitor is not None:
             if self._verbose:
                 print(f"Forzando captura en monitor {self.force_monitor}")
             frame = self.capture_specific_monitor(self.force_monitor)
             if frame is not None:
+                self.capture_state = "monitor_forced"
                 return frame
             if self.strict_force_monitor:
                 # No hacer fallback a otros monitores: evita que tools (ROI/minimap) capturen otra pantalla.
                 if self._verbose:
                     print("Monitor forzado falló (modo estricto); devolviendo None")
+                self.capture_state = "monitor_forced_failed"
                 return None
             if self._verbose:
                 print("Monitor forzado falló; usando búsqueda en todos los monitores")
 
+        self.capture_state = "fullscreen"
         return self.capture_fullscreen()
 
     def capture_window(self) -> Optional[np.ndarray]:

@@ -101,6 +101,18 @@ class WindowsKeyboardDriver:
         if not is_committed(action):
             return False
 
+        # Focus guard (strict): inputs only if the client window is foreground.
+        try:
+            from input_focus_guard import get_client_hwnd, is_allowed_to_inject
+
+            hwnd = int(get_client_hwnd() or 0)
+            ok, _reason = is_allowed_to_inject(hwnd)
+            if not ok:
+                return False
+        except Exception:
+            # Fail-closed: if we cannot validate focus, do not inject.
+            return False
+
         kind = (action.kind or "").strip().lower()
         val = (action.value or "").strip()
 

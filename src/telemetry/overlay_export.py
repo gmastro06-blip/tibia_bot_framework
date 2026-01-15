@@ -54,6 +54,7 @@ class OverlayExporter:
         boxes: Optional[Sequence[Dict[str, Any]]] = None,
         blocked_offsets: Optional[Sequence[Tuple[int, int]]] = None,
         target_label: str = "",
+        client_line: str = "",
         info_lines: Optional[Sequence[str]] = None,
         battlelist_lines: Optional[Sequence[str]] = None,
         roi_rects: Optional[Sequence[Tuple[str, Tuple[int, int, int, int]]]] = None,
@@ -199,6 +200,13 @@ class OverlayExporter:
         # Stacked info lines (keeps overlay readable and avoids overlap).
         try:
             lines: List[str] = []
+            if client_line:
+                try:
+                    s0 = str(client_line)
+                    if s0:
+                        lines.append(s0)
+                except Exception:
+                    pass
             if info_lines:
                 for s in info_lines:
                     try:

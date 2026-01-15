@@ -6,10 +6,12 @@ from typing import Optional
 from action.input_driver import ActionRequest, InputDriver, MockInputDriver, is_committed
 
 try:
-    from input_guard import get_foreground_window_title, is_target_window_active
+    import win_window
+    from input_focus_guard import get_client_hwnd, is_allowed_to_inject
 except Exception:  # pragma: no cover
-    get_foreground_window_title = None  # type: ignore[assignment]
-    is_target_window_active = None  # type: ignore[assignment]
+    win_window = None  # type: ignore[assignment]
+    get_client_hwnd = None  # type: ignore[assignment]
+    is_allowed_to_inject = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -91,21 +93,26 @@ class InputManager:
 
             # Window-scoped injection: only when target window is active.
             try:
-                if callable(get_foreground_window_title):
-                    self.last_foreground_title = str(get_foreground_window_title() or "")
+                if win_window is not None:
+                    fg = int(win_window.get_foreground_hwnd() or 0)
+                    if fg:
+                        self.last_foreground_title = str(win_window.get_window_title(fg) or "")
             except Exception:
                 self.last_foreground_title = ""
 
+            # STRICT focus guard: inject only if foreground_hwnd == client_hwnd and not minimized.
             try:
-                if callable(is_target_window_active):
-                    ok = bool(is_target_window_active(list(self.allowed_window_titles or [])))
+                if callable(get_client_hwnd) and callable(is_allowed_to_inject):
+                    client_hwnd = int(get_client_hwnd() or 0)
+                    ok, reason = is_allowed_to_inject(client_hwnd)
+                    if not ok:
+                        self.last_block_reason = str(reason or "not_allowed")
+                        return False
                 else:
-                    ok = False
+                    self.last_block_reason = "no_focus_guard"
+                    return False
             except Exception:
-                ok = False
-
-            if not ok:
-                self.last_block_reason = "wrong_window"
+                self.last_block_reason = "no_focus_guard"
                 return False
 
         try:

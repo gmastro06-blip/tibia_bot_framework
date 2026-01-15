@@ -56,7 +56,12 @@
     "sound_alerts": true,
     "input_mode": "log",
     "target_hotkey": "",
-    "minimap_hotkey": ""
+    "minimap_hotkey": "",
+    "live_input_armed": false,
+    "allowed_window_titles": [
+      "TibiaClone",
+      "MyClient"
+    ]
   },
   "replay": {
     "enabled": false,

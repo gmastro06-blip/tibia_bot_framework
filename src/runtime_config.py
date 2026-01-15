@@ -117,7 +117,7 @@ class AssistantConfig:
     # Double opt-in for OS input injection.
     live_input_armed: bool = False
     # Only inject if the foreground window title matches one of these.
-    allowed_window_titles: list[str] = field(default_factory=lambda: ["TibiaClone", "MyClient"])
+    allowed_window_titles: list[str] = field(default_factory=lambda: ["Tibia"])
     target_hotkey: str = ""
     minimap_hotkey: str = ""
 
@@ -232,6 +232,16 @@ class TelemetrySnapshot:
     # Input injection status (UI/JSONL observability)
     injection_state: str = ""  # "ARMED"|"DISABLED"|"WAITING_CONFIRM"
     injection_reason: str = ""  # wrong_window|not_armed|input_mode=log|fail_closed|no_committed_pulse|driver=mock
+
+    # Client window discovery / monitoring (Win32)
+    client_hwnd: int | None = None
+    client_title: str = ""
+    client_is_foreground: bool | None = None
+    client_is_minimized: bool | None = None
+    client_is_maximized: bool | None = None
+    capture_state: str = ""  # window_crop|fullscreen|minimized|...
+    capture_bounds: list[int] | None = None  # [l,t,r,b]
+    input_block_reason: str = ""  # focus-guard reason or other block reason
 
 
 @dataclass
@@ -839,6 +849,14 @@ class RuntimeConfig:
         stuck_extra: str | None = None,
         injection_state: str | None = None,
         injection_reason: str | None = None,
+        client_hwnd: int | None = None,
+        client_title: str | None = None,
+        client_is_foreground: bool | None = None,
+        client_is_minimized: bool | None = None,
+        client_is_maximized: bool | None = None,
+        capture_state: str | None = None,
+        capture_bounds: list[int] | None = None,
+        input_block_reason: str | None = None,
     ) -> None:
         with self._lock:
             self.telemetry.ts = time.time()
@@ -1060,6 +1078,29 @@ class RuntimeConfig:
                 self.telemetry.injection_state = str(injection_state)
             if injection_reason is not None:
                 self.telemetry.injection_reason = str(injection_reason)
+
+            if client_hwnd is not None:
+                try:
+                    self.telemetry.client_hwnd = int(client_hwnd)
+                except Exception:
+                    self.telemetry.client_hwnd = None
+            if client_title is not None:
+                self.telemetry.client_title = str(client_title)
+            if client_is_foreground is not None:
+                self.telemetry.client_is_foreground = bool(client_is_foreground)
+            if client_is_minimized is not None:
+                self.telemetry.client_is_minimized = bool(client_is_minimized)
+            if client_is_maximized is not None:
+                self.telemetry.client_is_maximized = bool(client_is_maximized)
+            if capture_state is not None:
+                self.telemetry.capture_state = str(capture_state)
+            if capture_bounds is not None:
+                try:
+                    self.telemetry.capture_bounds = [int(x) for x in list(capture_bounds)][:4]
+                except Exception:
+                    self.telemetry.capture_bounds = None
+            if input_block_reason is not None:
+                self.telemetry.input_block_reason = str(input_block_reason)
 
     def update_health(
         self,

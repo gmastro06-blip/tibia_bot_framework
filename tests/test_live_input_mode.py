@@ -37,8 +37,9 @@ def test_input_manager_blocks_preview_only(monkeypatch: pytest.MonkeyPatch) -> N
     import action.input_manager as im
     from action.input_manager import InputManager
 
-    # Pretend the window is correct.
-    monkeypatch.setattr(im, "is_target_window_active", lambda titles: True)
+    # Pretend focus guard passes.
+    monkeypatch.setattr(im, "get_client_hwnd", lambda: 123, raising=False)
+    monkeypatch.setattr(im, "is_allowed_to_inject", lambda hwnd: (True, "ok"), raising=False)
 
     drv = MockInputDriver()
     mgr = InputManager(driver=drv, fallback=drv, injection_enabled=True)
@@ -54,8 +55,18 @@ def test_input_manager_blocks_wrong_window(monkeypatch: pytest.MonkeyPatch) -> N
     import action.input_manager as im
     from action.input_manager import InputManager
 
-    monkeypatch.setattr(im, "get_foreground_window_title", lambda: "Some other window")
-    monkeypatch.setattr(im, "is_target_window_active", lambda titles: False)
+    class DummyWin:
+        @staticmethod
+        def get_foreground_hwnd() -> int:
+            return 999
+
+        @staticmethod
+        def get_window_title(_hwnd: int) -> str:
+            return "Some other window"
+
+    monkeypatch.setattr(im, "win_window", DummyWin, raising=False)
+    monkeypatch.setattr(im, "get_client_hwnd", lambda: 123, raising=False)
+    monkeypatch.setattr(im, "is_allowed_to_inject", lambda hwnd: (False, "not_foreground"), raising=False)
 
     drv = MockInputDriver()
     mgr = InputManager(driver=drv, fallback=drv, injection_enabled=True)
@@ -63,7 +74,7 @@ def test_input_manager_blocks_wrong_window(monkeypatch: pytest.MonkeyPatch) -> N
 
     ok = mgr.send(ActionRequest(kind="move", value="north", note="committed"))
     assert ok is False
-    assert mgr.last_block_reason == "wrong_window"
+    assert mgr.last_block_reason == "not_foreground"
     assert "window" in mgr.last_foreground_title.lower() or mgr.last_foreground_title
 
 
@@ -72,7 +83,9 @@ def test_input_manager_allows_committed_when_window_ok(monkeypatch: pytest.Monke
     import action.input_manager as im
     from action.input_manager import InputManager
 
-    monkeypatch.setattr(im, "is_target_window_active", lambda titles: True)
+    # Pretend focus guard passes.
+    monkeypatch.setattr(im, "get_client_hwnd", lambda: 123, raising=False)
+    monkeypatch.setattr(im, "is_allowed_to_inject", lambda hwnd: (True, "ok"), raising=False)
 
     drv = MockInputDriver()
     mgr = InputManager(driver=drv, fallback=drv, injection_enabled=True)
