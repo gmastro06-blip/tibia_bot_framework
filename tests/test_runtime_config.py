@@ -75,7 +75,12 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
         cavebot_finished=True,
         cavebot_finish_reason="LOW_CAP|LOW_POTIONS",
         action_request="move:north",
+        action_requests=[
+            {"kind": "move", "value": "north", "note": "committed", "committed": True},
+            {"kind": "heal", "value": "F1", "note": "", "committed": False},
+        ],
         action_committed=True,
+        action_source="bt",
         input_plan="key:Up",
         note="ok",
     )
@@ -83,6 +88,7 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     t1 = cfg.telemetry_snapshot()
     t1.hp_current = 1
     t1.note = "mutated"
+    t1.action_requests.append({"kind": "extra", "value": "x", "note": "", "committed": False})
 
     t2 = cfg.telemetry_snapshot()
     assert t2.hp_current == 50
@@ -97,7 +103,11 @@ def test_runtime_config_telemetry_snapshot_is_copy() -> None:
     assert t2.cavebot_finished is True
     assert t2.cavebot_finish_reason == "LOW_CAP|LOW_POTIONS"
     assert t2.action_request == "move:north"
+    assert isinstance(t2.action_requests, list)
+    assert len(t2.action_requests) == 2
+    assert t2.action_requests[0].get("kind") == "move"
     assert t2.action_committed is True
+    assert t2.action_source == "bt"
     assert t2.input_plan == "key:Up"
     assert t2.note == "ok"
 

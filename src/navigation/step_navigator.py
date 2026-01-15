@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -12,6 +13,8 @@ class StepDecision:
     direction: Optional[str] = None  # "north"|"south"|"east"|"west"|None
     reached_waypoint: bool = False
     waypoint: Optional[Waypoint] = None
+    note: str = ""
+    stuck_reason: str = ""
 
 
 
@@ -35,6 +38,33 @@ class StepNavigator:
         self._segment_dx = 0
         self._segment_dy = 0
         self._segment_initialized = False
+
+        # Optional stand wait (seconds) after reaching a stand tile.
+        try:
+            self._stand_wait_s = float(os.getenv("CAVEBOT_STAND_WAIT_S", "0").strip() or "0")
+        except Exception:
+            self._stand_wait_s = 0.0
+        self._stand_wait_s = max(0.0, float(self._stand_wait_s))
+        # Default scripts-master semantics: a stand step typically implies "arrive and pause".
+        # We model this as at least 1 tick wait (configurable).
+        try:
+            self._stand_wait_ticks = int(float(os.getenv("CAVEBOT_STAND_WAIT_TICKS", "1").strip() or "1"))
+        except Exception:
+            self._stand_wait_ticks = 1
+        self._stand_wait_ticks = max(0, int(self._stand_wait_ticks))
+        self._stand_wait_done: bool = False
+        self._stand_arrival_ts: float | None = None
+
+        # Rope/ladder: wait for z-change confirmation after triggering the action.
+        try:
+            self._z_change_timeout_s = float(os.getenv("CAVEBOT_Z_CHANGE_TIMEOUT_S", "3").strip() or "3")
+        except Exception:
+            self._z_change_timeout_s = 3.0
+        self._z_change_timeout_s = max(0.5, float(self._z_change_timeout_s))
+        self._pending_z: dict[str, float | int | str] | None = None
+
+        # Progress detection (for segment-mode fallback):
+        self._last_pos: tuple[int, int, int | None] | None = None
 
         # Indexar labels para saltos rápidos
         self._label_map = {}
@@ -94,8 +124,8 @@ class StepNavigator:
 
         Semantics:
         - conditional_jump: rewires idx and continues consuming
-        - action-only: returns a reached event so decision layer can build ActionRequests
-        - label/comment/call/load: skip silently
+        - action/call/load: returns a reached event so decision layer can build ActionRequests
+        - label/comment: skip silently
         """
 
         if not self.route:
@@ -183,6 +213,28 @@ class StepNavigator:
                 self._segment_initialized = False
                 return StepDecision(direction=None, reached_waypoint=True, waypoint=action_wp)
 
+            call = getattr(nxt, "call", None)
+            if call:
+                call_wp = nxt
+                nxt_i = advance(j)
+                if nxt_i is None:
+                    self._after_idx = None
+                else:
+                    self._after_idx = int(nxt_i)
+                self._segment_initialized = False
+                return StepDecision(direction=None, reached_waypoint=True, waypoint=call_wp, note="call")
+
+            load = getattr(nxt, "load", None)
+            if load:
+                load_wp = nxt
+                nxt_i = advance(j)
+                if nxt_i is None:
+                    self._after_idx = None
+                else:
+                    self._after_idx = int(nxt_i)
+                self._segment_initialized = False
+                return StepDecision(direction=None, reached_waypoint=True, waypoint=load_wp, note="load")
+
             # Skip label/call/load/comment-only steps.
             nxt_i = advance(j)
             if nxt_i is None:
@@ -199,6 +251,7 @@ class StepNavigator:
         self._segment_initialized = False
         self._after_idx = None
         self._next_from_idx = None
+        self._stand_wait_done = False
 
     def jump_to(self, idx: int) -> bool:
         """Jump to a specific route index.
@@ -221,6 +274,7 @@ class StepNavigator:
             self._segment_initialized = False
             self._after_idx = None
             self._next_from_idx = None
+            self._stand_wait_done = False
             return True
         except Exception:
             return False
@@ -277,26 +331,119 @@ class StepNavigator:
         self._segment_initialized = True
         return True
 
+    def _pos_from_gamestate(self, gamestate) -> tuple[int, int, int | None] | None:
+        try:
+            if gamestate is None:
+                return None
+            x = getattr(gamestate, "pos_x", None)
+            y = getattr(gamestate, "pos_y", None)
+            z = getattr(gamestate, "pos_z", None)
+            if x is None or y is None:
+                return None
+            return (int(x), int(y), int(z) if z is not None else None)
+        except Exception:
+            return None
+
+    def _progressed(self, pos: tuple[int, int, int | None] | None, gamestate) -> bool:
+        """Best-effort: True when we can infer movement happened since last tick."""
+
+        try:
+            if pos is not None:
+                if self._last_pos is None:
+                    self._last_pos = pos
+                    return False
+                moved = pos != self._last_pos
+                self._last_pos = pos
+                if moved:
+                    return True
+
+            # Minimap motion (experimental provider) can be used as a weak progress signal.
+            dx = getattr(gamestate, "minimap_delta_dx", None) if gamestate is not None else None
+            dy = getattr(gamestate, "minimap_delta_dy", None) if gamestate is not None else None
+            if dx is None and dy is None:
+                return False
+            try:
+                return (abs(float(dx or 0.0)) + abs(float(dy or 0.0))) >= 0.25
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+    def _at_tile(
+        self,
+        pos: tuple[int, int, int | None],
+        *,
+        x: int,
+        y: int,
+        z: int | None,
+        require_z: bool,
+    ) -> bool:
+        try:
+            if int(pos[0]) != int(x) or int(pos[1]) != int(y):
+                return False
+            if require_z and z is not None and pos[2] is not None:
+                return int(pos[2]) == int(z)
+            return True
+        except Exception:
+            return False
+
+    def _direction_to(self, pos: tuple[int, int, int | None], *, x: int, y: int) -> str | None:
+        """Direction using |delta|-priority. Tibia: +y is south."""
+
+        try:
+            dx = int(x) - int(pos[0])
+            dy = int(y) - int(pos[1])
+            if dx == 0 and dy == 0:
+                return None
+            if abs(dx) >= abs(dy):
+                return "east" if dx > 0 else "west"
+            return "south" if dy > 0 else "north"
+        except Exception:
+            return None
+
 
     def decide(self, gamestate=None, config=None) -> StepDecision:
-        """Consume 1 'tick' de navegación (mutando estado interno). Soporta labels y saltos condicionales."""
+        """Consume 1 tick de navegación (mutando estado interno).
+
+        - If coords are available on the GameState, we navigate to absolute tiles.
+        - For rope/ladder, we wait for z-change confirmation (z-1) with timeout.
+        - If no coords are available, we fall back to legacy segment stepping.
+        """
+
+        now = time.time()
+        pos = self._pos_from_gamestate(gamestate)
+
+        progressed = self._progressed(pos, gamestate)
+
+        # Segment stepping is a legacy fallback when we don't have coords.
+        # In tests (and some headless uses) we assume each suggested move succeeds.
+        # In *steps-mode* we must NOT invent progress: only coords/minimap-motion can confirm.
+        strict_no_coords_progress = False
+        try:
+            mode = str(getattr(config, "mode", "") or "").strip().lower()
+            force_steps = bool(getattr(config, "force_steps", False))
+            strict_no_coords_progress = force_steps or (mode in {"steps", "step"})
+        except Exception:
+            strict_no_coords_progress = False
+        if not strict_no_coords_progress:
+            try:
+                env_mode = str(os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
+                if env_mode in {"steps", "step"}:
+                    strict_no_coords_progress = True
+            except Exception:
+                pass
+
+        if pos is None and (not progressed) and (not strict_no_coords_progress):
+            progressed = True
+
         while True:
             cur = self._current()
             if cur is None:
                 return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
 
-            # In step mode, keep `idx` anchored on a coordinate waypoint.
-            # Skip any non-coordinate items we may land on (e.g. route starts with labels).
-            if not bool(getattr(cur, "has_xy", True)):
-                self.idx += 1
-                self._segment_initialized = False
-                self._after_idx = None
-                self._next_from_idx = None
-                continue
-
-            # Skip non-coordinate steps at the current pointer.
-            if not bool(getattr(cur, "has_xy", True)):
-                # Conditional jump step at current pointer.
+            has_xy = bool(getattr(cur, "has_xy", True))
+            if not has_xy:
+                # Conditional jump
                 cj = getattr(cur, "conditional_jump", None)
                 if isinstance(cj, dict) and cj:
                     vn = str(cj.get("var_name", "") or "").strip()
@@ -311,79 +458,189 @@ class StepNavigator:
                 if getattr(cur, "action", None):
                     self.idx += 1
                     self._segment_initialized = False
+                    self._pending_z = None
+                    self._stand_arrival_ts = None
                     return StepDecision(direction=None, reached_waypoint=True, waypoint=cur)
 
-                # Everything else: skip silently.
+                # scripts-master: call/load are control/meta steps that should be surfaced.
+                if getattr(cur, "call", None):
+                    self.idx += 1
+                    self._segment_initialized = False
+                    self._pending_z = None
+                    self._stand_arrival_ts = None
+                    return StepDecision(direction=None, reached_waypoint=True, waypoint=cur, note="call")
+
+                if getattr(cur, "load", None):
+                    self.idx += 1
+                    self._segment_initialized = False
+                    self._pending_z = None
+                    self._stand_arrival_ts = None
+                    return StepDecision(direction=None, reached_waypoint=True, waypoint=cur, note="load")
+
+                # Skip label/call/load/comment silently.
                 self.idx += 1
                 self._segment_initialized = False
                 continue
 
-            # Before moving to the next coordinate, consume action/jump steps that
-            # logically happen *after* arriving at the current coordinate.
+            # Absolute navigation when we have coords.
+            if pos is not None:
+                step_type = str(getattr(cur, "type", "") or "node").strip().lower() or "node"
+                tx = int(getattr(cur, "x", 0))
+                ty = int(getattr(cur, "y", 0))
+                tz_raw = getattr(cur, "z", None)
+                tz = int(tz_raw) if tz_raw is not None else None
+                require_z = tz is not None
+
+                # If we were waiting for a z-change but moved away, cancel it.
+                try:
+                    if self._pending_z is not None:
+                        v_idx = self._pending_z.get("idx", -1)
+                        pend_idx = int(v_idx) if v_idx is not None else -1
+                        # Pending z-change should not be cancelled just because z differs.
+                        # Only cancel when x/y changes or the idx changes.
+                        if pend_idx != int(self.idx) or not self._at_tile(pos, x=tx, y=ty, z=tz, require_z=False):
+                            self._pending_z = None
+                except Exception:
+                    self._pending_z = None
+
+                if step_type in {"node", "stand"}:
+                    at = self._at_tile(pos, x=tx, y=ty, z=tz, require_z=require_z)
+                    if at:
+                        if step_type == "stand":
+                            # Always wait at least one tick (unless explicitly disabled).
+                            if not bool(self._stand_wait_done) and int(self._stand_wait_ticks) > 0:
+                                self._stand_wait_done = True
+                                self._stand_arrival_ts = float(now)
+                                return StepDecision(direction=None, reached_waypoint=False, waypoint=cur, note="stand_wait")
+                            # Optional additional time-based wait.
+                            if self._stand_wait_s > 0.0:
+                                if self._stand_arrival_ts is None:
+                                    self._stand_arrival_ts = float(now)
+                                    return StepDecision(direction=None, reached_waypoint=False, waypoint=cur, note="stand_wait")
+                                if (now - float(self._stand_arrival_ts)) < float(self._stand_wait_s):
+                                    return StepDecision(direction=None, reached_waypoint=False, waypoint=cur, note="stand_wait")
+
+                        # Arrived: advance to next step (so actions/labels get processed).
+                        self._stand_arrival_ts = None
+                        self._stand_wait_done = False
+                        self.idx += 1
+                        self._segment_initialized = False
+                        continue
+
+                    # Not at target: produce movement direction.
+                    self._stand_arrival_ts = None
+                    self._stand_wait_done = False
+                    d = self._direction_to(pos, x=tx, y=ty)
+                    return StepDecision(direction=d, reached_waypoint=False, waypoint=cur)
+
+                if step_type in {"rope", "ladder"}:
+                    at_xy = (int(pos[0]) == int(tx)) and (int(pos[1]) == int(ty))
+                    at_xyz = self._at_tile(pos, x=tx, y=ty, z=tz, require_z=require_z)
+
+                    expected_z: int | None = None
+                    try:
+                        if tz is not None:
+                            expected_z = int(tz) - 1
+                        elif pos[2] is not None:
+                            expected_z = int(pos[2]) - 1
+                    except Exception:
+                        expected_z = None
+
+                    # If we are already waiting for a z-change on this step, we must NOT
+                    # require staying on the original z; z is expected to change.
+                    pending = self._pending_z
+                    pending_dict: dict[str, float | int | str] | None = pending if isinstance(pending, dict) else None
+                    pending_idx: int | None = None
+                    if pending_dict is not None:
+                        try:
+                            v_idx2 = pending_dict.get("idx", -1)
+                            pending_idx = int(v_idx2) if v_idx2 is not None else -1
+                        except Exception:
+                            pending_idx = -1
+
+                    is_pending_here = (pending_idx is not None and int(pending_idx) == int(self.idx))
+                    if is_pending_here:
+                        if expected_z is not None and pos[2] is not None:
+                            try:
+                                if int(pos[2]) == int(expected_z):
+                                    self._pending_z = None
+                                    self.idx += 1
+                                    self._segment_initialized = False
+                                    continue
+                            except Exception:
+                                pass
+
+                        # If we moved away in x/y, cancel pending and navigate back.
+                        if not at_xy:
+                            self._pending_z = None
+                            d = self._direction_to(pos, x=tx, y=ty)
+                            return StepDecision(direction=d, reached_waypoint=False, waypoint=cur)
+
+                        # Still waiting on same x/y.
+                        age = 0.0
+                        try:
+                            if pending_dict is not None:
+                                age = float(now) - float(float(pending_dict.get("start_ts", now) or now))
+                        except Exception:
+                            age = 0.0
+
+                        if age >= float(self._z_change_timeout_s):
+                            return StepDecision(
+                                direction=None,
+                                reached_waypoint=False,
+                                waypoint=cur,
+                                note=f"waiting_z->{expected_z}",
+                                stuck_reason=f"{step_type.upper()}_TIMEOUT",
+                            )
+                        return StepDecision(direction=None, reached_waypoint=False, waypoint=cur, note=f"waiting_z->{expected_z}")
+
+                    # Not pending yet: we must reach the tool tile (including its z) first.
+                    if not at_xyz:
+                        self._stand_arrival_ts = None
+                        d = self._direction_to(pos, x=tx, y=ty)
+                        return StepDecision(direction=d, reached_waypoint=False, waypoint=cur)
+
+                    if expected_z is None or pos[2] is None:
+                        # Can't confirm z; emit action once and move on.
+                        self.idx += 1
+                        self._pending_z = None
+                        self._segment_initialized = False
+                        return StepDecision(direction=None, reached_waypoint=True, waypoint=cur, note=f"{step_type}_no_z")
+
+                    self._pending_z = {
+                        "idx": int(self.idx),
+                        "type": str(step_type),
+                        "start_ts": float(now),
+                        "expected_z": int(expected_z),
+                    }
+                    # Surface as an action trigger exactly once; subsequent ticks will return waiting_z.
+                    return StepDecision(direction=None, reached_waypoint=True, waypoint=cur, note=f"{step_type}_trigger")
+
+                # Unknown coordinate type: treat as a normal node.
+                at = self._at_tile(pos, x=tx, y=ty, z=tz, require_z=require_z)
+                if at:
+                    self.idx += 1
+                    self._segment_initialized = False
+                    continue
+                d = self._direction_to(pos, x=tx, y=ty)
+                return StepDecision(direction=d, reached_waypoint=False, waypoint=cur)
+
+            # No coords: legacy segment stepping.
+            # Before moving, consume non-pos steps that are meant to happen
+            # immediately after the current coordinate anchor.
             idx_before = int(self.idx)
             extra = self._consume_nonpos_after_current()
             if extra is not None:
                 return extra
-            # conditional_jump may have rewired idx; restart to re-load `cur`.
             if int(self.idx) != idx_before:
                 continue
 
-            # Ejecutar saltos condicionales si existen
-            if getattr(cur, "conditional_jump", None):
-                cj = cur.conditional_jump
-                if isinstance(cj, dict) and cj:
-                    vn = str(cj.get("var_name", "") or "").strip()
-                    label_jump = str(cj.get("label_jump", "") or "").strip()
-                    label_skip = str(cj.get("label_skip", "") or "").strip()
-                    take = self._cond_value(vn)
-                    target = label_jump if take else label_skip
-                    if target and self._goto_label(target):
-                        continue
-                # Si no hay label válido, avanza normal
-                self.idx += 1
-                self._segment_initialized = False
-                continue
-
-            # Ejecutar call/load como hooks (puedes extender aquí)
-            if getattr(cur, "call", None):
-                # Aquí podrías ejecutar un sub-script, función, etc.
-                print(f"[StepNavigator] call: {cur.call} (raw: {cur.raw_line})")
-            if getattr(cur, "load", None):
-                print(f"[StepNavigator] load: {cur.load} (raw: {cur.raw_line})")
-
-            # Ejecutar acción especial
-            if getattr(cur, "action", None):
-                print(f"[StepNavigator] action: {cur.action} (raw: {cur.raw_line})")
-
-            # Loggear comentarios
-            if getattr(cur, "comment", None):
-                print(f"[StepNavigator] comment: {cur.comment} (raw: {cur.raw_line})")
-
-            # Si el paso es solo label, acción, call, load, comentario, avanza
-            if (
-                getattr(cur, "label", None)
-                and not bool(getattr(cur, "has_xy", True))
-                and not getattr(cur, "type", None)
-            ) or (
-                getattr(cur, "action", None) and not bool(getattr(cur, "has_xy", True))
-            ) or getattr(cur, "call", None) or getattr(cur, "load", None) or getattr(cur, "comment", None):
-                self.idx += 1
-                self._segment_initialized = False
-                continue
-
-            # Si es un waypoint real, navega como antes
             nxt = self._next()
             if nxt is None:
                 return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
 
-            # If the immediate next step is non-coordinate, consume it first (action/jump).
-            # (This should usually be handled by _consume_nonpos_after_current(), but keep
-            # this as a safety net.)
             if not bool(getattr(nxt, "has_xy", True)):
-                extra2 = self._consume_nonpos_after_current()
-                if extra2 is not None:
-                    return extra2
-                # If it's non-pos but not consumable, advance and retry.
+                # If next is non-pos, just advance and retry.
                 self.idx += 1
                 self._segment_initialized = False
                 continue
@@ -393,7 +650,6 @@ class StepNavigator:
 
             if self._segment_dx == 0 and self._segment_dy == 0 and self._segment_initialized:
                 reached = nxt
-                # Advance idx to the next coordinate waypoint.
                 next_idx = self._next_coord_index()
                 if next_idx is None:
                     if self.loop and self.route:
@@ -402,8 +658,6 @@ class StepNavigator:
                         self.idx = len(self.route)
                 else:
                     self.idx = int(next_idx)
-
-                # Reset segment state for the next segment.
                 self._segment_initialized = False
                 self._segment_dx = 0
                 self._segment_dy = 0
@@ -411,148 +665,59 @@ class StepNavigator:
                 self._next_from_idx = None
                 return StepDecision(direction=None, reached_waypoint=True, waypoint=reached)
 
-            # Execute dx first, then dy. (Deterministic)
-            if self._segment_dx != 0:
-                if self._segment_dx > 0:
-                    self._segment_dx -= 1
+            # Choose axis by remaining |delta| (tie -> dx).
+            dx = int(self._segment_dx)
+            dy = int(self._segment_dy)
+            if abs(dx) >= abs(dy) and dx != 0:
+                if dx > 0:
+                    if progressed:
+                        self._segment_dx -= 1
                     return StepDecision(direction="east", reached_waypoint=False, waypoint=nxt)
-                self._segment_dx += 1
+                if progressed:
+                    self._segment_dx += 1
                 return StepDecision(direction="west", reached_waypoint=False, waypoint=nxt)
 
-            if self._segment_dy != 0:
-                if self._segment_dy > 0:
-                    self._segment_dy -= 1
+            if dy != 0:
+                if dy > 0:
+                    if progressed:
+                        self._segment_dy -= 1
                     return StepDecision(direction="south", reached_waypoint=False, waypoint=nxt)
-                self._segment_dy += 1
+                if progressed:
+                    self._segment_dy += 1
                 return StepDecision(direction="north", reached_waypoint=False, waypoint=nxt)
 
-            # If we get here, the segment is complete but we haven't emitted the reached event yet.
-            # Next call will emit it.
             return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)
 
-    def preview(self) -> StepDecision:
+    def preview(self, gamestate=None, config=None) -> StepDecision:
         """Devuelve la próxima decisión sin mutar estado interno.
 
         Útil para modo 'asistente' donde el usuario confirma cada paso.
         """
 
-        # Snapshot state
-        idx = int(self.idx)
-        seg_dx = int(self._segment_dx)
-        seg_dy = int(self._segment_dy)
-        seg_init = bool(self._segment_initialized)
-
-        # Helpers equivalent to _current/_next but using local idx.
-        if not self.route:
-            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-
-        if idx < 0:
-            idx = 0
-        if idx >= len(self.route):
-            if self.loop:
-                idx = 0
-            else:
-                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-
-        # Skip non-coordinate steps at current pointer.
-        guard = 0
-        while guard < max(1, len(self.route)):
-            guard += 1
-            cur = self.route[idx]
-            if bool(getattr(cur, "has_xy", True)):
-                break
-            # conditional jump at current pointer
-            cj = getattr(cur, "conditional_jump", None)
-            if isinstance(cj, dict) and cj:
-                vn = str(cj.get("var_name", "") or "").strip()
-                label_jump = str(cj.get("label_jump", "") or "").strip()
-                label_skip = str(cj.get("label_skip", "") or "").strip()
-                take = self._cond_value(vn)
-                target = label_jump if take else label_skip
-                if target and target in self._label_map:
-                    idx = int(self._label_map[target])
-                    seg_init = False
-                    continue
-            # action-only at current pointer => surface as reached
-            if getattr(cur, "action", None):
-                return StepDecision(direction=None, reached_waypoint=True, waypoint=cur)
-            # skip
-            idx += 1
-            seg_init = False
-            if idx >= len(self.route):
-                if self.loop:
-                    idx = 0
-                else:
-                    return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-
-        cur = self.route[idx]
-
-        # Consume non-coordinate steps immediately after current coordinate.
-        j = idx + 1
-        if j >= len(self.route):
-            if self.loop:
-                j = 0
-            else:
-                return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-        nxt = self.route[j]
-        if not bool(getattr(nxt, "has_xy", True)):
-            # conditional jump step
-            cj = getattr(nxt, "conditional_jump", None)
-            if isinstance(cj, dict) and cj:
-                vn = str(cj.get("var_name", "") or "").strip()
-                label_jump = str(cj.get("label_jump", "") or "").strip()
-                label_skip = str(cj.get("label_skip", "") or "").strip()
-                take = self._cond_value(vn)
-                target = label_jump if take else label_skip
-                if target and target in self._label_map:
-                    # Jump: next decision is based on new idx
-                    idx = int(self._label_map[target])
-                    seg_init = False
-                    # Recurse by restarting preview with updated idx snapshot
-                    # (simple: call preview logic again by temporarily setting self.idx)
-                    # We avoid mutating real state by just continuing the loop.
-                    # NOTE: This only handles one jump depth per preview; that's OK.
-                    if idx < 0:
-                        idx = 0
-                    cur = self.route[idx]
-                    # fall through to compute segment from the jump location
-                    j = idx + 1
-                    if j >= len(self.route):
-                        if self.loop:
-                            j = 0
-                        else:
-                            return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-                    nxt = self.route[j]
-
-            # action-only step
-            if getattr(nxt, "action", None):
-                return StepDecision(direction=None, reached_waypoint=True, waypoint=nxt)
-
-            # otherwise skip (label/comment/call) by previewing the next after it
-            j += 1
-            if j >= len(self.route):
-                if self.loop:
-                    j = 0
-                else:
-                    return StepDecision(direction=None, reached_waypoint=False, waypoint=None)
-            nxt = self.route[j]
-
-        if not seg_init:
-            seg_dx = int(nxt.x) - int(cur.x)
-            seg_dy = int(nxt.y) - int(cur.y)
-            seg_init = True
-
-        if seg_dx == 0 and seg_dy == 0 and seg_init:
-            return StepDecision(direction=None, reached_waypoint=True, waypoint=nxt)
-
-        if seg_dx != 0:
-            if seg_dx > 0:
-                return StepDecision(direction="east", reached_waypoint=False, waypoint=nxt)
-            return StepDecision(direction="west", reached_waypoint=False, waypoint=nxt)
-
-        if seg_dy != 0:
-            if seg_dy > 0:
-                return StepDecision(direction="south", reached_waypoint=False, waypoint=nxt)
-            return StepDecision(direction="north", reached_waypoint=False, waypoint=nxt)
-
-        return StepDecision(direction=None, reached_waypoint=False, waypoint=nxt)
+        # Snapshot mutable state and reuse decide() for correctness.
+        snap = (
+            int(self.idx),
+            int(self._segment_dx),
+            int(self._segment_dy),
+            bool(self._segment_initialized),
+            self._after_idx,
+            self._next_from_idx,
+            self._stand_arrival_ts,
+            dict(self._pending_z) if isinstance(self._pending_z, dict) else None,
+            self._last_pos,
+        )
+        try:
+            return self.decide(gamestate=gamestate, config=config)
+        finally:
+            (
+                self.idx,
+                self._segment_dx,
+                self._segment_dy,
+                self._segment_initialized,
+                self._after_idx,
+                self._next_from_idx,
+                self._stand_arrival_ts,
+                pending_z,
+                self._last_pos,
+            ) = snap
+            self._pending_z = pending_z

@@ -52,7 +52,7 @@ def main() -> int:
 
     rows = (len(tiles) + cols - 1) // cols
     pad = 10
-    header_h = 120
+    header_h = 170
 
     canvas_h = header_h + rows * tile_h + (rows + 1) * pad
     canvas_w = cols * tile_w + (cols + 1) * pad
@@ -64,10 +64,49 @@ def main() -> int:
     def put(line: str, y: int) -> None:
         cv2.putText(canvas, line, (pad, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (240, 240, 240), 1, cv2.LINE_AA)
 
+    def clip(s: object, n: int = 140) -> str:
+        try:
+            t = str(s or "")
+        except Exception:
+            return ""
+        t = t.replace("\n", " ").replace("\r", " ").strip()
+        if len(t) > n:
+            return t[: n - 3] + "..."
+        return t
+
+    def fmt_actions(tel: dict) -> str:
+        try:
+            raw = tel.get("action_requests")
+            if isinstance(raw, list) and raw:
+                parts: list[str] = []
+                for r in raw:
+                    if not isinstance(r, dict):
+                        continue
+                    kind = clip(r.get("kind", ""), 40)
+                    value = clip(r.get("value", ""), 60)
+                    committed = bool(r.get("committed", False))
+                    note = str(r.get("note", "") or "").strip().lower()
+                    star = "*" if committed or note == "committed" else ""
+                    if kind or value:
+                        parts.append(f"{kind}:{value}{star}" if kind else f"{value}{star}")
+                s = ";".join(parts)
+                if s:
+                    return s
+        except Exception:
+            pass
+
+        # Legacy fallback
+        try:
+            return clip(tel.get("action_request", ""), 200)
+        except Exception:
+            return ""
+
     put(f"Replay: {json_path.name}", 25)
     res = payload.get("resolution")
     put(f"Resolution: {res}", 50)
     tel = payload.get("telemetry", {})
+    if not isinstance(tel, dict):
+        tel = {}
     put(
         "Telemetry: "
         + f"hp_pct={tel.get('hp_pct')} mp_pct={tel.get('mp_pct')} low_hp={tel.get('low_hp')} low_mp={tel.get('low_mp')}",
@@ -77,6 +116,17 @@ def main() -> int:
         f"Target={tel.get('target','')}  Reco={tel.get('recommendation','')}  Cavebot={tel.get('cavebot_next','')}",
         100,
     )
+
+    act = fmt_actions(tel)
+    if act:
+        committed = tel.get("action_committed", None)
+        committed_s = "committed" if bool(committed) else "preview"
+        src = clip(tel.get("action_source", ""), 60)
+        src_s = f"  planner={src}" if src else ""
+        put(f"Actions ({committed_s}): {clip(act, 200)}{src_s}", 125)
+    ip = clip(tel.get("input_plan", ""), 180)
+    if ip:
+        put(f"Inputs: {ip}", 150)
 
     # Tiles
     for idx, (name, img) in enumerate(tiles):

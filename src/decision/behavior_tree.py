@@ -466,10 +466,10 @@ class BehaviorTreeRunner:
             EnsureSafe(),
             HealIfNeeded(),
             AcquireTargetFromBattlelist(),
-            _PlanBeepOnTargetChange(),
             NavigateToWaypoint(),
             _PlanWaypointAction(),
             _PlanFood(),
+            _PlanBeepOnTargetChange(),
         ])
         self.tree = py_trees.trees.BehaviourTree(root)
         self.bb = py_trees.blackboard.Blackboard()

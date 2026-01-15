@@ -51,6 +51,44 @@ def test_bt_healing_move_waypoint_food() -> None:
     assert any(r.kind == "maintenance" and r.value == "eat_food" for r in reqs)
 
 
+def test_bt_priority_heal_then_target_then_move(monkeypatch) -> None:
+    monkeypatch.setenv("BT_BEEP_ON_TARGET", "0")
+
+    bt = BehaviorTreeRunner()
+
+    sig = SignalResult(
+        hp_current=100,
+        hp_max=200,
+        hp_pct=50.0,
+        mp_current=50,
+        mp_max=100,
+        mp_pct=50.0,
+        low_hp=True,
+        low_mp=False,
+        paralyzed=None,
+        haste_active=None,
+        utamo_active=None,
+        hungry=None,
+        healing_trigger=True,
+    )
+
+    heal_cfg = HealingConfig(enabled=True, hp_below_pct=70, mp_below_pct=30, action="exura")
+
+    reqs = bt.tick(
+        sig=sig,
+        healing_cfg=heal_cfg,
+        target_cls="orc",
+        target_conf=0.9,
+        cavebot_next="north",
+        cavebot_action="loot;rope",
+        commit_flag=True,
+        eat_food=True,
+    )
+
+    kinds = [r.kind for r in reqs]
+    assert kinds[:3] == ["heal", "target", "move"]
+
+
 def test_bt_disabled_conditions_produce_no_actions() -> None:
     bt = BehaviorTreeRunner()
 

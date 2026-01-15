@@ -3,6 +3,7 @@ import ctypes
 
 # WinAPI constants
 KEYEVENTF_SCANCODE = 0x0008
+KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
 INPUT_KEYBOARD = 1
 
@@ -65,6 +66,20 @@ SCANCODES = {
     "F10": 0x44,
     "F11": 0x57,
     "F12": 0x58,
+
+    # Arrow keys (extended)
+    "UP": 0x48,
+    "DOWN": 0x50,
+    "LEFT": 0x4B,
+    "RIGHT": 0x4D,
+}
+
+
+EXTENDED_KEYS = {
+    "UP",
+    "DOWN",
+    "LEFT",
+    "RIGHT",
 }
 
 class KEYBDINPUT(ctypes.Structure):
@@ -89,18 +104,20 @@ class KeyboardSender:
     def __init__(self) -> None:
         self._send_input = ctypes.windll.user32.SendInput
 
-    def _send_key(self, scan: int, flags: int) -> None:
+    def _send_key(self, scan: int, flags: int, *, extended: bool = False) -> None:
+        if extended:
+            flags = int(flags) | KEYEVENTF_EXTENDEDKEY
         ki = KEYBDINPUT(0, scan, flags, 0, None)
         inp = INPUT(INPUT_KEYBOARD, ki)
         self._send_input(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
     def press(self, key: str) -> None:
         scan = SCANCODES[key]
-        self._send_key(scan, KEYEVENTF_SCANCODE)
+        self._send_key(scan, KEYEVENTF_SCANCODE, extended=(key in EXTENDED_KEYS))
 
     def release(self, key: str) -> None:
         scan = SCANCODES[key]
-        self._send_key(scan, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP)
+        self._send_key(scan, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, extended=(key in EXTENDED_KEYS))
 
     def tap(self, key: str, hold_s: float = 0.05) -> None:
         self.press(key)

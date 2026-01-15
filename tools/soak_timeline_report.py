@@ -142,6 +142,46 @@ def _h(v: Any) -> str:
         return ""
 
 
+def _pick_action_requests(ev: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = ev.get("action_requests")
+    if isinstance(raw, list) and raw:
+        out: list[dict[str, Any]] = []
+        for x in raw:
+            if isinstance(x, dict):
+                out.append(dict(x))
+        if out:
+            return out
+
+    tel = ev.get("telemetry")
+    if isinstance(tel, dict):
+        raw2 = tel.get("action_requests")
+        if isinstance(raw2, list) and raw2:
+            out2: list[dict[str, Any]] = []
+            for x in raw2:
+                if isinstance(x, dict):
+                    out2.append(dict(x))
+            if out2:
+                return out2
+
+    return []
+
+
+def _fmt_action_requests(reqs: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for r in reqs:
+        try:
+            kind = str(r.get("kind", "") or "").strip()
+            value = str(r.get("value", "") or "").strip()
+            committed = bool(r.get("committed", False))
+            note = str(r.get("note", "") or "").strip().lower()
+            star = "*" if committed or note == "committed" else ""
+            if kind or value:
+                parts.append(f"{kind}:{value}{star}" if kind else f"{value}{star}")
+        except Exception:
+            continue
+    return ";".join(parts)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate an HTML timeline from soak artifacts (JSONL + replay + overlay).")
     ap.add_argument("--jsonl", default="", help="Path to telemetry JSONL (defaults to latest soak JSONL).")
@@ -173,7 +213,7 @@ def main() -> int:
     ap.add_argument(
         "--grep-action",
         default="",
-        help="Case-insensitive substring filter applied to action_request.",
+        help="Case-insensitive substring filter applied to action_requests (preferred) or action_request.",
     )
     args = ap.parse_args()
 
@@ -242,6 +282,11 @@ def main() -> int:
             ar = str(ev.get("action_request", "") or "")
         except Exception:
             ar = ""
+
+        reqs = _pick_action_requests(ev)
+        reqs_s = _fmt_action_requests(reqs)
+        # Normalized action text used for filtering/stats.
+        action_text = reqs_s or ar
         try:
             ac = bool(ev.get("action_committed", False))
         except Exception:
@@ -249,10 +294,13 @@ def main() -> int:
 
         if args.only_committed and not ac:
             continue
-        if args.only_action_events and not (kind == "event.action_request" or bool(ar)):
+        if args.only_action_events and not (kind == "event.action_request" or bool(action_text)):
             continue
-        if grep_action and (grep_action not in ar.lower()):
+        if grep_action and (grep_action not in action_text.lower()):
             continue
+
+        # Preserve original + add structured column for HTML.
+        ev["action_requests"] = reqs_s
 
         rows.append(ev)
 
@@ -278,10 +326,12 @@ def main() -> int:
             pass
         try:
             ar = str(ev.get("action_request", "") or "").strip()
-            if ar:
-                action_req_counter[ar] += 1
+            ars = str(ev.get("action_requests", "") or "").strip()
+            key = ars or ar
+            if key:
+                action_req_counter[key] += 1
                 if bool(ev.get("action_committed", False)):
-                    committed_action_req_counter[ar] += 1
+                    committed_action_req_counter[key] += 1
         except Exception:
             pass
         try:
@@ -336,14 +386,14 @@ def main() -> int:
 </div>
 
 <details>
-  <summary class='mono'>Top action_request (frequency)</summary>
+    <summary class='mono'>Top actions (frequency)</summary>
   <div class='mono'>
     {'<br/>'.join(_h(f'{k}  ×{v}') for k, v in _top(action_req_counter)) or '<span class="muted">(none)</span>'}
   </div>
 </details>
 
 <details>
-  <summary class='mono'>Top committed action_request</summary>
+    <summary class='mono'>Top committed actions</summary>
   <div class='mono'>
     {'<br/>'.join(_h(f'{k}  ×{v}') for k, v in _top(committed_action_req_counter)) or '<span class="muted">(none)</span>'}
   </div>
@@ -353,6 +403,7 @@ def main() -> int:
     cols = [
         "ts",
         "kind",
+        "action_requests",
         "action_request",
         "action_committed",
         "action_ts",

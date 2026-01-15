@@ -21,6 +21,11 @@ class WaypointStep:
     name: str = ""
     params: Dict[str, Any] = field(default_factory=dict)
     comment: str = ""
+    # Original source line (sans leading comment marker when disabled).
+    # Used for roundtrip stability and debugging.
+    raw_line: str = ""
+    # Preserve unknown fields when converting from richer route items.
+    extras: Dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
 
 

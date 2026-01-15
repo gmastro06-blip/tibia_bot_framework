@@ -30,7 +30,54 @@ def _fmt_ts(ts: Any) -> str:
         return "-"
 
 
+def _pick_action_requests(ev: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = ev.get("action_requests")
+    if isinstance(raw, list) and raw:
+        out: List[Dict[str, Any]] = []
+        for x in raw:
+            if isinstance(x, dict):
+                out.append(dict(x))
+        if out:
+            return out
+
+    tel = ev.get("telemetry")
+    if isinstance(tel, dict):
+        raw2 = tel.get("action_requests")
+        if isinstance(raw2, list) and raw2:
+            out2: List[Dict[str, Any]] = []
+            for x in raw2:
+                if isinstance(x, dict):
+                    out2.append(dict(x))
+            if out2:
+                return out2
+
+    return []
+
+
+def _fmt_action_requests(reqs: List[Dict[str, Any]]) -> str:
+    parts: List[str] = []
+    for r in reqs:
+        try:
+            kind = str(r.get("kind", "") or "").strip()
+            value = str(r.get("value", "") or "").strip()
+            committed = bool(r.get("committed", False))
+            note = str(r.get("note", "") or "").strip().lower()
+            star = "*" if committed or note == "committed" else ""
+            if kind or value:
+                parts.append(f"{kind}:{value}{star}" if kind else f"{value}{star}")
+        except Exception:
+            continue
+    return ";".join(parts)
+
+
 def _pick_action_str(ev: Dict[str, Any]) -> str:
+    # Prefer structured list (no parsing).
+    reqs = _pick_action_requests(ev)
+    if reqs:
+        s = _fmt_action_requests(reqs)
+        if s:
+            return s
+
     # Prefer explicit event payload.
     ar = ev.get("action_request")
     if isinstance(ar, str) and ar.strip():
@@ -69,7 +116,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument(
         "--include-telemetry",
         action="store_true",
-        help="Also include kind='telemetry' lines when they have a non-empty action_request.",
+        help="Also include kind='telemetry' lines when they have non-empty action_requests/action_request.",
     )
 
     args = p.parse_args(argv)

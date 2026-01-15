@@ -28,7 +28,8 @@ def parse_waypoints(text: str) -> WaypointParseResult:
     errors: List[str] = []
 
     for idx, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
+        original_raw = str(raw_line)
+        line = original_raw.strip()
         if not line:
             continue
         enabled = True
@@ -52,7 +53,7 @@ def parse_waypoints(text: str) -> WaypointParseResult:
             if not rest:
                 errors.append(f"L{idx}: falta nombre para {cmd}")
                 continue
-            steps.append(WaypointStep(kind=cmd, name=rest, enabled=enabled))
+            steps.append(WaypointStep(kind=cmd, name=rest, enabled=enabled, raw_line=line))
             continue
 
         if cmd == "cond":
@@ -67,6 +68,7 @@ def parse_waypoints(text: str) -> WaypointParseResult:
                     name=var_name,
                     params={"label_true": label_true, "label_false": label_false},
                     enabled=enabled,
+                    raw_line=line,
                 )
             )
             continue
@@ -78,7 +80,7 @@ def parse_waypoints(text: str) -> WaypointParseResult:
         x = int(coord_match.group("x"))
         y = int(coord_match.group("y"))
         z = int(coord_match.group("z"))
-        steps.append(WaypointStep(kind=cmd, x=x, y=y, z=z, enabled=enabled))
+        steps.append(WaypointStep(kind=cmd, x=x, y=y, z=z, enabled=enabled, raw_line=line))
 
     return WaypointParseResult(steps=steps, errors=errors)
 

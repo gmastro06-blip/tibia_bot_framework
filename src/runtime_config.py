@@ -5,6 +5,70 @@ import threading
 import time
 
 
+def compute_injection_state(
+    *,
+    input_mode: str,
+    driver_name: str,
+    injection_enabled: bool,
+    disabled_reason: str,
+    live_input_armed: bool,
+    target_window_active: bool,
+    gating_enabled: bool,
+    advance_pulse_pending: bool,
+    has_injectable_action: bool,
+) -> tuple[str, str]:
+    """Compute assistant injection state + reason.
+
+    This is UI/telemetry-facing only (assistant-first design).
+    It does NOT enable any OS injection; it only reports why actions won't run.
+    """
+
+    try:
+        mode = str(input_mode or "").strip().lower() or "log"
+    except Exception:
+        mode = "log"
+    try:
+        drv = str(driver_name or "").strip() or ""
+    except Exception:
+        drv = ""
+    try:
+        dis = str(disabled_reason or "").strip()
+    except Exception:
+        dis = ""
+
+    if dis:
+        return "DISABLED", "fail_closed"
+
+    if mode == "log":
+        return "DISABLED", "input_mode=log"
+    if mode == "mock":
+        return "DISABLED", "input_mode=mock"
+    if mode not in {"keyboard", "wininput"}:
+        return "DISABLED", f"input_mode={mode or 'log'}"
+
+    # Live input is always opt-in (armed) and window-scoped.
+    if not bool(live_input_armed):
+        return "DISABLED", "not_armed"
+    if not bool(injection_enabled):
+        # Even if UI asked for keyboard, the runtime driver may still be mock.
+        return "DISABLED", "driver=mock"
+    if not bool(target_window_active):
+        return "DISABLED", "wrong_window"
+
+    if not bool(has_injectable_action):
+        return "DISABLED", "no_action"
+
+    if bool(advance_pulse_pending):
+        return "ARMED", "advance_pulse_pending"
+
+    # For safety, when live input is armed we require a human pulse even if
+    # the UI toggled gating off.
+    effective_gating = bool(gating_enabled) or bool(live_input_armed)
+    if bool(effective_gating):
+        return "WAITING_CONFIRM", "no_committed_pulse"
+    return "DISABLED", "no_committed_pulse"
+
+
 @dataclass
 class HealingConfig:
     enabled: bool = False
@@ -49,7 +113,11 @@ class AssistantConfig:
     enabled: bool = True
     confirm_actions: bool = True
     sound_alerts: bool = True
-    input_mode: str = "log"  # "log"|"keyboard"
+    input_mode: str = "log"  # "log"|"mock"|"keyboard"
+    # Double opt-in for OS input injection.
+    live_input_armed: bool = False
+    # Only inject if the foreground window title matches one of these.
+    allowed_window_titles: list[str] = field(default_factory=lambda: ["TibiaClone", "MyClient"])
     target_hotkey: str = ""
     minimap_hotkey: str = ""
 
@@ -145,7 +213,12 @@ class TelemetrySnapshot:
     nav_astar_visited: int | None = None
     # What the bot would do (assistant mode): serialized mock action(s)
     action_request: str = ""
+    # Structured action list (assistant mode): avoids parsing the serialized string.
+    # Each entry is expected to be JSON-serializable (kind/value/note/committed).
+    action_requests: list[dict[str, object]] = field(default_factory=list)
     action_committed: bool = False
+    # Which planner produced the action(s): "bt"|"fallback_exception"|"fallback_empty"|"fallback_disabled"|""
+    action_source: str = ""
     # Log-only: planned inputs (keys/hotkeys/macros) derived from ActionRequest(s)
     input_plan: str = ""
     # Texto amigable opcional
@@ -155,6 +228,31 @@ class TelemetrySnapshot:
     stuck_idle_s: float | None = None
     stuck_blockers: int | None = None
     stuck_extra: str = ""
+
+    # Input injection status (UI/JSONL observability)
+    injection_state: str = ""  # "ARMED"|"DISABLED"|"WAITING_CONFIRM"
+    injection_reason: str = ""  # wrong_window|not_armed|input_mode=log|fail_closed|no_committed_pulse|driver=mock
+
+
+@dataclass
+class AssistantStatus:
+    """Thread-safe assistant status for UI/overlay.
+
+    Goal: make it obvious why an action does (or doesn't) execute.
+    """
+
+    ts: float = 0.0
+    cavebot_mode: str = ""
+    step_index: int | None = None
+    total_steps: int | None = None
+    current_label: str = ""
+    next_step_text: str = ""
+    injection_state: str = "DISABLED"  # "ARMED"|"WAITING_CONFIRM"|"DISABLED"
+    injection_reason: str = ""
+    input_mode: str = ""  # UI-requested mode: "log"|"keyboard"|"wininput"
+    driver_name: str = ""  # actual driver in use (runtime)
+    gating_enabled: bool = False
+    advance_pulse_pending: bool = False
 
 
 @dataclass
@@ -203,6 +301,7 @@ class RuntimeConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
     health: HealthSnapshot = field(default_factory=HealthSnapshot)
+    assistant_status: AssistantStatus = field(default_factory=AssistantStatus)
     _advance_counter: int = field(default=0, init=False, repr=False)
     _replay_force_counter: int = field(default=0, init=False, repr=False)
     _step_jump_counter: int = field(default=0, init=False, repr=False)
@@ -255,6 +354,14 @@ class RuntimeConfig:
                     cps = dict(getattr(self.telemetry, "coords_provider_state") or {})
             except Exception:
                 cps = None
+
+            ars: list[dict[str, object]] = []
+            try:
+                raw = getattr(self.telemetry, "action_requests", None)
+                if isinstance(raw, list):
+                    ars = [dict(x) for x in raw if isinstance(x, dict)]
+            except Exception:
+                ars = []
             return TelemetrySnapshot(
                 ts=float(self.telemetry.ts),
                 hp_current=self.telemetry.hp_current,
@@ -318,13 +425,17 @@ class RuntimeConfig:
                 nav_astar_path_len=getattr(self.telemetry, "nav_astar_path_len", None),
                 nav_astar_visited=getattr(self.telemetry, "nav_astar_visited", None),
                 action_request=str(self.telemetry.action_request),
+                action_requests=ars,
                 action_committed=bool(self.telemetry.action_committed),
+                action_source=str(getattr(self.telemetry, "action_source", "")),
                 input_plan=str(getattr(self.telemetry, "input_plan", "")),
                 note=str(self.telemetry.note),
                 stuck_reason=str(getattr(self.telemetry, "stuck_reason", "")),
                 stuck_idle_s=getattr(self.telemetry, "stuck_idle_s", None),
                 stuck_blockers=getattr(self.telemetry, "stuck_blockers", None),
                 stuck_extra=str(getattr(self.telemetry, "stuck_extra", "")),
+                injection_state=str(getattr(self.telemetry, "injection_state", "") or ""),
+                injection_reason=str(getattr(self.telemetry, "injection_reason", "") or ""),
             )
 
     def health_snapshot(self) -> HealthSnapshot:
@@ -354,6 +465,61 @@ class RuntimeConfig:
                 warn=str(self.health.warn),
             )
 
+    def assistant_status_snapshot(self) -> AssistantStatus:
+        with self._lock:
+            return AssistantStatus(
+                ts=float(getattr(self.assistant_status, "ts", 0.0) or 0.0),
+                cavebot_mode=str(getattr(self.assistant_status, "cavebot_mode", "") or ""),
+                step_index=getattr(self.assistant_status, "step_index", None),
+                total_steps=getattr(self.assistant_status, "total_steps", None),
+                current_label=str(getattr(self.assistant_status, "current_label", "") or ""),
+                next_step_text=str(getattr(self.assistant_status, "next_step_text", "") or ""),
+                injection_state=str(getattr(self.assistant_status, "injection_state", "DISABLED") or "DISABLED"),
+                injection_reason=str(getattr(self.assistant_status, "injection_reason", "") or ""),
+                input_mode=str(getattr(self.assistant_status, "input_mode", "") or ""),
+                driver_name=str(getattr(self.assistant_status, "driver_name", "") or ""),
+                gating_enabled=bool(getattr(self.assistant_status, "gating_enabled", False)),
+                advance_pulse_pending=bool(getattr(self.assistant_status, "advance_pulse_pending", False)),
+            )
+
+    def update_assistant_status(
+        self,
+        *,
+        cavebot_mode: str | None = None,
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        current_label: str | None = None,
+        next_step_text: str | None = None,
+        injection_state: str | None = None,
+        injection_reason: str | None = None,
+        input_mode: str | None = None,
+        driver_name: str | None = None,
+        gating_enabled: bool | None = None,
+        advance_pulse_pending: bool | None = None,
+    ) -> None:
+        with self._lock:
+            self.assistant_status.ts = float(time.time())
+            if cavebot_mode is not None:
+                self.assistant_status.cavebot_mode = str(cavebot_mode)
+            self.assistant_status.step_index = step_index
+            self.assistant_status.total_steps = total_steps
+            if current_label is not None:
+                self.assistant_status.current_label = str(current_label)
+            if next_step_text is not None:
+                self.assistant_status.next_step_text = str(next_step_text)
+            if injection_state is not None:
+                self.assistant_status.injection_state = str(injection_state)
+            if injection_reason is not None:
+                self.assistant_status.injection_reason = str(injection_reason)
+            if input_mode is not None:
+                self.assistant_status.input_mode = str(input_mode)
+            if driver_name is not None:
+                self.assistant_status.driver_name = str(driver_name)
+            if gating_enabled is not None:
+                self.assistant_status.gating_enabled = bool(gating_enabled)
+            if advance_pulse_pending is not None:
+                self.assistant_status.advance_pulse_pending = bool(advance_pulse_pending)
+
     def assistant_snapshot(self) -> AssistantConfig:
         with self._lock:
             return AssistantConfig(
@@ -361,6 +527,8 @@ class RuntimeConfig:
                 confirm_actions=bool(self.assistant.confirm_actions),
                 sound_alerts=bool(self.assistant.sound_alerts),
                 input_mode=str(getattr(self.assistant, "input_mode", "log") or "log"),
+                live_input_armed=bool(getattr(self.assistant, "live_input_armed", False)),
+                allowed_window_titles=list(getattr(self.assistant, "allowed_window_titles", None) or ["TibiaClone", "MyClient"]),
                 target_hotkey=str(getattr(self.assistant, "target_hotkey", "")),
                 minimap_hotkey=str(getattr(self.assistant, "minimap_hotkey", "")),
             )
@@ -475,6 +643,8 @@ class RuntimeConfig:
         confirm_actions: bool | None = None,
         sound_alerts: bool | None = None,
         input_mode: str | None = None,
+        live_input_armed: bool | None = None,
+        allowed_window_titles: list[str] | None = None,
         target_hotkey: str | None = None,
         minimap_hotkey: str | None = None,
     ) -> None:
@@ -487,9 +657,22 @@ class RuntimeConfig:
                 self.assistant.sound_alerts = bool(sound_alerts)
             if input_mode is not None:
                 mode = str(input_mode).strip().lower()
-                if mode not in {"keyboard", "wininput", "log"}:
+                if mode == "wininput":
+                    mode = "keyboard"
+                if mode not in {"keyboard", "mock", "log"}:
                     mode = "log"
                 self.assistant.input_mode = mode
+            if live_input_armed is not None:
+                self.assistant.live_input_armed = bool(live_input_armed)
+            if allowed_window_titles is not None:
+                # Normalize + keep order.
+                out: list[str] = []
+                for t in list(allowed_window_titles or []):
+                    s = str(t).strip()
+                    if not s:
+                        continue
+                    out.append(s)
+                self.assistant.allowed_window_titles = out
             if target_hotkey is not None:
                 self.assistant.target_hotkey = str(target_hotkey)
             if minimap_hotkey is not None:
@@ -635,13 +818,17 @@ class RuntimeConfig:
         nav_astar_path_len: int | None = None,
         nav_astar_visited: int | None = None,
         action_request: str | None = None,
+        action_requests: list[dict[str, object]] | None = None,
         action_committed: bool | None = None,
+        action_source: str | None = None,
         input_plan: str | None = None,
         note: str | None = None,
         stuck_reason: str | None = None,
         stuck_idle_s: float | None = None,
         stuck_blockers: int | None = None,
         stuck_extra: str | None = None,
+        injection_state: str | None = None,
+        injection_reason: str | None = None,
     ) -> None:
         with self._lock:
             self.telemetry.ts = time.time()
@@ -829,8 +1016,17 @@ class RuntimeConfig:
                     self.telemetry.nav_astar_visited = None
             if action_request is not None:
                 self.telemetry.action_request = str(action_request)
+            if action_requests is not None:
+                try:
+                    self.telemetry.action_requests = [
+                        dict(x) for x in list(action_requests) if isinstance(x, dict)
+                    ]
+                except Exception:
+                    self.telemetry.action_requests = []
             if action_committed is not None:
                 self.telemetry.action_committed = bool(action_committed)
+            if action_source is not None:
+                self.telemetry.action_source = str(action_source)
             if input_plan is not None:
                 self.telemetry.input_plan = str(input_plan)
             if note is not None:
@@ -849,6 +1045,11 @@ class RuntimeConfig:
                     self.telemetry.stuck_blockers = None
             if stuck_extra is not None:
                 self.telemetry.stuck_extra = str(stuck_extra)
+
+            if injection_state is not None:
+                self.telemetry.injection_state = str(injection_state)
+            if injection_reason is not None:
+                self.telemetry.injection_reason = str(injection_reason)
 
     def update_health(
         self,

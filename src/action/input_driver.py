@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import List, Optional, Protocol
 
 from action.keyboard import KeyboardSender, SCANCODES
@@ -113,7 +114,19 @@ class WindowsKeyboardDriver:
             return self._tap_hotkey(self.target_hotkey)
 
         if kind == "move":
-            dir_map = {"north": "w", "south": "s", "east": "d", "west": "a"}
+            def _mv(name: str, default: str) -> str:
+                try:
+                    return (os.getenv(name, default) or default).strip().upper()
+                except Exception:
+                    return str(default).strip().upper()
+
+            # Defaults match Tibia's common movement bindings (arrow keys).
+            dir_map = {
+                "north": _mv("ASSIST_MOVE_NORTH", "UP"),
+                "south": _mv("ASSIST_MOVE_SOUTH", "DOWN"),
+                "west": _mv("ASSIST_MOVE_WEST", "LEFT"),
+                "east": _mv("ASSIST_MOVE_EAST", "RIGHT"),
+            }
             mapped = dir_map.get(val.lower())
             if mapped:
                 return self._tap_hotkey(mapped)

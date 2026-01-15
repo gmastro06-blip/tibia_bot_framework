@@ -117,8 +117,10 @@ class BotUI:
         self._last_event_reco: str = ""
         self._last_event_action_req: str = ""
         self._last_event_action_committed: bool | None = None
+        self._last_event_action_source: str = ""
         self._last_event_input_plan: str = ""
         self._latest_input_plan: str = ""
+        self._latest_action_requests_display: str = ""
         self._last_event_wp: str = ""
         self._last_event_wp_action: str = ""
         self._last_event_health_status: str = ""
@@ -157,7 +159,15 @@ class BotUI:
         self.heal_cooldown_s = tk.DoubleVar(value=1.0)
 
         self.cavebot_enabled = tk.BooleanVar(value=False)
-        self.cavebot_route_path = tk.StringVar(value="configs/route.json")
+        # Prefer scripts-master sample route when present.
+        try:
+            cand = self._repo_root / "scripts-master" / "wasp_ab" / "waypoints.in"
+            if cand.is_file():
+                self.cavebot_route_path = tk.StringVar(value=str(cand))
+            else:
+                self.cavebot_route_path = tk.StringVar(value="configs/route.json")
+        except Exception:
+            self.cavebot_route_path = tk.StringVar(value="configs/route.json")
         # Cavebot execution mode (applied via env vars at bot start)
         try:
             _cb_mode_default = (os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
@@ -267,6 +277,14 @@ class BotUI:
 
         self.cavebot_step_text = tk.StringVar(value="-")
 
+        # Injection status (assistant-only observability; reflects why actions won't execute).
+        self.injection_step_var = tk.StringVar(value="-")
+        self.injection_label_var = tk.StringVar(value="-")
+        self.injection_next_var = tk.StringVar(value="-")
+        self.injection_state_var = tk.StringVar(value="-")
+        self.injection_reason_var = tk.StringVar(value="-")
+        self.injection_mode_driver_var = tk.StringVar(value="-")
+
         # Simulacion/overrides de senales (para cuando aun no hay deteccion real)
         self.sim_enabled = tk.BooleanVar(value=True)
         self.sim_paralyzed = tk.BooleanVar(value=False)
@@ -283,9 +301,28 @@ class BotUI:
             _action_driver = os.getenv("ACTION_DRIVER", "log").strip().lower() or "log"
         except Exception:
             _action_driver = "log"
-        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "keyboard", "wininput"} else "log")
+        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "mock", "keyboard", "wininput"} else "log")
         self.asst_target_hotkey = tk.StringVar(value=os.getenv("TARGET_HOTKEY", "").strip())
         self.asst_minimap_hotkey = tk.StringVar(value=os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
+
+        # Live input mode (OS injection) must be explicitly armed.
+        _asst_titles = ["TibiaClone", "MyClient"]
+        _asst_armed = False
+        try:
+            _asst_cfg = self._config.assistant_snapshot()
+            try:
+                _asst_titles = list(getattr(_asst_cfg, "allowed_window_titles", None) or _asst_titles)
+            except Exception:
+                _asst_titles = _asst_titles
+            try:
+                _asst_armed = bool(getattr(_asst_cfg, "live_input_armed", False))
+            except Exception:
+                _asst_armed = False
+        except Exception:
+            pass
+
+        self.asst_live_input_armed = tk.BooleanVar(value=bool(_asst_armed))
+        self.asst_allowed_window_titles = tk.StringVar(value=",".join([str(x).strip() for x in _asst_titles if str(x).strip()]))
 
         # Idle alert (anti-stuck, sin inputs). Se aplica al iniciar el bot via env vars.
         try:
@@ -486,6 +523,8 @@ class BotUI:
             # Prefer planned inputs; fall back to action_request.
             txt = str(getattr(self, "_latest_input_plan", "") or "").strip()
             if not txt:
+                txt = str(getattr(self, "_latest_action_requests_display", "") or "").strip()
+            if not txt:
                 txt = str(getattr(self, "_last_event_action_req", "") or "").strip()
             if not txt:
                 try:
@@ -508,12 +547,19 @@ class BotUI:
             row=4, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_control, text="Inputs:").grid(row=4, column=2, sticky="w", pady=(6, 0))
-        tk.Label(tab_control, textvariable=self.input_plan_text, width=52, anchor="w").grid(
-            row=4, column=3, sticky="w", pady=(6, 0)
+        tk.Label(tab_control, text="Inputs / Actions:").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Label(
+            tab_control,
+            textvariable=self.input_plan_text,
+            width=52,
+            anchor="nw",
+            justify="left",
+            font=("Consolas", 9),
+        ).grid(
+            row=4, column=3, sticky="w", pady=(6, 2)
         )
 
-        self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none")
+        self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none", font=("Consolas", 9))
         try:
             self._events_text.configure(state="disabled")
         except Exception:
@@ -1057,10 +1103,13 @@ class BotUI:
             try:
                 from tkinter import filedialog
 
+                base = Path(__file__).resolve().parent / "scripts-master"
+                if not base.is_dir():
+                    base = Path(__file__).resolve().parent / "configs"
                 path = filedialog.askopenfilename(
                     title="Selecciona ruta/script JSON",
-                    initialdir=str((Path(__file__).resolve().parent / "configs")),
-                    filetypes=[("JSON", "*.json"), ("All files", "*")],
+                    initialdir=str(base),
+                    filetypes=[("Routes", "*.in *.json"), ("waypoints", "waypoints.in"), ("JSON", "*.json"), ("All files", "*")],
                 )
                 if path:
                     self.cavebot_route_path.set(path)
@@ -1197,12 +1246,27 @@ class BotUI:
         self._cavebot_next_btn = tk.Button(cb_right, text="Siguiente accion", width=14, command=request_advance)
         self._cavebot_next_btn.grid(row=4, column=1, sticky="w", pady=(10, 0))
 
+        inj = tk.LabelFrame(cb_right, text="Injection Status", padx=8, pady=6)
+        inj.grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        tk.Label(inj, text="STEP").grid(row=0, column=0, sticky="w")
+        tk.Label(inj, textvariable=self.injection_step_var, width=34, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(inj, text="LABEL").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_label_var, width=34, anchor="w").grid(row=1, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="NEXT").grid(row=2, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_next_var, width=34, anchor="w").grid(row=2, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="STATE").grid(row=3, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_state_var, width=34, anchor="w").grid(row=3, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="REASON").grid(row=4, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_reason_var, width=34, anchor="w").grid(row=4, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="MODE/DRIVER").grid(row=5, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_mode_driver_var, width=34, anchor="w").grid(row=5, column=1, sticky="w", pady=(2, 0))
+
         cb_block = tk.Frame(tab_cavebot)
         cb_block.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
         tk.Label(
             cb_block,
-            text="(Only logs: genera ActionRequest + input_plan; no inyecta inputs)",
+            text="(Default: solo logs. Live input solo si esta ARMED + ventana allowlisted + accion COMMITTED)",
         ).grid(row=0, column=0, columnspan=8, sticky="w")
 
         # Stop conditions
@@ -1437,7 +1501,7 @@ class BotUI:
         )
 
         tk.Label(cfg_right, text="Modo de inputs").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "keyboard", "wininput").grid(
+        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "mock", "keyboard", "wininput").grid(
             row=3, column=1, sticky="w", pady=(6, 0)
         )
 
@@ -1451,7 +1515,90 @@ class BotUI:
             row=5, column=1, sticky="w", pady=(4, 0)
         )
 
-        tk.Label(cfg_right, text="").grid(row=6, column=0, pady=(6, 0))
+        # Live input guardrails (must not shift the rest of the layout).
+        live_frame = tk.LabelFrame(cfg_right, text="Live input safety", padx=8, pady=6)
+        live_frame.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        def _confirm_arm_live() -> None:
+            try:
+                if not bool(self.asst_live_input_armed.get()):
+                    return
+
+                msg = (
+                    "Vas a ARMAR live input (inyeccion real de teclas en Windows).\n\n"
+                    "Reglas de seguridad:\n"
+                    "- Solo ejecuta acciones COMMITTED (no preview).\n"
+                    "- Requiere un pulso humano (boton 'Siguiente accion').\n"
+                    "- Solo envia teclas si la ventana activa coincide con los titulos permitidos.\n\n"
+                    "Continuar?"
+                )
+                ok = bool(self._messagebox.askyesno("Arm live input", msg))
+                if not ok:
+                    self.asst_live_input_armed.set(False)
+                    return
+
+                # Ensure we are in keyboard mode when arming.
+                try:
+                    m = str(self.asst_input_mode.get() or "log").strip().lower()
+                except Exception:
+                    m = "log"
+                if m not in {"keyboard", "wininput"}:
+                    self.asst_input_mode.set("keyboard")
+            except Exception:
+                try:
+                    self.asst_live_input_armed.set(False)
+                except Exception:
+                    pass
+
+        tk.Checkbutton(
+            live_frame,
+            text="ARM live input (I understand)",
+            variable=self.asst_live_input_armed,
+            command=_confirm_arm_live,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+
+        tk.Label(live_frame, text="Allowed window titles (comma)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(live_frame, textvariable=self.asst_allowed_window_titles, width=34).grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
+        )
+
+        tk.Label(
+            live_frame,
+            text="Tip: usa 'TibiaClone Harness' para pruebas controladas",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        def open_live_input_harness() -> None:
+            try:
+                # Convenience: ensure the harness title is allowlisted.
+                # This does NOT arm live input; it only updates the allowlist.
+                try:
+                    harness_title = "TibiaClone Harness"
+                    raw = str(self.asst_allowed_window_titles.get() or "")
+                    titles = [s.strip() for s in raw.split(",") if s.strip()]
+                    if harness_title not in titles:
+                        titles.append(harness_title)
+                        self.asst_allowed_window_titles.set(", ".join(titles))
+                except Exception:
+                    pass
+
+                script = self._repo_root / "tools" / "live_input_harness.py"
+                if not script.is_file():
+                    self._messagebox.showerror("Harness", f"No existe: {script}")
+                    return
+                # Use the current interpreter (Poetry/venv) so Tk deps match.
+                subprocess.Popen(
+                    [sys.executable, str(script), "--title", "TibiaClone Harness"],
+                    cwd=str(self._repo_root),
+                )
+            except Exception as e:
+                try:
+                    self._messagebox.showerror("Harness", f"No pude abrir el harness: {e}")
+                except Exception:
+                    pass
+
+        tk.Button(live_frame, text="Abrir harness", width=14, command=open_live_input_harness).grid(
+            row=3, column=0, sticky="w", pady=(6, 0)
+        )
 
         tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
             row=7, column=0, columnspan=2, sticky="w"
@@ -1873,10 +2020,124 @@ class BotUI:
             )
 
         def sync_cavebot(*_args):
+            # Apply Cavebot config live (RuntimeConfig + env-driven knobs).
+            try:
+                mode = str(self.cavebot_mode.get() or "").strip().lower() or "steps"
+            except Exception:
+                mode = "steps"
+            if mode not in {"pos", "steps"}:
+                mode = "steps"
+
             self._config.update_cavebot(
                 enabled=bool(self.cavebot_enabled.get()),
                 route_path=str(self.cavebot_route_path.get()),
+                mode=mode,
+                # Keep explicit force_steps as an advanced knob (not exposed in UI for now).
+                force_steps=False,
             )
+
+            # Keep env vars in sync so core pieces that read os.getenv() each tick
+            # can react without restarting.
+            try:
+                os.environ["CAVEBOT_MODE"] = mode
+            except Exception:
+                pass
+            try:
+                os.environ["CAVEBOT_LOOP"] = "1" if bool(self.cavebot_loop.get()) else "0"
+            except Exception:
+                pass
+
+            # Coords provider (used by GameStateBuilder each update).
+            try:
+                cp = str(self.coords_provider.get() or "").strip().lower()
+                if not cp or cp == "auto":
+                    os.environ.pop("COORDS_PROVIDER", None)
+                else:
+                    os.environ["COORDS_PROVIDER"] = cp
+            except Exception:
+                pass
+
+            # Minimap seed + fallback (only meaningful if provider is minimap).
+            try:
+                if str(self.coords_provider.get() or "").strip().lower() == "minimap":
+                    sx = str(self.minimap_seed_x.get() or "").strip()
+                    sy = str(self.minimap_seed_y.get() or "").strip()
+                    sz = str(self.minimap_seed_z.get() or "").strip()
+                    if sx:
+                        os.environ["COORDS_SEED_X"] = sx
+                    else:
+                        os.environ.pop("COORDS_SEED_X", None)
+                    if sy:
+                        os.environ["COORDS_SEED_Y"] = sy
+                    else:
+                        os.environ.pop("COORDS_SEED_Y", None)
+                    if sz:
+                        os.environ["COORDS_SEED_Z"] = sz
+                    else:
+                        os.environ.pop("COORDS_SEED_Z", None)
+
+                    fb_mode = str(self.minimap_fallback_mode.get() or "steps").strip().lower()
+                    if fb_mode not in {"steps", "ocr"}:
+                        fb_mode = "steps"
+                    os.environ["MINIMAP_FALLBACK_MODE"] = fb_mode
+                    os.environ["MINIMAP_FALLBACK_CONF_THRESHOLD"] = str(
+                        float(self.minimap_fallback_conf_threshold.get())
+                    )
+                    os.environ["MINIMAP_FALLBACK_N_TICKS"] = str(
+                        max(1, int(self.minimap_fallback_n_ticks.get()))
+                    )
+                else:
+                    for k in [
+                        "COORDS_SEED_X",
+                        "COORDS_SEED_Y",
+                        "COORDS_SEED_Z",
+                        "MINIMAP_FALLBACK_MODE",
+                        "MINIMAP_FALLBACK_CONF_THRESHOLD",
+                        "MINIMAP_FALLBACK_N_TICKS",
+                    ]:
+                        os.environ.pop(k, None)
+            except Exception:
+                pass
+
+            # Cavebot stop conditions (assistant-only).
+            try:
+                os.environ["CAP_LEAVE_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_cap.get()) else "0"
+                os.environ["CAP_LEAVE_THRESHOLD"] = str(max(0, int(self.cavebot_cap_threshold.get())))
+            except Exception:
+                pass
+            try:
+                os.environ["POTIONS_STOP_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_potions.get()) else "0"
+                os.environ["POTIONS_MIN"] = str(max(0, int(self.cavebot_potions_min.get())))
+                os.environ["POTIONS_REMAINING"] = str(max(0, int(self.cavebot_potions_remaining.get())))
+            except Exception:
+                pass
+
+            # Recovery policy (assistant-only).
+            try:
+                os.environ["ASSIST_RECOVERY_ENABLED"] = "1" if bool(self.cavebot_recovery_enabled.get()) else "0"
+            except Exception:
+                pass
+            try:
+                idle_s = float(self.cavebot_recovery_idle_s.get())
+            except Exception:
+                idle_s = 0.0
+            try:
+                if idle_s > 0.0:
+                    os.environ["ASSIST_RECOVERY_IDLE_S"] = str(float(idle_s))
+                else:
+                    os.environ.pop("ASSIST_RECOVERY_IDLE_S", None)
+            except Exception:
+                pass
+            try:
+                os.environ["ASSIST_RECOVERY_MAX_ATTEMPTS"] = str(
+                    max(1, int(self.cavebot_recovery_max_attempts.get()))
+                )
+            except Exception:
+                pass
+            try:
+                os.environ["ASSIST_RECOVERY_STOP_ON_FAIL"] = "1" if bool(self.cavebot_recovery_stop_on_fail.get()) else "0"
+            except Exception:
+                pass
 
         def sync_simulation(*_args):
             self._config.update_simulation(
@@ -1888,6 +2149,19 @@ class BotUI:
             )
 
         def sync_assistant(*_args):
+            try:
+                mode = str(self.asst_input_mode.get() or "log").strip().lower()
+            except Exception:
+                mode = "log"
+
+            # Only allow arming when keyboard mode is selected.
+            live_armed = bool(self.asst_live_input_armed.get())
+            if mode not in {"keyboard", "wininput"}:
+                live_armed = False
+
+            titles_raw = str(self.asst_allowed_window_titles.get() or "")
+            allowed_titles = [s.strip() for s in titles_raw.split(",") if s.strip()]
+
             self._config.update_assistant(
                 enabled=bool(self.asst_enabled.get()),
                 confirm_actions=bool(self.asst_confirm.get()),
@@ -1895,6 +2169,8 @@ class BotUI:
                 input_mode=str(self.asst_input_mode.get()),
                 target_hotkey=str(self.asst_target_hotkey.get()),
                 minimap_hotkey=str(self.asst_minimap_hotkey.get()),
+                live_input_armed=bool(live_armed),
+                allowed_window_titles=list(allowed_titles),
             )
 
         def sync_replay_and_logging(*_args):
@@ -1921,11 +2197,41 @@ class BotUI:
             self.heal_cooldown_s,
         ]:
             v.trace_add("write", sync_healing)
-        for v in [self.cavebot_enabled, self.cavebot_route_path]:
+        for v in [
+            self.cavebot_enabled,
+            self.cavebot_route_path,
+            self.cavebot_mode,
+            self.cavebot_loop,
+            self.coords_provider,
+            self.minimap_seed_x,
+            self.minimap_seed_y,
+            self.minimap_seed_z,
+            self.minimap_fallback_mode,
+            self.minimap_fallback_conf_threshold,
+            self.minimap_fallback_n_ticks,
+            self.cavebot_stop_on_low_cap,
+            self.cavebot_cap_threshold,
+            self.cavebot_stop_on_low_potions,
+            self.cavebot_potions_remaining,
+            self.cavebot_potions_min,
+            self.cavebot_recovery_enabled,
+            self.cavebot_recovery_idle_s,
+            self.cavebot_recovery_max_attempts,
+            self.cavebot_recovery_stop_on_fail,
+        ]:
             v.trace_add("write", sync_cavebot)
         for v in [self.sim_enabled, self.sim_paralyzed, self.sim_haste_active, self.sim_utamo_active, self.sim_hungry]:
             v.trace_add("write", sync_simulation)
-        for v in [self.asst_enabled, self.asst_confirm, self.asst_sound, self.asst_input_mode, self.asst_target_hotkey, self.asst_minimap_hotkey]:
+        for v in [
+            self.asst_enabled,
+            self.asst_confirm,
+            self.asst_sound,
+            self.asst_input_mode,
+            self.asst_target_hotkey,
+            self.asst_minimap_hotkey,
+            self.asst_live_input_armed,
+            self.asst_allowed_window_titles,
+        ]:
             v.trace_add("write", sync_assistant)
         for v in [
             self.replay_enabled,
@@ -1948,6 +2254,28 @@ class BotUI:
             try:
                 tel = self._config.telemetry_snapshot()
                 health = self._config.health_snapshot()
+
+                # Injection/steps status (assistant-only). Fail-safe if core doesn't provide it.
+                try:
+                    st = getattr(self._config, "assistant_status_snapshot", None)
+                    if callable(st):
+                        ss = st()
+                        i = getattr(ss, "step_index", None)
+                        n = getattr(ss, "total_steps", None)
+                        if i is not None and n is not None and int(n) > 0:
+                            # `step_index` is 0-based in core; display 1-based.
+                            self.injection_step_var.set(f"{int(i) + 1}/{int(n)}")
+                        else:
+                            self.injection_step_var.set("-")
+                        self.injection_label_var.set(str(getattr(ss, "current_label", "") or "-") or "-")
+                        self.injection_next_var.set(str(getattr(ss, "next_step_text", "") or "-") or "-")
+                        self.injection_state_var.set(str(getattr(ss, "injection_state", "") or "-") or "-")
+                        self.injection_reason_var.set(str(getattr(ss, "injection_reason", "") or "-") or "-")
+                        mode = str(getattr(ss, "input_mode", "") or "-") or "-"
+                        drv = str(getattr(ss, "driver_name", "") or "-") or "-"
+                        self.injection_mode_driver_var.set(f"{mode} | {drv}")
+                except Exception:
+                    pass
                 hp_str = "?"
                 mp_str = "?"
                 cap_str = "?"
@@ -2471,21 +2799,106 @@ class BotUI:
                         tgt = str(getattr(tel, "target", "") or "")
                         reco = str(getattr(tel, "recommendation", "") or "")
                         action_req = str(getattr(tel, "action_request", "") or "")
+                        action_requests = getattr(tel, "action_requests", None)
+                        action_source = str(getattr(tel, "action_source", "") or "")
                         action_committed = getattr(tel, "action_committed", None)
                         input_plan = str(getattr(tel, "input_plan", "") or "")
                         self._latest_input_plan = input_plan
+
+                        def _clip1(s: object, n: int = 80) -> str:
+                            try:
+                                t = str(s or "").replace("\n", " ").replace("\r", " ").strip()
+                            except Exception:
+                                return ""
+                            if len(t) > int(n):
+                                return t[: max(0, int(n) - 3)] + "..."
+                            return t
+
+                        def _fmt_actions_lines_ui(reqs) -> list[str]:
+                            try:
+                                if not isinstance(reqs, list) or not reqs:
+                                    return []
+                                out: list[str] = []
+                                for r in reqs:
+                                    if not isinstance(r, dict):
+                                        continue
+                                    kind = _clip1(r.get("kind", ""), 18)
+                                    value = _clip1(r.get("value", ""), 42)
+                                    committed = bool(r.get("committed", False))
+                                    note = str(r.get("note", "") or "").strip().lower()
+                                    star = "*" if committed or note == "committed" else ""
+                                    if kind or value:
+                                        base = f"{kind}:{value}" if kind else f"{value}"
+                                        out.append(f"{base}{star}")
+                                return out
+                            except Exception:
+                                return []
+
+                        # Build multi-line operator display: inputs + actions.
                         try:
-                            s = (input_plan or "").strip()
-                            if not s:
+                            disp_lines: list[str] = []
+
+                            ip = (input_plan or "").strip()
+                            if ip:
+                                disp_lines.append(_clip1(ip, 110))
+
+                            acts_lines = _fmt_actions_lines_ui(action_requests)
+                            if acts_lines:
+                                disp_lines.append("actions:")
+                                for ln in acts_lines[:5]:
+                                    disp_lines.append(f"  {ln}")
+
+                                # Clipboard-friendly multi-line list.
+                                try:
+                                    self._latest_action_requests_display = "\n".join(acts_lines)
+                                except Exception:
+                                    self._latest_action_requests_display = "".join(acts_lines)
+
+                            if not disp_lines:
                                 self.input_plan_text.set("-")
                             else:
-                                if len(s) > 80:
-                                    s = s[:77] + "..."
-                                self.input_plan_text.set(s)
+                                self.input_plan_text.set("\n".join(disp_lines))
                         except Exception:
                             self.input_plan_text.set("-")
                         wp = str(getattr(tel, "cavebot_waypoint", "") or "")
                         wp_action = str(getattr(tel, "cavebot_action", "") or "")
+
+                        def _fmt_actions_ui(reqs) -> str:
+                            try:
+                                if not isinstance(reqs, list) or not reqs:
+                                    return ""
+                                parts = []
+                                for r in reqs:
+                                    if not isinstance(r, dict):
+                                        continue
+                                    kind = str(r.get("kind", "") or "").strip()
+                                    value = str(r.get("value", "") or "").strip()
+                                    committed = bool(r.get("committed", False))
+                                    note = str(r.get("note", "") or "").strip().lower()
+                                    star = "*" if committed or note == "committed" else ""
+                                    if kind or value:
+                                        parts.append(f"{kind}:{value}{star}" if kind else f"{value}{star}")
+                                return ";".join(parts)
+                            except Exception:
+                                return ""
+
+                        action_req_struct = _fmt_actions_ui(action_requests)
+                        action_req_display = action_req_struct or action_req
+                        # Keep a compact single-line representation for event stream;
+                        # clipboard uses the multi-line value when available.
+                        if not str(getattr(self, "_latest_action_requests_display", "") or "").strip():
+                            self._latest_action_requests_display = action_req_struct
+
+                        if action_source != self._last_event_action_source:
+                            try:
+                                ssrc = (action_source or "").strip()
+                                if ssrc:
+                                    if len(ssrc) > 100:
+                                        ssrc = ssrc[:97] + "..."
+                                    _push(f"{_ts()} planner: {ssrc}")
+                            except Exception:
+                                pass
+                            self._last_event_action_source = action_source
 
                         # Coords confidence transitions (structured telemetry)
                         coords_status = str(getattr(tel, "coords_status", "") or "")
@@ -2553,13 +2966,13 @@ class BotUI:
                             self._last_event_reco = reco
 
                         if (
-                            action_req != self._last_event_action_req
+                            action_req_display != self._last_event_action_req
                             or self._last_event_action_committed is None
                             or (action_committed is not None and bool(action_committed) != bool(self._last_event_action_committed))
                         ):
                             star = "*" if bool(action_committed) else ""
-                            _push(f"{_ts()} action{star}: {action_req}")
-                            self._last_event_action_req = action_req
+                            _push(f"{_ts()} action{star}: {action_req_display}")
+                            self._last_event_action_req = action_req_display
                             self._last_event_action_committed = bool(action_committed) if action_committed is not None else None
 
                         if input_plan != self._last_event_input_plan:
@@ -3019,13 +3432,28 @@ class BotUI:
                     self.asst_sound.set(bool(a.get("sound_alerts")))
                 if "input_mode" in a:
                     mode = str(a.get("input_mode") or "log").strip().lower()
-                    if mode not in {"log", "keyboard", "wininput"}:
+                    if mode not in {"log", "mock", "keyboard", "wininput"}:
                         mode = "log"
                     self.asst_input_mode.set(mode)
                 if "target_hotkey" in a:
                     self.asst_target_hotkey.set(str(a.get("target_hotkey") or ""))
                 if "minimap_hotkey" in a:
                     self.asst_minimap_hotkey.set(str(a.get("minimap_hotkey") or ""))
+                if "live_input_armed" in a:
+                    try:
+                        self.asst_live_input_armed.set(bool(a.get("live_input_armed")))
+                    except Exception:
+                        self.asst_live_input_armed.set(False)
+                if "allowed_window_titles" in a:
+                    try:
+                        raw = a.get("allowed_window_titles")
+                        if isinstance(raw, list):
+                            titles = [str(x).strip() for x in raw if str(x).strip()]
+                        else:
+                            titles = ["TibiaClone", "MyClient"]
+                        self.asst_allowed_window_titles.set(",".join(titles))
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -3594,6 +4022,10 @@ class BotUI:
                     "input_mode": str(self.asst_input_mode.get()),
                     "target_hotkey": str(self.asst_target_hotkey.get()),
                     "minimap_hotkey": str(self.asst_minimap_hotkey.get()),
+                    "live_input_armed": bool(self.asst_live_input_armed.get()),
+                    "allowed_window_titles": [
+                        s.strip() for s in str(self.asst_allowed_window_titles.get() or "").split(",") if s.strip()
+                    ],
                 },
                 "replay": {
                     "enabled": bool(self.replay_enabled.get()),
@@ -3779,6 +4211,8 @@ class BotUI:
             self.asst_input_mode.set("log")
             self.asst_target_hotkey.set(os.getenv("TARGET_HOTKEY", "").strip())
             self.asst_minimap_hotkey.set(os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
+            self.asst_live_input_armed.set(False)
+            self.asst_allowed_window_titles.set("TibiaClone,MyClient")
         except Exception:
             pass
 

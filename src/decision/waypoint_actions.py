@@ -60,6 +60,7 @@ def parse_waypoint_action_tokens(action: Optional[str]) -> List[WaypointActionTo
 class WaypointActionConfig:
     quick_loot_hotkey: str = "ctrl+l"
     rope_hotkey: str = "rope"
+    ladder_hotkey: str = "ladder"
     shovel_hotkey: str = "shovel"
     weapon_switch: str = "weapon_switch"
 
@@ -68,6 +69,7 @@ def config_from_env() -> WaypointActionConfig:
     return WaypointActionConfig(
         quick_loot_hotkey=os.getenv("ASSIST_QUICK_LOOT", "ctrl+l").strip() or "ctrl+l",
         rope_hotkey=os.getenv("ASSIST_TOOL_ROPE", "rope").strip() or "rope",
+        ladder_hotkey=os.getenv("ASSIST_TOOL_LADDER", "ladder").strip() or "ladder",
         shovel_hotkey=os.getenv("ASSIST_TOOL_SHOVEL", "shovel").strip() or "shovel",
         weapon_switch=os.getenv("ASSIST_ANTITRAP_SWITCH", "weapon_switch").strip() or "weapon_switch",
     )
@@ -104,6 +106,8 @@ def build_requests_from_waypoint_action(
             out.append(ActionRequest(kind="loot", value=c.quick_loot_hotkey, note=note))
         elif cmd in {"rope", "use_rope"}:
             out.append(ActionRequest(kind="tool", value=c.rope_hotkey, note=note))
+        elif cmd in {"ladder", "use_ladder"}:
+            out.append(ActionRequest(kind="tool", value=c.ladder_hotkey, note=note))
         elif cmd in {"shovel", "use_shovel"}:
             out.append(ActionRequest(kind="tool", value=c.shovel_hotkey, note=note))
         elif cmd in {"antitrap", "weapon_switch", "switch_weapon"}:
@@ -131,6 +135,14 @@ def build_requests_from_waypoint_action(
         elif cmd == "beep":
             # NOTE: assistant-only side-effect is implemented at the decision layer.
             out.append(ActionRequest(kind="beep", value=str(arg or ""), note=note))
+        elif cmd == "call":
+            # scripts-master semantics: "call <name>" (no OS input injection here).
+            if arg:
+                out.append(ActionRequest(kind="call", value=str(arg), note=note))
+        elif cmd == "load":
+            # scripts-master semantics: "load <name>" (no OS input injection here).
+            if arg:
+                out.append(ActionRequest(kind="load", value=str(arg), note=note))
         elif cmd in {"require", "requires"}:
             # Gate evaluation happens in the decision loop; we still emit a trace.
             out.append(ActionRequest(kind="require", value=str(arg or ""), note=note))

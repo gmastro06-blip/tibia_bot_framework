@@ -74,6 +74,38 @@ La UI incluye pestañas:
 - **Cavebot**: configuración básica (se aplica en tiempo real)
 - **Rutas / Cavebot**: editor de rutas (waypoints.in) + setup (setup_*.json)
 
+### LIVE INPUT MODE (pruebas reales, con seguridad)
+
+Por defecto este repo opera en **assistant-first** (no inyecta inputs). Para pruebas reales en Windows existe un modo controlado de inyección de teclas.
+
+Reglas (todas deben cumplirse):
+- **Modo de inputs = `keyboard`**
+- **ARM live input** debe estar activo (doble opt-in desde la UI)
+- La **ventana en foco** debe matchear el allowlist de títulos (substring case-insensitive)
+- Solo se ejecutan acciones **COMMITTED** (las preview nunca se inyectan)
+- En live input, siempre se requiere un **pulso humano** (botón “Siguiente acción” / “Marcar como ejecutado”)
+- Si el watchdog detecta anomalías (stale/dead threads) o faltan señales críticas, el sistema hace **fail-closed** y auto-desarma live input
+
+#### Harness recomendado (seguro)
+
+Hay una ventana de prueba para validar la inyección sin tocar el cliente:
+
+```powershell
+poetry run python tools/live_input_harness.py
+```
+
+Pasos:
+1) Abre el harness (título: `TibiaClone Harness`).
+2) En la UI: Configuración → **Live input safety**
+  - Allowed window titles: agrega `TibiaClone Harness`
+  - Modo de inputs: `keyboard`
+  - Activa “ARM live input (I understand)”
+3) Enfoca el harness (que sea la ventana activa).
+4) Presiona “Siguiente acción” en la pestaña Cavebot.
+5) Verifica que el harness registre keypress.
+
+Tip: si en “Injection Status” ves `wrong_window`, ajusta el allowlist o enfoca la ventana correcta.
+
 Notas:
 - El botón **Minimizar** usa system tray si están disponibles `pystray` + `Pillow`; si no, solo minimiza la ventana.
 - El editor de rutas es *asistente-only*: modifica archivos, no inyecta inputs.
@@ -363,6 +395,13 @@ Mantiene los N JSON más recientes y borra los PNG asociados al mismo timestamp.
 El archivo incluye:
 - `kind="telemetry"` (muestreo periódico)
 - `kind` tipo `event.*` cuando cambian target/recommendation/cavebot o cambian flags.
+
+Campos de acciones (compatibilidad):
+- `action_request`: string legacy (ej: `move:north*;heal:F1`), mantenido por compatibilidad.
+- `action_requests`: lista estructurada (preferida) con entries tipo:
+  - `{"kind": "move", "value": "north", "note": "committed"|"", "committed": true|false}`
+
+Nota: cuando `action_requests` está presente, herramientas/UI intentan usarlo para evitar parsear `action_request`.
 
 ### Inspeccionar un replay (montage)
 Genera una imagen con los crops en grilla y un header con telemetría:

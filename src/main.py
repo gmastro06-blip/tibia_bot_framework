@@ -241,34 +241,70 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
-    action_state: dict[str, float | str | bool] = {
+    action_state: dict[str, object] = {
         "ts": 0.0,
         "action_request": "",
+        "action_requests": [],
         "action_committed": False,
+        "action_source": "",
         "input_plan": "",
     }
 
-    def _a_set(action_request: str, action_committed: bool, input_plan: str = "") -> None:
+    def _a_set(
+        action_request: str,
+        action_committed: bool,
+        input_plan: str = "",
+        action_source: str = "",
+        action_requests: list[dict[str, object]] | None = None,
+    ) -> None:
         try:
             with action_lock:
                 action_state["ts"] = float(time.time())
                 action_state["action_request"] = str(action_request or "")
+                try:
+                    if action_requests is None:
+                        action_state["action_requests"] = []
+                    else:
+                        action_state["action_requests"] = [
+                            dict(x) for x in list(action_requests) if isinstance(x, dict)
+                        ]
+                except Exception:
+                    action_state["action_requests"] = []
                 action_state["action_committed"] = bool(action_committed)
+                action_state["action_source"] = str(action_source or "")
                 action_state["input_plan"] = str(input_plan or "")
         except Exception:
             pass
 
-    def _a_snapshot() -> tuple[str, bool, float, str]:
+    def _a_snapshot() -> tuple[str, bool, float, str, str, list[dict[str, object]]]:
         try:
             with action_lock:
+                ars: list[dict[str, object]] = []
+                try:
+                    raw = action_state.get("action_requests", [])
+                    if isinstance(raw, list):
+                        ars = [dict(x) for x in raw if isinstance(x, dict)]
+                except Exception:
+                    ars = []
+
+                ts_raw = action_state.get("ts", 0.0)
+                if isinstance(ts_raw, (int, float)):
+                    ts = float(ts_raw)
+                else:
+                    try:
+                        ts = float(str(ts_raw or "0"))
+                    except Exception:
+                        ts = 0.0
                 return (
                     str(action_state.get("action_request", "") or ""),
                     bool(action_state.get("action_committed", False)),
-                    float(action_state.get("ts", 0.0) or 0.0),
+                    float(ts),
                     str(action_state.get("input_plan", "") or ""),
+                    str(action_state.get("action_source", "") or ""),
+                    ars,
                 )
         except Exception:
-            return "", False, 0.0, ""
+            return "", False, 0.0, "", "", []
 
     # Cross-thread safety policy: if OS input injection is enabled, fail-closed
     # on critical anomalies (stale pipeline/dead threads/missing signals).
@@ -540,7 +576,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 "cavebot_waypoint": tel.cavebot_waypoint,
                                 "cavebot_action": tel.cavebot_action,
                                 "action_request": getattr(tel, "action_request", ""),
+                                "action_requests": getattr(tel, "action_requests", None) or [],
                                 "action_committed": bool(getattr(tel, "action_committed", False)),
+                                "action_source": getattr(tel, "action_source", ""),
                                 "note": tel.note,
                             }
                         else:
@@ -548,13 +586,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         # Always attach latest action request for end-to-end correlation.
                         try:
-                            ar, ac, ats, ip = _a_snapshot()
+                            ar, ac, ats, ip, a_src, ars = _a_snapshot()
                             if ar:
                                 tel_payload["action_request"] = ar
                                 tel_payload["action_committed"] = bool(ac)
                                 tel_payload["action_ts"] = float(ats)
+                                if a_src:
+                                    tel_payload["action_source"] = str(a_src)
                                 if ip:
                                     tel_payload["input_plan"] = str(ip)
+                            if ars:
+                                tel_payload["action_requests"] = ars
                         except Exception:
                             pass
 
@@ -741,7 +783,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                     # Action correlation (planned vs committed), from decision thread.
                     try:
-                        ar, ac, _ats, ip = _a_snapshot()
+                        ar, ac, _ats, ip, a_src, _ars = _a_snapshot()
+                        if a_src:
+                            s0 = str(a_src)
+                            if len(s0) > 160:
+                                s0 = s0[:157] + "..."
+                            info_lines.append(f"planner={s0}")
                         if ar:
                             s = str(ar)
                             if len(s) > 160:
@@ -752,6 +799,33 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             if len(s2) > 160:
                                 s2 = s2[:157] + "..."
                             info_lines.append(f"inputs={s2}")
+                    except Exception:
+                        pass
+
+                    # Injection/steps status from RuntimeConfig (UI-facing, thread-safe).
+                    try:
+                        if runtime_config is not None:
+                            st = runtime_config.assistant_status_snapshot()
+                            if st is not None:
+                                step_s = ""
+                                try:
+                                    if st.step_index is not None and st.total_steps is not None and int(st.total_steps) > 0:
+                                        step_s = f"STEP {int(st.step_index) + 1}/{int(st.total_steps)}"
+                                    elif st.step_index is not None:
+                                        step_s = f"STEP {int(st.step_index) + 1}"
+                                except Exception:
+                                    step_s = ""
+
+                                line = f"INJECTION: {st.injection_state} ({st.injection_reason})"
+                                if step_s:
+                                    line = f"{line} | {step_s}"
+                                if st.current_label:
+                                    line = f"{line} | {st.current_label}"
+                                if st.next_step_text:
+                                    line = f"{line} | {st.next_step_text}"
+                                if len(line) > 220:
+                                    line = line[:217] + "..."
+                                info_lines.append(line)
                     except Exception:
                         pass
 
@@ -925,6 +999,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_good_coords: tuple[int, int, int | None] | None = None
 
         # Coords source/provider (affects diagnostics).
+        # NOTE: refreshed per tick from GameState/env so UI can switch live.
         coords_provider = (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
         coords_provider_disabled = coords_provider in {"disabled", "none", "off", "0", "false", "no"}
         coords_provider_minimap = coords_provider in {"minimap", "map", "minimap_motion"}
@@ -987,11 +1062,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver, is_committed
             from action.input_manager import InputManager
             from fail_closed import fail_closed
+            from input_guard import is_target_window_active
 
             mock_driver = MockInputDriver(max_items=500)
             driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
             target_hotkey = os.getenv("TARGET_HOTKEY", "").strip()
             minimap_hotkey = os.getenv("MINIMAP_CLICK_HOTKEY", "").strip()
+            allowed_titles: list[str] = ["TibiaClone", "MyClient"]
+            live_input_armed = False
 
             try:
                 if runtime_config is not None:
@@ -999,6 +1077,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     mode = str(getattr(asst_cfg, "input_mode", "") or "").strip().lower()
                     if mode:
                         driver_name = mode
+                    try:
+                        live_input_armed = bool(getattr(asst_cfg, "live_input_armed", False))
+                    except Exception:
+                        live_input_armed = False
+                    try:
+                        allowed_titles = list(getattr(asst_cfg, "allowed_window_titles", None) or allowed_titles)
+                    except Exception:
+                        allowed_titles = allowed_titles
                     th = str(getattr(asst_cfg, "target_hotkey", "") or "").strip()
                     mh = str(getattr(asst_cfg, "minimap_hotkey", "") or "").strip()
                     if th:
@@ -1007,7 +1093,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         minimap_hotkey = mh
             except Exception:
                 pass
-            if driver_name in {"keyboard", "wininput"}:
+            # Build the OS-injecting driver only when explicitly armed.
+            # Otherwise keep a safe mock driver even if mode==keyboard (unarmed).
+            use_keyboard = driver_name in {"keyboard", "wininput"}
+            if use_keyboard and bool(live_input_armed):
                 input_driver = WindowsKeyboardDriver(
                     target_hotkey=target_hotkey or None,
                     minimap_hotkey=minimap_hotkey or None,
@@ -1018,14 +1107,143 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             input_mgr = InputManager(
                 driver=input_driver,
                 fallback=mock_driver,
-                injection_enabled=bool(isinstance(input_driver, WindowsKeyboardDriver)),
+                injection_enabled=bool(isinstance(input_driver, WindowsKeyboardDriver)) and bool(live_input_armed),
             )
+            try:
+                input_mgr.set_live_policy(live_input_armed=bool(live_input_armed), allowed_window_titles=list(allowed_titles))
+            except Exception:
+                pass
             _im_set(input_mgr, bool(input_mgr.injection_enabled), "")
         except Exception:
             ActionRequest = None  # type: ignore[assignment]
             mock_driver = None
             input_driver = None
             input_mgr = None
+            is_target_window_active = None  # type: ignore[assignment]
+
+        # Track applied assistant input settings (UI can change these at runtime).
+        applied_input_mode = str(driver_name or "log").strip().lower() if "driver_name" in locals() else "log"
+        applied_target_hotkey = str(target_hotkey or "") if "target_hotkey" in locals() else ""
+        applied_minimap_hotkey = str(minimap_hotkey or "") if "minimap_hotkey" in locals() else ""
+        applied_live_input_armed = bool(live_input_armed) if "live_input_armed" in locals() else False
+        applied_allowed_titles = "|".join([str(x).strip() for x in (allowed_titles if "allowed_titles" in locals() else []) if str(x).strip()])
+
+        def _sync_input_driver_from_ui() -> None:
+            """Apply assistant input settings live (RuntimeConfig/UI).
+
+            Important safety invariants:
+            - If fail-closed disabled injection (InputManager.disabled_reason), do NOT auto re-enable.
+            - Switching to 'log' mode is always allowed.
+            """
+
+            nonlocal applied_input_mode, applied_target_hotkey, applied_minimap_hotkey, applied_live_input_armed, applied_allowed_titles, input_driver
+
+            if runtime_config is None:
+                return
+            if input_mgr is None:
+                return
+            if mock_driver is None:
+                return
+
+            try:
+                asst_cfg = runtime_config.assistant_snapshot()
+            except Exception:
+                return
+
+            try:
+                desired_mode = str(getattr(asst_cfg, "input_mode", "log") or "log").strip().lower()
+            except Exception:
+                desired_mode = "log"
+            if desired_mode == "wininput":
+                desired_mode = "keyboard"
+            if desired_mode not in {"log", "mock", "keyboard"}:
+                desired_mode = "log"
+
+            try:
+                desired_armed = bool(getattr(asst_cfg, "live_input_armed", False))
+            except Exception:
+                desired_armed = False
+            try:
+                desired_titles_list = list(getattr(asst_cfg, "allowed_window_titles", None) or [])
+            except Exception:
+                desired_titles_list = []
+            desired_titles = "|".join([str(x).strip() for x in desired_titles_list if str(x).strip()])
+
+            try:
+                desired_target = str(getattr(asst_cfg, "target_hotkey", "") or "").strip()
+            except Exception:
+                desired_target = ""
+            try:
+                desired_minimap = str(getattr(asst_cfg, "minimap_hotkey", "") or "").strip()
+            except Exception:
+                desired_minimap = ""
+
+            if (
+                desired_mode == applied_input_mode
+                and desired_target == applied_target_hotkey
+                and desired_minimap == applied_minimap_hotkey
+                and bool(desired_armed) == bool(applied_live_input_armed)
+                and str(desired_titles) == str(applied_allowed_titles)
+            ):
+                return
+
+            # Always allow switching back to safe modes.
+            if desired_mode in {"log", "mock"} or not bool(desired_armed):
+                try:
+                    input_driver = mock_driver
+                    input_mgr.set_driver(mock_driver, injection_enabled=False)
+                    try:
+                        input_mgr.set_live_policy(live_input_armed=False, allowed_window_titles=desired_titles_list)
+                    except Exception:
+                        pass
+                    _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
+                except Exception:
+                    pass
+            else:
+                # Sticky fail-closed: don't re-arm injection automatically.
+                try:
+                    if str(getattr(input_mgr, "disabled_reason", "") or ""):
+                        # Still update the remembered settings so UI reflects intent.
+                        applied_input_mode = desired_mode
+                        applied_target_hotkey = desired_target
+                        applied_minimap_hotkey = desired_minimap
+                        applied_live_input_armed = bool(desired_armed)
+                        applied_allowed_titles = str(desired_titles)
+                        _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
+                        return
+                except Exception:
+                    pass
+
+                try:
+                    # (Re)build OS-injecting driver with latest hotkeys.
+                    input_driver = WindowsKeyboardDriver(
+                        target_hotkey=(desired_target or None),
+                        minimap_hotkey=(desired_minimap or None),
+                    )
+                    input_mgr.set_driver(input_driver, injection_enabled=True)
+                    try:
+                        input_mgr.set_live_policy(live_input_armed=True, allowed_window_titles=desired_titles_list)
+                    except Exception:
+                        pass
+                    _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
+                except Exception:
+                    # Fail-safe: if anything goes wrong, fall back to mock.
+                    try:
+                        input_driver = mock_driver
+                        input_mgr.set_driver(mock_driver, injection_enabled=False)
+                        try:
+                            input_mgr.set_live_policy(live_input_armed=False, allowed_window_titles=desired_titles_list)
+                        except Exception:
+                            pass
+                        _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
+                    except Exception:
+                        pass
+
+            applied_input_mode = desired_mode
+            applied_target_hotkey = desired_target
+            applied_minimap_hotkey = desired_minimap
+            applied_live_input_armed = bool(desired_armed)
+            applied_allowed_titles = str(desired_titles)
 
         # Simulation-only auto-input generator (logs-only, no real injection).
         sim_inputs_auto = os.getenv("SIM_INPUTS_AUTO", "1").strip().lower() not in {"0", "false", "no"}
@@ -1061,6 +1279,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Always-initialized per-tick flags (avoid possibly-unbound locals).
             should_advance = False
             commit_flag = False
+            injection_state_tick = ""
+            injection_reason_tick = ""
             gamestate = None
             try:
                 gamestate = gs_queue.get(timeout=1)
@@ -1092,6 +1312,62 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             sim_cfg = runtime_config.simulation_snapshot() if runtime_config is not None else None
             assistant_cfg = runtime_config.assistant_snapshot() if runtime_config is not None else None
 
+            # Apply UI changes to input mode/hotkeys live (no restart required).
+            try:
+                _sync_input_driver_from_ui()
+            except Exception:
+                pass
+
+            # Headless/CLI mode: allow explicit auto-commit for OS input injection.
+            # By default, we do NOT auto-commit to keep assistant-first safety.
+            # When confirm_actions is enabled (UI gating), auto-commit is ignored.
+            try:
+                auto_commit_env = os.getenv("ASSIST_AUTO_COMMIT", "0").strip().lower() in {"1", "true", "yes"}
+            except Exception:
+                auto_commit_env = False
+            try:
+                confirm_mode = bool(assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions)
+            except Exception:
+                confirm_mode = False
+
+            # Live input arming (strict): requires keyboard mode + explicit arming.
+            try:
+                asst_input_mode = str(getattr(assistant_cfg, "input_mode", "log") or "log").strip().lower()
+            except Exception:
+                asst_input_mode = "log"
+            if asst_input_mode == "wininput":
+                asst_input_mode = "keyboard"
+            try:
+                live_input_armed = bool(getattr(assistant_cfg, "live_input_armed", False)) if assistant_cfg is not None else False
+            except Exception:
+                live_input_armed = False
+            try:
+                allowed_titles = list(getattr(assistant_cfg, "allowed_window_titles", None) or []) if assistant_cfg is not None else []
+            except Exception:
+                allowed_titles = []
+
+            live_active = bool(asst_input_mode == "keyboard" and live_input_armed)
+            target_window_active = False
+            try:
+                if live_active and is_target_window_active is not None:
+                    target_window_active = bool(is_target_window_active(list(allowed_titles)))
+            except Exception:
+                target_window_active = False
+
+            needs_confirm = bool(confirm_mode or live_active)
+            auto_commit = bool(auto_commit_env and (not needs_confirm))
+
+            # UI confirm-actions pulse: when it changes, we may commit exactly one action.
+            advance_pulse = False
+            try:
+                if needs_confirm and runtime_config is not None:
+                    cur_adv = int(runtime_config.advance_counter_snapshot())
+                    advance_pulse = cur_adv != int(last_advance_seen)
+                    if advance_pulse:
+                        last_advance_seen = int(cur_adv)
+            except Exception:
+                advance_pulse = False
+
             # Log de cambios de toggles (para ver que aplica en tiempo real)
             lines, last_healing_enabled, last_cavebot_enabled = _toggle_transition_lines(
                 healing_cfg,
@@ -1121,6 +1397,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 continue
 
             last_gs_ts = time.time()
+
+            # Refresh coords provider diagnostics (provider can be switched via env/UI).
+            try:
+                coords_provider = (
+                    str(getattr(gamestate, "coords_provider", None) or "")
+                    .strip()
+                    .lower()
+                    or (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
+                )
+            except Exception:
+                coords_provider = (os.getenv("COORDS_PROVIDER", "ocr") or "ocr").strip().lower()
+            coords_provider_disabled = coords_provider in {"disabled", "none", "off", "0", "false", "no"}
+            coords_provider_minimap = coords_provider in {"minimap", "map", "minimap_motion"}
 
             # Señales derivadas + simulación (no ejecuta nada, solo computa flags)
             sig = None
@@ -1155,6 +1444,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     set_stop=True,
                                 )
                                 _im_set(mgr, False, "CRITICAL_SIGNALS_MISSING")
+                                try:
+                                    if runtime_config is not None:
+                                        runtime_config.update_assistant(live_input_armed=False)
+                                except Exception:
+                                    pass
                     else:
                         critical_missing_since = None
             except Exception:
@@ -1432,8 +1726,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 if bool(getattr(cavebot_cfg, "force_steps", False)):
                     cavebot_mode = "steps"
                 base_steps_mode = cavebot_mode in {"steps", "step"}
-                # Reload route if needed
-                if (navigator is None and step_navigator is None) or navigator_route_path != cavebot_cfg.route_path:
+                # Reload route if needed.
+                # Also reload when switching modes and the required navigator is missing.
+                if (
+                    (navigator is None and step_navigator is None)
+                    or navigator_route_path != cavebot_cfg.route_path
+                    or (base_steps_mode and step_navigator is None)
+                    or ((not base_steps_mode) and navigator is None)
+                ):
                     try:
                         route = load_route(cavebot_cfg.route_path)
                         navigator = None
@@ -1522,19 +1822,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         if cavebot_finished:
                             # Stop emitting actions when finished; keep UI updated.
-                            decision = step_navigator.preview()
+                            decision = step_navigator.preview(gamestate=gamestate, config=cavebot_cfg)
                             cavebot_next = "stop"
                         else:
                             # Modo asistente: preview constante, pero solo consume/avanza con confirmación.
-                            decision = step_navigator.preview()
+                            decision = step_navigator.preview(gamestate=gamestate, config=cavebot_cfg)
 
                         if cavebot_finished:
                             should_advance = False
-                        elif assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
-                            cur_adv = runtime_config.advance_counter_snapshot() if runtime_config is not None else 0
-                            should_advance = cur_adv != last_advance_seen
-                            if should_advance:
-                                last_advance_seen = cur_adv
+                        elif needs_confirm:
+                            should_advance = bool(advance_pulse)
                         else:
                             should_advance = True
 
@@ -1569,13 +1866,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 pass
 
                         if (not cavebot_finished) and should_advance:
-                            decision = step_navigator.decide()
+                            decision = step_navigator.decide(gamestate=gamestate, config=cavebot_cfg)
 
-                        # Only mark as "committed" when assistant confirm mode is on and the user advanced.
-                        if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
+                        # Only mark as "committed" when gated (confirm-actions or live input) and user advanced.
+                        if needs_confirm:
                             commit_flag = bool(should_advance)
                         else:
-                            commit_flag = False
+                            commit_flag = bool(auto_commit)
 
                         if decision.reached_waypoint and decision.waypoint is not None:
                             wp = decision.waypoint
@@ -1587,8 +1884,39 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         if decision.waypoint is not None:
                             wp = decision.waypoint
-                            cavebot_waypoint = wp.name or f"({wp.x},{wp.y})"
+                            # Prefer human-readable labels for non-coordinate steps.
+                            if not bool(getattr(wp, "has_xy", True)):
+                                if getattr(wp, "call", None):
+                                    cavebot_waypoint = f"call {wp.call}"
+                                elif getattr(wp, "load", None):
+                                    cavebot_waypoint = f"load {wp.load}"
+                                elif getattr(wp, "label", None):
+                                    cavebot_waypoint = f"label {wp.label}"
+                                elif getattr(wp, "action", None):
+                                    cavebot_waypoint = f"action {wp.action}"
+                                else:
+                                    cavebot_waypoint = "step"
+                            else:
+                                cavebot_waypoint = wp.name or f"({wp.x},{wp.y})"
+
                             cavebot_action = wp.action or ""
+                            # scripts-master `rope(...)`/`ladder(...)` are encoded as waypoint.type.
+                            if not cavebot_action:
+                                try:
+                                    t = str(getattr(wp, "type", "") or "").strip().lower()
+                                    if t in {"rope", "ladder"}:
+                                        cavebot_action = t
+                                except Exception:
+                                    pass
+                            # scripts-master call/load steps (non-coordinate).
+                            if not cavebot_action:
+                                try:
+                                    if getattr(wp, "call", None):
+                                        cavebot_action = f"call:{wp.call}"
+                                    elif getattr(wp, "load", None):
+                                        cavebot_action = f"load:{wp.load}"
+                                except Exception:
+                                    pass
 
                         if not cavebot_finished and decision.direction:
                             cavebot_next = f"{decision.direction}"
@@ -1596,6 +1924,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             wp = decision.waypoint
                             label = wp.name or f"({wp.x},{wp.y})"
                             cavebot_next = f"reached {label}"
+
+                        # StepNavigator diagnostics (rope/ladder z-change waits/timeouts, stand waits).
+                        try:
+                            s_stuck = str(getattr(decision, "stuck_reason", "") or "").strip()
+                            s_note = str(getattr(decision, "note", "") or "").strip()
+                            if s_stuck:
+                                stuck_reason_tick = s_stuck
+                                stuck_idle_s_tick = 0.0
+                                stuck_blockers_tick = 0
+                                stuck_extra_tick = s_note
+                                if not note_out:
+                                    note_out = f"⛔ {s_stuck}"
+                            elif s_note.startswith("waiting_z") and not note_out:
+                                note_out = f"ℹ️ {s_note}"
+                        except Exception:
+                            pass
 
                         nav_mode = "steps_auto" if auto_steps_active else "steps"
 
@@ -1775,6 +2119,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pass
 
+            # Apply auto-commit in pos-mode too (when enabled), but never override confirm-actions UI gating.
+            try:
+                if cavebot_next in {"north", "south", "east", "west"}:
+                    if needs_confirm:
+                        if advance_pulse:
+                            commit_flag = True
+                    else:
+                        if auto_commit:
+                            commit_flag = True
+            except Exception:
+                pass
+
             # Assistant-only recovery: if we have trusted coords and haven't moved
             # for a while *while cavebot wants to move*, suggest a sidestep.
             try:
@@ -1837,261 +2193,285 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Build mock action requests (for logging/replay) without doing real inputs.
             action_req_str = ""
             action_committed = False
+            action_source = ""
             input_plan_str = ""
+            action_requests_struct: list[dict[str, object]] = []
+            reqs: list[ActionRequest] = []
+            action_source = "priority_planner"
             try:
-                reqs = []
-
-                eat_food_now = False
-                try:
-                    eat_food_now = bool(food_trigger.interval_s > 0.0 and food_trigger.should_fire())
-                except Exception:
-                    eat_food_now = False
-
-                heal_committed = True
-                try:
-                    if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions:
-                        heal_committed = False
-                except Exception:
-                    heal_committed = True
-
-                def _inline_planner() -> list[ActionRequest]:
-                    out: list[ActionRequest] = []
-
-                    # Fallback: inline planner (pre-BT behavior).
-                    try:
-                        if last_target is not None and ActionRequest is not None:
-                            tcls = str(getattr(last_target, "cls", "") or "").strip().lower()
-                            if tcls:
-                                out.append(ActionRequest(kind="target", value=tcls, note="preview"))
-                    except Exception:
-                        pass
-
-                    heal_note = "committed" if heal_committed else "preview"
-                    if healing_cfg is not None and healing_cfg.enabled:
-                        if getattr(heal_dec, "heal_hp", False):
-                            act_hp = (getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
-                            if ActionRequest is not None:
-                                out.append(ActionRequest(kind="heal", value=act_hp, note=heal_note))
-                        if getattr(heal_dec, "heal_mp", False):
-                            act_mp = (getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "heal").strip() or "heal"
-                            if ActionRequest is not None:
-                                out.append(ActionRequest(kind="heal", value=act_mp, note=heal_note))
-
-                    if cavebot_next in {"north", "south", "east", "west"}:
-                        note = "committed" if commit_flag else "preview"
-                        if ActionRequest is not None:
-                            out.append(ActionRequest(kind="move", value=str(cavebot_next), note=note))
-
-                    # Waypoint 'action' string can request loot/tools/trade/etc.
-                    try:
-                        if cavebot_action:
-                            out.extend(build_requests_from_waypoint_action(cavebot_action, committed=bool(commit_flag)))
-                    except Exception:
-                        pass
-
-                    # Periodic maintenance: eat food.
-                    try:
-                        if eat_food_now:
-                            if ActionRequest is not None:
-                                out.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
-                    except Exception:
-                        pass
-
-                        # Auto-generate simulated inputs when simulation mode is on (logs-only).
-                        try:
-                            if (
-                                sim_cfg is not None
-                                and bool(getattr(sim_cfg, "enabled", False))
-                                and sim_inputs_auto
-                                and (time.time() - sim_inputs_last_ts) >= sim_inputs_interval_s
-                            ):
-                                sim_inputs_last_ts = time.time()
-                                if ActionRequest is not None:
-                                    out.append(ActionRequest(kind="keyboard_sim", value="heal_hotkey", note="sim"))
-                                    out.append(ActionRequest(kind="minimap_click_sim", value="center_tile", note="sim"))
-                        except Exception:
-                            pass
-
-                    return out
-
-                # BehaviorTreeRunner is the default planner when enabled.
-                if bt_runner is not None and ActionRequest is not None:
-                    from decision.action_planner import plan_action_requests
-
-                    target_cls = ""
-                    target_conf = None
-                    try:
-                        if last_target is not None:
-                            target_cls = str(getattr(last_target, "cls", "") or "")
-                            target_conf = float(getattr(last_target, "confidence", 0.0) or 0.0)
-                    except Exception:
-                        target_cls = ""
-                        target_conf = None
-
-                    bl_target = ""
-                    bl_conf = None
-                    try:
-                        top = getattr(gamestate, "battlelist_top_names", None)
-                        if isinstance(top, list) and top:
-                            bl_target = str(top[0] or "").strip().lower()
-                        bl_conf = getattr(gamestate, "battlelist_confidence", None)
-                        if bl_conf is not None:
-                            bl_conf = float(bl_conf)
-                    except Exception:
-                        bl_target = ""
-                        bl_conf = None
-
-                    # Fallback policy: exception OR empty output => inline planner.
-                    reqs, _src = plan_action_requests(
-                        bt_enabled=True,
-                        bt_runner=bt_runner,
-                        fallback=_inline_planner,
-                        sig=sig,
-                        healing_cfg=healing_cfg,
-                        heal_hp=bool(getattr(heal_dec, "heal_hp", False)),
-                        heal_mp=bool(getattr(heal_dec, "heal_mp", False)),
-                        battlelist_target=bl_target,
-                        battlelist_conf=bl_conf,
-                        target_cls=target_cls,
-                        target_conf=target_conf,
-                        cavebot_next=cavebot_next,
-                        cavebot_action=cavebot_action,
-                        commit_flag=bool(commit_flag),
-                        eat_food=bool(eat_food_now),
-                        fallback_on_empty=True,
-                    )
+                if ActionRequest is None:
+                    reqs = []
                 else:
-                    reqs = _inline_planner()
-
-                if reqs:
+                    # --- 1) Healing (highest priority) ---
                     try:
-                        reqs = expand_service_requests(reqs)
+                        if healing_cfg is not None and bool(getattr(healing_cfg, "enabled", False)):
+                            # NOTE: keep assistant-first: preview by default.
+                            if bool(getattr(heal_dec, "heal_hp", False)):
+                                hp_act = (
+                                    str(getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "")
+                                    .strip()
+                                )
+                                if hp_act:
+                                    reqs.append(ActionRequest(kind="heal", value=hp_act, note="preview"))
+                            if bool(getattr(heal_dec, "heal_mp", False)):
+                                mp_act = (
+                                    str(getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "")
+                                    .strip()
+                                )
+                                if mp_act:
+                                    # Keep separate kind for observability; driver may still be mock.
+                                    reqs.append(ActionRequest(kind="mana", value=mp_act, note="preview"))
                     except Exception:
                         pass
 
-                    action_committed = any(getattr(r, "note", "") == "committed" for r in reqs)
-                    action_req_str = ";".join(
-                        f"{r.kind}:{r.value}{'*' if getattr(r, 'note', '') == 'committed' else ''}" for r in reqs
+                    # --- 2) Targeting (2nd priority) ---
+                    try:
+                        if str(target_str or "").strip() and str(target_str).strip().lower() != "none":
+                            reqs.append(ActionRequest(kind="target", value=str(target_str), note="preview"))
+                    except Exception:
+                        pass
+
+                    # --- 3) Cavebot (3rd priority) ---
+                    try:
+                        if str(cavebot_next or "").strip().lower() in {"north", "south", "east", "west"}:
+                            reqs.append(ActionRequest(kind="move", value=str(cavebot_next).strip().lower(), note="preview"))
+                    except Exception:
+                        pass
+
+                    # Waypoint actions (tools/loot/etc.)
+                    try:
+                        emit_wp_action = bool(str(cavebot_action or "").strip())
+
+                        # Rope/ladder: trigger only once, then wait for z change.
+                        try:
+                            dn = str(getattr(decision, "note", "") or "")
+                        except Exception:
+                            dn = ""
+                        if dn.startswith("waiting_z"):
+                            emit_wp_action = False
+                        if str(cavebot_action or "").strip().lower() in {"rope", "ladder"}:
+                            if not dn.endswith("_trigger"):
+                                emit_wp_action = False
+
+                        if emit_wp_action:
+                            reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=False))
+                    except Exception:
+                        pass
+
+                # Commit exactly one action when allowed (confirm pulse or auto-commit).
+                # This preserves strict priority: first item in reqs wins.
+                try:
+                    mgr0, inj_enabled0, dis0 = _im_snapshot()
+                    can_commit = (
+                        bool(commit_flag)
+                        and bool(inj_enabled0)
+                        and not bool(str(dis0 or "").strip())
+                        and (bool(target_window_active) if bool(live_active) else True)
                     )
+                except Exception:
+                    can_commit = False
 
-                    # Assistant-only notification: allow waypoint action to request a beep.
-                    try:
-                        want_beep_committed = any(
-                            str(getattr(r, "kind", "") or "").lower() == "beep"
-                            and str(getattr(r, "note", "") or "") == "committed"
-                            for r in reqs
-                        )
-                        want_beep_preview = any(
-                            str(getattr(r, "kind", "") or "").lower() == "beep"
-                            and str(getattr(r, "note", "") or "") != "committed"
-                            for r in reqs
-                        )
+                injectable_kinds = {
+                    "heal",
+                    "mana",
+                    "target",
+                    "move",
+                    "tool",
+                    "loot",
+                    "switch",
+                    "npc_trade",
+                    "depot",
+                    "bank",
+                    "supplies",
+                    "minimap_click_sim",
+                }
 
-                        allow_preview = os.getenv("ASSIST_BEEP_PREVIEW", "0").strip().lower() in {"1", "true", "yes"}
-
-                        should_beep = False
-                        if want_beep_committed and bool(commit_flag):
-                            should_beep = True
-                        elif want_beep_preview and allow_preview:
-                            should_beep = True
-
-                        if (
-                            should_beep
-                            and assistant_cfg is not None
-                            and assistant_cfg.enabled
-                            and assistant_cfg.sound_alerts
-                        ):
+                if can_commit and reqs:
+                    new_reqs: list[ActionRequest] = []
+                    committed_one = False
+                    for r in reqs:
+                        try:
+                            k = str(getattr(r, "kind", "") or "").strip().lower()
+                        except Exception:
+                            k = ""
+                        if (not committed_one) and k in injectable_kinds:
                             try:
-                                import winsound
-
-                                # Pick a tone based on the planned beep request value.
-                                # This is still assistant-only (no input injection).
-                                beep_value = ""
-                                try:
-                                    for r in reqs:
-                                        if str(getattr(r, "kind", "") or "").lower() != "beep":
-                                            continue
-                                        rv = str(getattr(r, "value", "") or "")
-                                        rn = str(getattr(r, "note", "") or "")
-                                        if want_beep_committed and rn == "committed":
-                                            beep_value = rv
-                                            break
-                                        if want_beep_preview and rn != "committed":
-                                            beep_value = rv
-                                            break
-                                        if not beep_value:
-                                            beep_value = rv
-                                except Exception:
-                                    beep_value = ""
-
-                                def _env_int(name: str, default: int) -> int:
-                                    try:
-                                        return int(float(os.getenv(name, str(default)).strip() or str(default)))
-                                    except Exception:
-                                        return int(default)
-
-                                freq = _env_int("ASSIST_BEEP_FREQ_DEFAULT", 740)
-                                dur = _env_int("ASSIST_BEEP_DUR_MS", 120)
-
-                                v = (beep_value or "").strip().lower()
-                                if v == "target_reliable":
-                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_RELIABLE", 880)
-                                elif v == "target_probable":
-                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_PROBABLE", 740)
-                                elif v == "target_ambiguous":
-                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_AMBIGUOUS", 660)
-                                elif v == "target_unknown":
-                                    freq = _env_int("ASSIST_BEEP_FREQ_TARGET_UNKNOWN", 520)
-                                else:
-                                    # keep default
-                                    pass
-
-                                winsound.Beep(int(freq), int(dur))
+                                new_reqs.append(ActionRequest(kind=str(r.kind), value=str(r.value), note="committed"))
                             except Exception:
-                                try:
-                                    print("\a", end="")
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
+                                new_reqs.append(r)
+                            committed_one = True
+                        else:
+                            new_reqs.append(r)
+                    reqs = new_reqs
 
-                    # LOG-ONLY planned input sequence (no injection).
-                    try:
-                        from action.input_planner import InputPlanner, format_plan
+                # Expand services AFTER committing (purely assistant-side expansion).
+                try:
+                    reqs = expand_service_requests(reqs)
+                except Exception:
+                    pass
 
-                        planner = InputPlanner()
-                        input_plan_str = format_plan(planner.plan_many(reqs))
-                    except Exception:
-                        input_plan_str = ""
+                # Structured actions for telemetry/replay/JSONL (JSON-friendly).
+                try:
+                    action_requests_struct = [
+                        {
+                            "kind": str(getattr(r, "kind", "") or ""),
+                            "value": str(getattr(r, "value", "") or ""),
+                            "note": str(getattr(r, "note", "") or ""),
+                            "committed": bool(is_committed(r)),
+                        }
+                        for r in reqs
+                    ]
+                except Exception:
+                    action_requests_struct = []
 
-                    # Route side-effects via InputManager (central policy).
-                    send_sink = input_mgr if input_mgr is not None else input_driver
-                    if send_sink is not None:
-                        for r in reqs:
+                try:
+                    action_committed = any(bool(is_committed(r)) for r in reqs)
+                except Exception:
+                    action_committed = False
+
+                try:
+                    action_req_str = ";".join(
+                        f"{r.kind}:{r.value}{'*' if bool(is_committed(r)) else ''}" for r in reqs
+                    )
+                except Exception:
+                    action_req_str = ""
+
+                # LOG-ONLY planned input sequence (no injection).
+                try:
+                    from action.input_planner import InputPlanner, format_plan
+
+                    planner = InputPlanner()
+                    input_plan_str = format_plan(planner.plan_many(reqs))
+                except Exception:
+                    input_plan_str = ""
+
+                # Route side-effects via InputManager (central policy).
+                send_sink = input_mgr if input_mgr is not None else input_driver
+                if send_sink is not None:
+                    for r in reqs:
+                        try:
+                            # Strict safety gate: never send preview actions to an OS-injecting driver.
                             try:
-                                # Strict safety gate: never send preview actions to an OS-injecting driver.
-                                try:
-                                    if isinstance(input_driver, WindowsKeyboardDriver) and not is_committed(r):
-                                        continue
-                                except Exception:
-                                    pass
-                                try:
-                                    if input_mgr is not None:
-                                        input_mgr.send(r)
-                                    else:
-                                        send_sink.send(r)
-                                except Exception:
-                                    pass
+                                if isinstance(input_driver, WindowsKeyboardDriver) and not is_committed(r):
+                                    continue
                             except Exception:
                                 pass
+                            try:
+                                if input_mgr is not None:
+                                    input_mgr.send(r)
+                                else:
+                                    send_sink.send(r)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
             except Exception:
                 action_req_str = ""
                 action_committed = False
                 input_plan_str = ""
+                action_requests_struct = []
+                action_source = "exception"
 
             # Publish latest action snapshot for overlay/replay correlation.
             try:
-                _a_set(action_req_str, bool(action_committed), input_plan_str)
+                _a_set(
+                    action_req_str,
+                    bool(action_committed),
+                    input_plan_str,
+                    str(action_source or ""),
+                    action_requests_struct,
+                )
+            except Exception:
+                pass
+
+            # Publish assistant status snapshot for UI/overlay (steps-mode indicator).
+            try:
+                if runtime_config is not None:
+                    from runtime_config import compute_injection_state
+
+                    # Describe next step.
+                    next_step_text = ""
+                    cur_label = ""
+                    try:
+                        # Prefer decision.waypoint (already computed) to avoid peeking into StepNavigator internals.
+                        wp = getattr(decision, "waypoint", None)
+                        if wp is not None:
+                            if not bool(getattr(wp, "has_xy", True)):
+                                if getattr(wp, "label", None):
+                                    cur_label = str(getattr(wp, "label", "") or "")
+                                    next_step_text = f"label {cur_label}".strip()
+                                elif getattr(wp, "action", None):
+                                    next_step_text = f"action {str(getattr(wp, 'action', '') or '').strip()}".strip()
+                                elif getattr(wp, "call", None):
+                                    next_step_text = f"call {str(getattr(wp, 'call', '') or '').strip()}".strip()
+                                elif getattr(wp, "load", None):
+                                    next_step_text = f"load {str(getattr(wp, 'load', '') or '').strip()}".strip()
+                                else:
+                                    next_step_text = "step"
+                            else:
+                                stype = str(getattr(wp, "type", "") or "node").strip().lower() or "node"
+                                tx = int(getattr(wp, "x", 0) or 0)
+                                ty = int(getattr(wp, "y", 0) or 0)
+                                tz = getattr(wp, "z", None)
+                                if tz is None:
+                                    next_step_text = f"{stype} ({tx}, {ty})"
+                                else:
+                                    next_step_text = f"{stype} ({tx}, {ty}, {int(tz)})"
+                    except Exception:
+                        next_step_text = ""
+
+                    try:
+                        mgr1, inj_enabled1, dis1 = _im_snapshot()
+                    except Exception:
+                        inj_enabled1, dis1 = False, ""
+
+                    drv_name = ""
+                    try:
+                        if input_driver is not None:
+                            drv_name = type(input_driver).__name__
+                    except Exception:
+                        drv_name = ""
+
+                    has_injectable_action = False
+                    try:
+                        has_injectable_action = any(
+                            str(a.get("kind", "") or "").strip().lower() in {"heal", "mana", "target", "move", "tool", "loot", "switch", "npc_trade", "depot", "bank", "supplies"}
+                            for a in (action_requests_struct or [])
+                        )
+                    except Exception:
+                        has_injectable_action = False
+
+                    gating_enabled = bool(assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions)
+                    advance_pending = bool(advance_pulse)
+
+                    st_state, st_reason = compute_injection_state(
+                        input_mode=str(asst_input_mode or "log"),
+                        driver_name=str(drv_name),
+                        injection_enabled=bool(inj_enabled1),
+                        disabled_reason=str(dis1 or ""),
+                        gating_enabled=bool(gating_enabled),
+                        advance_pulse_pending=bool(advance_pending),
+                        has_injectable_action=bool(has_injectable_action),
+                        live_input_armed=bool(live_input_armed),
+                        target_window_active=bool(target_window_active),
+                    )
+
+                    injection_state_tick = str(st_state)
+                    injection_reason_tick = str(st_reason)
+
+                    runtime_config.update_assistant_status(
+                        cavebot_mode=str(getattr(cavebot_cfg, "mode", "") or ""),
+                        step_index=int(cavebot_step_idx) if cavebot_step_idx is not None else None,
+                        total_steps=int(cavebot_step_total) if cavebot_step_total is not None else None,
+                        current_label=str(cur_label or ""),
+                        next_step_text=str(next_step_text or ""),
+                        injection_state=str(st_state),
+                        injection_reason=str(st_reason),
+                        input_mode=str(asst_input_mode or "log"),
+                        driver_name=str(drv_name),
+                        gating_enabled=bool(gating_enabled),
+                        advance_pulse_pending=bool(advance_pending),
+                    )
             except Exception:
                 pass
 
@@ -2327,8 +2707,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         battlelist_top_names=list(getattr(gamestate, "battlelist_top_names", None) or []),
                         battlelist_confidence=getattr(gamestate, "battlelist_confidence", None),
                         action_request=action_req_str,
+                        action_requests=action_requests_struct,
                         action_committed=action_committed,
+                        action_source=str(action_source or ""),
                         input_plan=input_plan_str,
+                        injection_state=(injection_state_tick or None),
+                        injection_reason=(injection_reason_tick or None),
                         note=note_out if note_out else None,
                         stuck_reason=stuck_reason_tick,
                         stuck_idle_s=stuck_idle_s_tick,
@@ -2386,19 +2770,48 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             or action_committed != last_event_action_committed
                         ):
                             ats = None
+                            inj_dbg = {}
                             try:
-                                _ar, _ac, _ats, _ip = _a_snapshot()
+                                _ar, _ac, _ats, _ip, _src, _ars = _a_snapshot()
                                 if _ats:
                                     ats = float(_ats)
                             except Exception:
                                 ats = None
+                            try:
+                                mgr_dbg, inj_enabled_dbg, disabled_dbg = _im_snapshot()
+                                fg_title = None
+                                block_reason = None
+                                try:
+                                    if mgr_dbg is not None:
+                                        fg_title = str(getattr(mgr_dbg, "last_foreground_title", "") or "")
+                                        block_reason = str(getattr(mgr_dbg, "last_block_reason", "") or "")
+                                except Exception:
+                                    fg_title = None
+                                    block_reason = None
+
+                                inj_dbg = {
+                                    "input_injection_enabled": bool(inj_enabled_dbg),
+                                    "input_disabled_reason": (str(disabled_dbg) if str(disabled_dbg or "").strip() else None),
+                                    "live_input_armed": bool(live_input_armed),
+                                    "target_window_active": bool(target_window_active),
+                                    "allowed_window_titles": list(allowed_titles) if isinstance(allowed_titles, list) else [],
+                                    "foreground_title": (fg_title if fg_title else None),
+                                    "input_block_reason": (block_reason if block_reason else None),
+                                }
+                            except Exception:
+                                inj_dbg = {}
                             emit(
                                 "event.action_request",
                                 {
                                     "action_request": action_req_str,
+                                    "action_requests": action_requests_struct,
                                     "action_committed": bool(action_committed),
+                                    "action_source": str(action_source or ""),
+                                    "injection_state": (injection_state_tick or None),
+                                    "injection_reason": (injection_reason_tick or None),
                                     "action_ts": ats,
                                     "input_plan": input_plan_str,
+                                    **inj_dbg,
                                 },
                             )
                             last_event_action_req = action_req_str
@@ -2495,7 +2908,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "battlelist_top_names": getattr(tel, "battlelist_top_names", None),
                         "battlelist_confidence": getattr(tel, "battlelist_confidence", None),
                         "action_request": getattr(tel, "action_request", ""),
+                        "action_requests": getattr(tel, "action_requests", None) or [],
                         "action_committed": bool(getattr(tel, "action_committed", False)),
+                        "action_source": str(getattr(tel, "action_source", "") or ""),
+                        "injection_state": getattr(tel, "injection_state", None),
+                        "injection_reason": getattr(tel, "injection_reason", None),
                         "action_ts": None,
                         "note": tel.note,
                         "stuck_reason": getattr(tel, "stuck_reason", ""),
@@ -2504,7 +2921,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "stuck_extra": getattr(tel, "stuck_extra", ""),
                     }
                     try:
-                        ar, _ac, ats, ip = _a_snapshot()
+                        ar, _ac, ats, ip, _src, _ars = _a_snapshot()
                         if ar and ats:
                             tel_event["action_ts"] = float(ats)
                         if ip:
@@ -2565,7 +2982,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "cavebot_blocked": bool(cavebot_blocked),
                         "cavebot_block_reason": str(cavebot_block_reason or ""),
                         "action_request": action_req_str,
+                        "action_requests": action_requests_struct,
                         "action_committed": bool(action_committed),
+                        "action_source": str(action_source or ""),
+                        "injection_state": (injection_state_tick or None),
+                        "injection_reason": (injection_reason_tick or None),
                         "action_ts": None,
                         "note": "",
                         "stuck_reason": stuck_reason_tick,
@@ -2579,7 +3000,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "nav_astar_visited": nav_astar_visited,
                     }
                     try:
-                        ar, _ac, ats, ip = _a_snapshot()
+                        ar, _ac, ats, ip, _src, _ars = _a_snapshot()
                         if ar and ats:
                             tel_event["action_ts"] = float(ats)
                         if ip:
@@ -2795,6 +3216,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         must_stop = bool((dead and stop_on_dead) or ((gs_age is not None and gs_age >= stale_gs_s) and stop_on_stale))
                         fail_closed(stop_event=stop_event, input_manager=mgr, reason=reason, set_stop=must_stop)
                         _im_set(mgr, False, reason)
+                        try:
+                            if runtime_config is not None:
+                                runtime_config.update_assistant(live_input_armed=False)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 

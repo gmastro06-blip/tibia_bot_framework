@@ -26,6 +26,12 @@
     "route_path": "configs/route.json",
     "mode": "steps",
     "coords_provider": "disabled",
+    "minimap_seed_x": "",
+    "minimap_seed_y": "",
+    "minimap_seed_z": "",
+    "minimap_fallback_mode": "steps",
+    "minimap_fallback_conf_threshold": 0.4,
+    "minimap_fallback_n_ticks": 4,
     "loop": true,
     "stop_on_low_cap": true,
     "cap_threshold": 50,
@@ -47,7 +53,10 @@
   "assistant": {
     "enabled": true,
     "confirm_actions": true,
-    "sound_alerts": true
+    "sound_alerts": true,
+    "input_mode": "log",
+    "target_hotkey": "",
+    "minimap_hotkey": ""
   },
   "replay": {
     "enabled": false,

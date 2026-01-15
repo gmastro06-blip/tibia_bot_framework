@@ -33,12 +33,31 @@ class Waypoint:
 
 
 def load_route(path: str) -> List[Waypoint]:
-    """Carga una ruta desde JSON.
+    """Carga una ruta desde JSON o desde `waypoints.in` (scripts-master).
 
-    Formato esperado: lista de objetos con {x, y, z?, name?, action?, label?, call?, load?, conditional_jump?, type?, comment?, raw_line?}.
+    - JSON: lista de objetos con {x, y, z?, name?, action?, label?, call?, load?, conditional_jump?, type?, comment?, raw_line?}.
+    - IN: formato line-based (label/action/node/stand/rope/ladder/cond) convertido a items y luego a Waypoints.
     """
+
     p = Path(path)
-    data = json.loads(p.read_text(encoding="utf-8"))
+
+    # Support scripts-master style `waypoints.in` directly.
+    if p.suffix.lower() == ".in":
+        try:
+            from route_editor.waypoints import expand_move_macros, parse_waypoints
+            from route_editor.conversion import waypoints_to_route_items
+
+            raw = p.read_text(encoding="utf-8")
+            parsed = parse_waypoints(raw)
+            steps = parsed.steps
+            # Expand MOVE macros if any (not used by wasp_ab but supported).
+            steps, _errs = expand_move_macros(list(steps))
+            items = waypoints_to_route_items(steps)
+            data = items
+        except Exception as e:
+            raise ValueError(f"waypoints.in parse failed: {e}")
+    else:
+        data = json.loads(p.read_text(encoding="utf-8"))
 
     # Optional schema validation (helps catch typos early).
     # Opt-out: ROUTE_SCHEMA_VALIDATE=0
@@ -60,7 +79,7 @@ def load_route(path: str) -> List[Waypoint]:
         pass
 
     if not isinstance(data, list):
-        raise ValueError("route.json must be a list")
+        raise ValueError("route must be a list")
 
     out: List[Waypoint] = []
     for item in data:
