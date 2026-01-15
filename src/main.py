@@ -12,6 +12,7 @@ if project_root not in sys.path:
 
 import threading
 from queue import Queue, Empty
+from queue import Full
 import time
 import json
 from queue_utils import put_latest
@@ -21,6 +22,7 @@ from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
 from decision.targeting import TargetSelector, format_target, Target
 from decision.signals import evaluate_signals
+from decision.action_planner import plan_action_requests
 from decision.scheduler import PeriodicTrigger
 from decision.waypoint_actions import build_requests_from_waypoint_action, evaluate_waypoint_requirements
 from decision.service_flow import expand_service_requests
@@ -139,6 +141,71 @@ def load_roi_config(resolution: tuple) -> tuple:
         return default_rois, [2048, 1076]
 
 
+def build_capture_backend(*, force_monitor: int):
+    """Build capture backend instance based on environment.
+
+    Env vars:
+      - CAPTURE_BACKEND: dxgi|obs_websocket|virtualcam (default: dxgi)
+      - OBS_HOST/OBS_PORT/OBS_PASSWORD/OBS_CAPTURE_METHOD/OBS_SOURCE_NAME
+      - VIRTUALCAM_INDEX
+
+    Notes:
+      - Always fail-safe: on any error, falls back to DXGI.
+      - This is extracted for unit testing (no threads started here).
+    """
+
+    capture_backend = (os.getenv("CAPTURE_BACKEND", "dxgi") or "dxgi").strip().lower()
+    if capture_backend in {"", "default", "dxgi", "win", "window"}:
+        return DXGICapture(force_monitor=int(force_monitor))
+
+    if capture_backend in {"obs", "obs_websocket", "obsws"}:
+        try:
+            from capture.obs_websocket_capture import OBSWebSocketCapture
+
+            host = (os.getenv("OBS_HOST", "localhost") or "localhost").strip() or "localhost"
+            try:
+                port = int(float((os.getenv("OBS_PORT", "4455") or "4455").strip() or "4455"))
+            except Exception:
+                port = 4455
+            password = os.getenv("OBS_PASSWORD", "") or ""
+            capture_method = (os.getenv("OBS_CAPTURE_METHOD", "obs_source") or "obs_source").strip() or "obs_source"
+            source_name = (os.getenv("OBS_SOURCE_NAME", "Tibia_Fuente") or "Tibia_Fuente").strip() or "Tibia_Fuente"
+
+            obs_capture = OBSWebSocketCapture(
+                host=host,
+                port=port,
+                password=password,
+                capture_method=capture_method,
+                source_name=source_name,
+            )
+            if bool(obs_capture.connect()):
+                return obs_capture
+            print("⚠️  OBS capture no conectó; fallback a DXGI")
+        except Exception as e:
+            print(f"⚠️  OBS capture no disponible ({e}); fallback a DXGI")
+        return DXGICapture(force_monitor=int(force_monitor))
+
+    if capture_backend in {"virtualcam", "cam", "webcam"}:
+        try:
+            from capture.virtualcam_capture import VirtualCamCapture
+
+            try:
+                cam_idx = int(float((os.getenv("VIRTUALCAM_INDEX", "2") or "2").strip() or "2"))
+            except Exception:
+                cam_idx = 2
+
+            vc = VirtualCamCapture(camera_index=cam_idx)
+            if bool(vc.connect()):
+                return vc
+            print("⚠️  VirtualCam no conectó; fallback a DXGI")
+        except Exception as e:
+            print(f"⚠️  VirtualCam no disponible ({e}); fallback a DXGI")
+        return DXGICapture(force_monitor=int(force_monitor))
+
+    print(f"⚠️  CAPTURE_BACKEND desconocido '{capture_backend}'; usando DXGI")
+    return DXGICapture(force_monitor=int(force_monitor))
+
+
 def main() -> None:
     """Entry-point estable: ejecuta el bot."""
     run_bot()
@@ -226,18 +293,43 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         - If it still can't enqueue (race), drops the new item.
         """
 
+        # IMPORTANT: Implement the latest-wins semantics *here* (forced rule).
+        # We still update health counters consistently.
         try:
-            put_latest_health(
-                q,
-                item,
-                inc=_h_inc,
-                drop_oldest_key=drop_oldest_key,
-                drop_new_key=drop_new_key,
-            )
+            q.put_nowait(item)
+            return
+        except Full:
+            pass
         except Exception:
-            # Be fail-safe: if anything goes wrong, count as new-drop.
             if drop_new_key:
                 _h_inc(drop_new_key)
+            return
+
+        # Queue full: drop one oldest item.
+        try:
+            q.get_nowait()
+            if drop_oldest_key:
+                _h_inc(drop_oldest_key)
+        except Empty:
+            # Race: became empty; continue to retry put.
+            pass
+        except Exception:
+            if drop_new_key:
+                _h_inc(drop_new_key)
+            return
+
+        # Retry once.
+        try:
+            q.put_nowait(item)
+            return
+        except Full:
+            if drop_new_key:
+                _h_inc(drop_new_key)
+            return
+        except Exception:
+            if drop_new_key:
+                _h_inc(drop_new_key)
+            return
     # Cross-thread correlation: latest planned/committed ActionRequest summary.
     # Vision (overlay/replay) can read this even when there's no RuntimeConfig/UI.
     action_lock = threading.Lock()
@@ -349,7 +441,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     else:
         print("🖥️  FORCE_MONITOR no configurado; usando monitor 2 por defecto")
 
-    capture = DXGICapture(force_monitor=force_monitor)
+    capture = build_capture_backend(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
 
     anchor_tracker = AnchorTracker()
@@ -2190,73 +2282,132 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 else:
                     recommendation = f"move: {cavebot_next}"
 
-            # Build mock action requests (for logging/replay) without doing real inputs.
+            # Build action requests (assistant-first): planner (BT or fallback) ->
+            # central commit policy (at most one committed action) -> expansion.
             action_req_str = ""
             action_committed = False
             action_source = ""
             input_plan_str = ""
             action_requests_struct: list[dict[str, object]] = []
             reqs: list[ActionRequest] = []
-            action_source = "priority_planner"
+            action_source = "planner"
             try:
                 if ActionRequest is None:
                     reqs = []
                 else:
-                    # --- 1) Healing (highest priority) ---
-                    try:
-                        if healing_cfg is not None and bool(getattr(healing_cfg, "enabled", False)):
-                            # NOTE: keep assistant-first: preview by default.
-                            if bool(getattr(heal_dec, "heal_hp", False)):
-                                hp_act = (
-                                    str(getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "")
-                                    .strip()
-                                )
-                                if hp_act:
-                                    reqs.append(ActionRequest(kind="heal", value=hp_act, note="preview"))
-                            if bool(getattr(heal_dec, "heal_mp", False)):
-                                mp_act = (
-                                    str(getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "")
-                                    .strip()
-                                )
-                                if mp_act:
-                                    # Keep separate kind for observability; driver may still be mock.
-                                    reqs.append(ActionRequest(kind="mana", value=mp_act, note="preview"))
-                    except Exception:
-                        pass
+                    def _fallback_planner() -> list[ActionRequest]:
+                        out: list[ActionRequest] = []
 
-                    # --- 2) Targeting (2nd priority) ---
-                    try:
-                        if str(target_str or "").strip() and str(target_str).strip().lower() != "none":
-                            reqs.append(ActionRequest(kind="target", value=str(target_str), note="preview"))
-                    except Exception:
-                        pass
-
-                    # --- 3) Cavebot (3rd priority) ---
-                    try:
-                        if str(cavebot_next or "").strip().lower() in {"north", "south", "east", "west"}:
-                            reqs.append(ActionRequest(kind="move", value=str(cavebot_next).strip().lower(), note="preview"))
-                    except Exception:
-                        pass
-
-                    # Waypoint actions (tools/loot/etc.)
-                    try:
-                        emit_wp_action = bool(str(cavebot_action or "").strip())
-
-                        # Rope/ladder: trigger only once, then wait for z change.
+                        # --- 1) Healing (highest priority) ---
                         try:
-                            dn = str(getattr(decision, "note", "") or "")
+                            if healing_cfg is not None and bool(getattr(healing_cfg, "enabled", False)):
+                                if bool(getattr(heal_dec, "heal_hp", False)):
+                                    hp_act = (
+                                        str(getattr(healing_cfg, "hp_action", "") or getattr(healing_cfg, "action", "") or "")
+                                        .strip()
+                                    )
+                                    if hp_act:
+                                        out.append(ActionRequest(kind="heal", value=hp_act, note="preview"))
+                                if bool(getattr(heal_dec, "heal_mp", False)):
+                                    mp_act = (
+                                        str(getattr(healing_cfg, "mp_action", "") or getattr(healing_cfg, "action", "") or "")
+                                        .strip()
+                                    )
+                                    if mp_act:
+                                        out.append(ActionRequest(kind="mana", value=mp_act, note="preview"))
                         except Exception:
-                            dn = ""
-                        if dn.startswith("waiting_z"):
-                            emit_wp_action = False
-                        if str(cavebot_action or "").strip().lower() in {"rope", "ladder"}:
-                            if not dn.endswith("_trigger"):
-                                emit_wp_action = False
+                            pass
 
-                        if emit_wp_action:
-                            reqs.extend(build_requests_from_waypoint_action(cavebot_action, committed=False))
+                        # --- 2) Targeting (2nd priority) ---
+                        try:
+                            if str(target_str or "").strip() and str(target_str).strip().lower() != "none":
+                                out.append(ActionRequest(kind="target", value=str(target_str), note="preview"))
+                        except Exception:
+                            pass
+
+                        # --- 3) Cavebot (3rd priority) ---
+                        try:
+                            if str(cavebot_next or "").strip().lower() in {"north", "south", "east", "west"}:
+                                out.append(
+                                    ActionRequest(kind="move", value=str(cavebot_next).strip().lower(), note="preview")
+                                )
+                        except Exception:
+                            pass
+
+                        # Waypoint actions (tools/loot/etc.)
+                        try:
+                            emit_wp_action = bool(str(cavebot_action or "").strip())
+
+                            # Rope/ladder: trigger only once, then wait for z change.
+                            try:
+                                dn = str(getattr(decision, "note", "") or "")
+                            except Exception:
+                                dn = ""
+                            if dn.startswith("waiting_z"):
+                                emit_wp_action = False
+                            if str(cavebot_action or "").strip().lower() in {"rope", "ladder"}:
+                                if not dn.endswith("_trigger"):
+                                    emit_wp_action = False
+
+                            if emit_wp_action:
+                                out.extend(build_requests_from_waypoint_action(cavebot_action, committed=False))
+                        except Exception:
+                            pass
+
+                        # Periodic maintenance (assistant-only).
+                        try:
+                            if bool(food_trigger.should_fire()):
+                                out.append(ActionRequest(kind="maintenance", value="eat_food", note="preview"))
+                        except Exception:
+                            pass
+
+                        return out
+
+                    # BT inputs: best-effort battlelist and detector target info.
+                    battlelist_target = ""
+                    battlelist_conf = None
+                    try:
+                        top = getattr(gamestate, "battlelist_top_names", None)
+                        if isinstance(top, list) and top:
+                            battlelist_target = str(top[0] or "")
                     except Exception:
-                        pass
+                        battlelist_target = ""
+                    try:
+                        bc = getattr(gamestate, "battlelist_confidence", None)
+                        battlelist_conf = float(bc) if bc is not None else None
+                    except Exception:
+                        battlelist_conf = None
+
+                    target_cls = ""
+                    target_conf = None
+                    try:
+                        if last_target is not None:
+                            target_cls = str(getattr(last_target, "cls", "") or getattr(last_target, "label", "") or "")
+                            tc = getattr(last_target, "conf", None)
+                            target_conf = float(tc) if tc is not None else None
+                    except Exception:
+                        target_cls = ""
+                        target_conf = None
+
+                    bt_enabled = bool(bt_runner is not None)
+                    reqs, src = plan_action_requests(
+                        bt_enabled=bt_enabled,
+                        bt_runner=bt_runner,
+                        fallback=_fallback_planner,
+                        sig=sig,
+                        healing_cfg=healing_cfg,
+                        heal_hp=bool(getattr(heal_dec, "heal_hp", False)),
+                        heal_mp=bool(getattr(heal_dec, "heal_mp", False)),
+                        battlelist_target=battlelist_target,
+                        battlelist_conf=battlelist_conf,
+                        target_cls=target_cls,
+                        target_conf=target_conf,
+                        cavebot_next=cavebot_next,
+                        cavebot_action=cavebot_action,
+                        commit_flag=bool(commit_flag),
+                        eat_food=False,  # fallback planner handles periodic maintenance
+                    )
+                    action_source = str(src)
 
                 # Commit exactly one action when allowed (confirm pulse or auto-commit).
                 # This preserves strict priority: first item in reqs wins.
@@ -2285,6 +2436,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     "supplies",
                     "minimap_click_sim",
                 }
+
+                # Normalize planner output: never allow multi-commit; when we can't
+                # commit (wrong window/disabled), force everything to preview.
+                try:
+                    reqs = [ActionRequest(kind=str(r.kind), value=str(r.value), note="preview") for r in (reqs or [])]
+                except Exception:
+                    reqs = list(reqs or [])
 
                 if can_commit and reqs:
                     new_reqs: list[ActionRequest] = []
@@ -2425,6 +2583,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         inj_enabled1, dis1 = False, ""
 
+                    fg_title = ""
+                    block_reason = ""
+                    try:
+                        if mgr1 is not None:
+                            fg_title = str(getattr(mgr1, "last_foreground_title", "") or "")
+                            block_reason = str(getattr(mgr1, "last_block_reason", "") or "")
+                    except Exception:
+                        fg_title = ""
+                        block_reason = ""
+
                     drv_name = ""
                     try:
                         if input_driver is not None:
@@ -2467,6 +2635,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         next_step_text=str(next_step_text or ""),
                         injection_state=str(st_state),
                         injection_reason=str(st_reason),
+                        foreground_title=str(fg_title or ""),
+                        input_block_reason=str(block_reason or ""),
                         input_mode=str(asst_input_mode or "log"),
                         driver_name=str(drv_name),
                         gating_enabled=bool(gating_enabled),

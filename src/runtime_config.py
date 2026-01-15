@@ -249,6 +249,8 @@ class AssistantStatus:
     next_step_text: str = ""
     injection_state: str = "DISABLED"  # "ARMED"|"WAITING_CONFIRM"|"DISABLED"
     injection_reason: str = ""
+    foreground_title: str = ""  # Last observed foreground window title (InputManager)
+    input_block_reason: str = ""  # Last InputManager block reason (preview_only|wrong_window|...)
     input_mode: str = ""  # UI-requested mode: "log"|"keyboard"|"wininput"
     driver_name: str = ""  # actual driver in use (runtime)
     gating_enabled: bool = False
@@ -476,6 +478,8 @@ class RuntimeConfig:
                 next_step_text=str(getattr(self.assistant_status, "next_step_text", "") or ""),
                 injection_state=str(getattr(self.assistant_status, "injection_state", "DISABLED") or "DISABLED"),
                 injection_reason=str(getattr(self.assistant_status, "injection_reason", "") or ""),
+                foreground_title=str(getattr(self.assistant_status, "foreground_title", "") or ""),
+                input_block_reason=str(getattr(self.assistant_status, "input_block_reason", "") or ""),
                 input_mode=str(getattr(self.assistant_status, "input_mode", "") or ""),
                 driver_name=str(getattr(self.assistant_status, "driver_name", "") or ""),
                 gating_enabled=bool(getattr(self.assistant_status, "gating_enabled", False)),
@@ -492,6 +496,8 @@ class RuntimeConfig:
         next_step_text: str | None = None,
         injection_state: str | None = None,
         injection_reason: str | None = None,
+        foreground_title: str | None = None,
+        input_block_reason: str | None = None,
         input_mode: str | None = None,
         driver_name: str | None = None,
         gating_enabled: bool | None = None,
@@ -511,6 +517,10 @@ class RuntimeConfig:
                 self.assistant_status.injection_state = str(injection_state)
             if injection_reason is not None:
                 self.assistant_status.injection_reason = str(injection_reason)
+            if foreground_title is not None:
+                self.assistant_status.foreground_title = str(foreground_title)
+            if input_block_reason is not None:
+                self.assistant_status.input_block_reason = str(input_block_reason)
             if input_mode is not None:
                 self.assistant_status.input_mode = str(input_mode)
             if driver_name is not None:

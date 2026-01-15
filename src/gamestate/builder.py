@@ -319,8 +319,22 @@ class GameStateBuilder:
             step = None
 
         if step is None:
+            # Treat this as a low-confidence tick so fallback policy can engage.
+            try:
+                self._minimap_last_resp = 0.0
+            except Exception:
+                pass
+            try:
+                self._minimap_accept_streak = 0
+            except Exception:
+                pass
+            try:
+                self._minimap_confidence = 0.0
+            except Exception:
+                pass
+
             self._minimap_status = "minimap_no_step"
-            return self._minimap_coords
+            return self._minimap_apply_fallback(frame, rois, resolution, allow_ocr=allow_ocr, coords=self._minimap_coords)
 
         dx_tiles, dy_tiles, _resp = step
         if self._minimap_coords is None:
@@ -733,9 +747,13 @@ class GameStateBuilder:
                     gamestate.coords_provider_state = {
                         "enabled": True,
                         "seed_ok": bool(self._minimap_seed is not None),
+                        "coords_enabled": bool(gamestate.pos_x is not None and gamestate.pos_y is not None),
                         "confidence": gamestate.coords_confidence,
                         "last_update_ts": float(self._minimap_last_update_ts) if float(self._minimap_last_update_ts) > 0 else None,
                         "reason": str(self._minimap_status or ""),
+                        "accept_streak": int(getattr(self, "_minimap_accept_streak", 0) or 0),
+                        "low_conf_streak": int(getattr(self, "_minimap_low_conf_streak", 0) or 0),
+                        "last_resp": float(getattr(self, "_minimap_last_resp", 0.0) or 0.0),
                     }
                 except Exception:
                     gamestate.coords_provider_state = None

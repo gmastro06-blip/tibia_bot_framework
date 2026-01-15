@@ -81,5 +81,6 @@ def test_input_manager_allows_committed_when_window_ok(monkeypatch: pytest.Monke
     ok = mgr.send(ActionRequest(kind="move", value="north", note="committed"))
     assert ok is True
     assert mgr.last_block_reason == ""
-    assert drv.last() is not None
-    assert drv.last().kind == "move"
+    last = drv.last()
+    assert last is not None
+    assert last.kind == "move"

@@ -7,7 +7,7 @@ import threading
 import time
 import subprocess
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 
 def _add_src_to_syspath() -> None:
@@ -284,6 +284,8 @@ class BotUI:
         self.injection_state_var = tk.StringVar(value="-")
         self.injection_reason_var = tk.StringVar(value="-")
         self.injection_mode_driver_var = tk.StringVar(value="-")
+        self.injection_foreground_var = tk.StringVar(value="-")
+        self.injection_block_reason_var = tk.StringVar(value="-")
 
         # Simulacion/overrides de senales (para cuando aun no hay deteccion real)
         self.sim_enabled = tk.BooleanVar(value=True)
@@ -1261,6 +1263,11 @@ class BotUI:
         tk.Label(inj, text="MODE/DRIVER").grid(row=5, column=0, sticky="w", pady=(2, 0))
         tk.Label(inj, textvariable=self.injection_mode_driver_var, width=34, anchor="w").grid(row=5, column=1, sticky="w", pady=(2, 0))
 
+        tk.Label(inj, text="FOREGROUND").grid(row=6, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_foreground_var, width=34, anchor="w").grid(row=6, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="BLOCK").grid(row=7, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_block_reason_var, width=34, anchor="w").grid(row=7, column=1, sticky="w", pady=(2, 0))
+
         cb_block = tk.Frame(tab_cavebot)
         cb_block.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
 
@@ -1596,9 +1603,86 @@ class BotUI:
                 except Exception:
                     pass
 
+        def add_foreground_title_to_allowlist() -> None:
+            """Append the current foreground window title to the allowlist.
+
+            This does NOT arm live input; it only helps populate the allowlist.
+            """
+
+            try:
+                from input_guard import get_foreground_window_title
+
+                title = str(get_foreground_window_title() or "").strip()
+            except Exception:
+                title = ""
+
+            if not title:
+                try:
+                    self._messagebox.showwarning(
+                        "Allowlist",
+                        "No pude leer el titulo de la ventana activa.\n\n"
+                        "Tip: ejecuta como Windows, o agrega el titulo manualmente.",
+                    )
+                except Exception:
+                    pass
+                return
+
+            try:
+                raw = str(self.asst_allowed_window_titles.get() or "")
+                titles = [s.strip() for s in raw.split(",") if s.strip()]
+                if title not in titles:
+                    titles.append(title)
+                    self.asst_allowed_window_titles.set(", ".join(titles))
+            except Exception:
+                pass
+
+        def reset_allowlist_defaults() -> None:
+            """Reset allowlist to safe defaults.
+
+            This does NOT arm live input.
+            """
+
+            try:
+                defaults = ["TibiaClone", "MyClient", "TibiaClone Harness"]
+                self.asst_allowed_window_titles.set(",".join(defaults))
+            except Exception:
+                pass
+
+        def clear_allowlist() -> None:
+            """Clear the allowlist.
+
+            This does NOT arm live input.
+            """
+
+            try:
+                self.asst_allowed_window_titles.set("")
+            except Exception:
+                pass
+
         tk.Button(live_frame, text="Abrir harness", width=14, command=open_live_input_harness).grid(
             row=3, column=0, sticky="w", pady=(6, 0)
         )
+
+        tk.Button(
+            live_frame,
+            text="Add foreground",
+            width=14,
+            command=add_foreground_title_to_allowlist,
+        ).grid(row=3, column=1, sticky="w", pady=(6, 0))
+
+        tk.Button(
+            live_frame,
+            text="Reset allowlist",
+            width=14,
+            command=reset_allowlist_defaults,
+        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
+
+        tk.Button(
+            live_frame,
+            text="Clear allowlist",
+            width=14,
+            command=clear_allowlist,
+        ).grid(row=4, column=1, sticky="w", pady=(6, 0))
 
         tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
             row=7, column=0, columnspan=2, sticky="w"
@@ -2250,7 +2334,7 @@ class BotUI:
         sync_assistant()
         sync_replay_and_logging()
 
-        def poll_telemetry() -> None:
+        def poll_telemetry() -> None:  # pyright: ignore[reportGeneralTypeIssues]
             try:
                 tel = self._config.telemetry_snapshot()
                 health = self._config.health_snapshot()
@@ -2274,6 +2358,14 @@ class BotUI:
                         mode = str(getattr(ss, "input_mode", "") or "-") or "-"
                         drv = str(getattr(ss, "driver_name", "") or "-") or "-"
                         self.injection_mode_driver_var.set(f"{mode} | {drv}")
+                        fg = str(getattr(ss, "foreground_title", "") or "-") or "-"
+                        br = str(getattr(ss, "input_block_reason", "") or "-") or "-"
+                        if len(fg) > 60:
+                            fg = fg[:57] + "..."
+                        if len(br) > 60:
+                            br = br[:57] + "..."
+                        self.injection_foreground_var.set(fg)
+                        self.injection_block_reason_var.set(br)
                 except Exception:
                     pass
                 hp_str = "?"
@@ -2300,12 +2392,12 @@ class BotUI:
                 # Coords provider status (selection + readiness)
                 try:
                     prov = str(getattr(tel, "coords_provider", "") or "")
-                    state = getattr(tel, "coords_provider_state", None)
-                    if isinstance(state, dict) and state:
-                        enabled = bool(state.get("enabled", True))
-                        seed_ok = bool(state.get("seed_ok", False))
-                        reason = str(state.get("reason", "") or "")
-                        conf = state.get("confidence", None)
+                    prov_info = getattr(tel, "coords_provider_state", None)
+                    if isinstance(prov_info, dict) and prov_info:
+                        enabled = bool(prov_info.get("enabled", True))
+                        seed_ok = bool(prov_info.get("seed_ok", False))
+                        reason = str(prov_info.get("reason", "") or "")
+                        conf = prov_info.get("confidence", None)
                         conf_s = "-"
                         color = "gray"
                         try:
@@ -2424,11 +2516,14 @@ class BotUI:
                 # Disable/enable advance buttons based on finish state.
                 try:
                     running = bool(self._is_running())
-                    state: Literal["disabled", "normal"] = "disabled" if (not running or finished) else "normal"
+                    btn_tk_state = cast(
+                        Literal["disabled", "normal"],
+                        ("disabled" if (not running or finished) else "normal"),
+                    )
                     if hasattr(self, "_cavebot_mark_btn") and self._cavebot_mark_btn is not None:
-                        self._cavebot_mark_btn.config(state=state)
+                        self._cavebot_mark_btn.config(state=btn_tk_state)
                     if hasattr(self, "_cavebot_next_btn") and self._cavebot_next_btn is not None:
-                        self._cavebot_next_btn.config(state=state)
+                        self._cavebot_next_btn.config(state=btn_tk_state)
                 except Exception:
                     pass
                 try:
@@ -3163,7 +3258,9 @@ class BotUI:
 
         def _run_icon():
             try:
-                self._tray_icon.run()
+                icon = self._tray_icon
+                if icon is not None:
+                    icon.run()
             except Exception:
                 pass
 
@@ -4212,7 +4309,7 @@ class BotUI:
             self.asst_target_hotkey.set(os.getenv("TARGET_HOTKEY", "").strip())
             self.asst_minimap_hotkey.set(os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
             self.asst_live_input_armed.set(False)
-            self.asst_allowed_window_titles.set("TibiaClone,MyClient")
+            self.asst_allowed_window_titles.set("TibiaClone,MyClient,TibiaClone Harness")
         except Exception:
             pass
 
