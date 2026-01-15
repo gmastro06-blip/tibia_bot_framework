@@ -3204,11 +3204,8 @@ class BotUI:
             pass
 
     def _on_window_close(self) -> None:
-        if self._allow_close:
-            self.on_close()
-            return
-        if self._minimize_to_tray():
-            return
+        # UX: clicking the window close button (X) should close the UI.
+        # Minimize-to-tray is available via the explicit "Minimizar" button.
         self._allow_close = True
         self.on_close()
 
