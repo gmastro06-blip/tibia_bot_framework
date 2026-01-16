@@ -418,20 +418,25 @@ class StepNavigator:
         # Segment stepping is a legacy fallback when we don't have coords.
         # In tests (and some headless uses) we assume each suggested move succeeds.
         # In *steps-mode* we must NOT invent progress: only coords/minimap-motion can confirm.
+        #
+        # IMPORTANT: Do not let ambient env vars (e.g. CAVEBOT_MODE=steps) change
+        # pure unit-test/simulation behavior when no GameState is provided.
         strict_no_coords_progress = False
-        try:
-            mode = str(getattr(config, "mode", "") or "").strip().lower()
-            force_steps = bool(getattr(config, "force_steps", False))
-            strict_no_coords_progress = force_steps or (mode in {"steps", "step"})
-        except Exception:
-            strict_no_coords_progress = False
-        if not strict_no_coords_progress:
+        if gamestate is not None:
             try:
-                env_mode = str(os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
-                if env_mode in {"steps", "step"}:
-                    strict_no_coords_progress = True
+                mode = str(getattr(config, "mode", "") or "").strip().lower()
+                force_steps = bool(getattr(config, "force_steps", False))
+                strict_no_coords_progress = force_steps or (mode in {"steps", "step"})
             except Exception:
-                pass
+                strict_no_coords_progress = False
+
+            if not strict_no_coords_progress:
+                try:
+                    env_mode = str(os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
+                    if env_mode in {"steps", "step"}:
+                        strict_no_coords_progress = True
+                except Exception:
+                    pass
 
         if pos is None and (not progressed) and (not strict_no_coords_progress):
             progressed = True

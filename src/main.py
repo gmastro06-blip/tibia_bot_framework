@@ -38,6 +38,7 @@ from telemetry.overlay_export import OverlayExporter, overlay_config_from_env
 from telemetry.debug_panel import DebugPanelExporter, debug_panel_config_from_env
 from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
+from telemetry.decision_trace import DecisionTraceWriter, ensure_blocked_reason
 from vision.anchor_tracker import AnchorTracker
 from vision.viewport_tracker import ViewportTracker
 from layout_tracker import LayoutTracker
@@ -521,6 +522,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     debug_panel = DebugPanelExporter(debug_panel_config_from_env())
     jsonl = JsonlLogger()
     jsonl_writer = JsonlWriter()
+
+    # DecisionTrace: one JSONL line per decision tick (assistant observability).
+    # Fail-safe: never blocks or breaks the bot.
+    decision_trace = DecisionTraceWriter(
+        path=(os.getenv("DECISION_TRACE_PATH", "logs/decision_trace.jsonl") or "logs/decision_trace.jsonl"),
+        max_bytes=10 * 1024 * 1024,
+    )
 
     replay_write_q: Queue = Queue(maxsize=10)
     jsonl_write_q: Queue = Queue(maxsize=100)
@@ -1469,61 +1477,25 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             from input_focus_guard import get_client_hwnd, is_allowed_to_inject, update_client_state
 
             mock_driver = MockInputDriver(max_items=500)
-            driver_name = os.getenv("ACTION_DRIVER", "").strip().lower()
+            # Force a single input driver policy by code: keyboard injection is ON.
+            # UI does not control driver types.
+            driver_name = "keyboard"
+            live_input_armed = True
+
             target_hotkey = os.getenv("TARGET_HOTKEY", "").strip()
             minimap_hotkey = os.getenv("MINIMAP_CLICK_HOTKEY", "").strip()
-            allowed_titles: list[str] = ["TibiaClone", "MyClient"]
-            live_input_armed = False
 
-            try:
-                if runtime_config is not None:
-                    asst_cfg = runtime_config.assistant_snapshot()
-                    mode = str(getattr(asst_cfg, "input_mode", "") or "").strip().lower()
-                    if mode:
-                        driver_name = mode
-                    try:
-                        live_input_armed = bool(getattr(asst_cfg, "live_input_armed", False))
-                    except Exception:
-                        live_input_armed = False
-                    try:
-                        allowed_titles = list(getattr(asst_cfg, "allowed_window_titles", None) or allowed_titles)
-                    except Exception:
-                        allowed_titles = allowed_titles
-                    th = str(getattr(asst_cfg, "target_hotkey", "") or "").strip()
-                    mh = str(getattr(asst_cfg, "minimap_hotkey", "") or "").strip()
-                    if th:
-                        target_hotkey = th
-                    if mh:
-                        minimap_hotkey = mh
-            except Exception:
-                pass
-            # Build the OS-injecting driver only when explicitly armed.
-            # Otherwise keep a safe mock driver even if mode==keyboard (unarmed).
-            use_keyboard = driver_name in {"keyboard", "wininput"}
-            use_bridge = driver_name in {"bridge", "input_bridge"}
-            if use_bridge and bool(live_input_armed):
-                try:
-                    host = (os.getenv("INPUT_BRIDGE_HOST", "127.0.0.1") or "127.0.0.1").strip()
-                    try:
-                        port = int(float((os.getenv("INPUT_BRIDGE_PORT", "7777") or "7777").strip() or "7777"))
-                    except Exception:
-                        port = 7777
-                    token = os.getenv("INPUT_BRIDGE_TOKEN", "") or ""
-                    input_bridge_client = InputBridgeClient(host=host, port=port, token=token)
-                    input_driver = InputBridgeDriver(
-                        client=input_bridge_client,
-                        target_hotkey=target_hotkey or None,
-                    )
-                except Exception:
-                    input_bridge_client = None
-                    input_driver = mock_driver
-            elif use_keyboard and bool(live_input_armed):
-                input_driver = WindowsKeyboardDriver(
-                    target_hotkey=target_hotkey or None,
-                    minimap_hotkey=minimap_hotkey or None,
-                )
-            else:
-                input_driver = mock_driver
+            # Window allowlist (env-configurable, not UI-editable).
+            raw_titles = (os.getenv("ALLOWED_WINDOW_TITLES", "Tibia") or "Tibia").strip()
+            allowed_titles: list[str] = [s.strip() for s in raw_titles.split(",") if s.strip()]
+            if not allowed_titles:
+                allowed_titles = ["Tibia"]
+
+            # Always use keyboard driver when armed.
+            input_driver = WindowsKeyboardDriver(
+                target_hotkey=target_hotkey or None,
+                minimap_hotkey=minimap_hotkey or None,
+            )
 
             input_mgr = InputManager(
                 driver=input_driver,
@@ -1563,12 +1535,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             nonlocal applied_input_mode, applied_target_hotkey, applied_minimap_hotkey, applied_live_input_armed, applied_allowed_titles, input_driver, input_bridge_client
 
-            if runtime_config is None:
-                return
-            if input_mgr is None:
-                return
-            if mock_driver is None:
-                return
+            # Input mode/hotkeys/titles are not controlled via UI.
+            return
 
             try:
                 asst_cfg = runtime_config.assistant_snapshot()
@@ -1778,23 +1746,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 confirm_mode = False
 
-            # Live input arming (strict): requires keyboard mode + explicit arming.
-            try:
-                asst_input_mode = str(getattr(assistant_cfg, "input_mode", "log") or "log").strip().lower()
-            except Exception:
-                asst_input_mode = "log"
-            if asst_input_mode == "wininput":
-                asst_input_mode = "keyboard"
-            if asst_input_mode == "input_bridge":
-                asst_input_mode = "bridge"
-            try:
-                live_input_armed = bool(getattr(assistant_cfg, "live_input_armed", False)) if assistant_cfg is not None else False
-            except Exception:
-                live_input_armed = False
-            try:
-                allowed_titles = list(getattr(assistant_cfg, "allowed_window_titles", None) or []) if assistant_cfg is not None else []
-            except Exception:
-                allowed_titles = []
+            # Input policy is code/env controlled only (no UI switching).
+            asst_input_mode = "keyboard"
+            live_input_armed = True
+            raw_titles = (os.getenv("ALLOWED_WINDOW_TITLES", "Tibia") or "Tibia").strip()
+            allowed_titles = [s.strip() for s in raw_titles.split(",") if s.strip()]
+            if not allowed_titles:
+                allowed_titles = ["Tibia"]
 
             live_active = bool(asst_input_mode in {"keyboard", "bridge"} and live_input_armed)
             target_window_active = False
@@ -1858,6 +1816,50 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             )
                         except Exception:
                             pass
+
+                # DecisionTrace (always-on): also log ticks when no GameState is
+                # available, to aid real-world debugging of stale pipelines.
+                try:
+                    cap_backend = None
+                    cap_title = None
+                    cap_hwnd = None
+                    try:
+                        cap_backend = str(getattr(capture, "capture_backend", "") or "")
+                    except Exception:
+                        cap_backend = None
+                    try:
+                        cap_title = str(getattr(capture, "client_title", "") or "")
+                    except Exception:
+                        cap_title = None
+                    try:
+                        cap_hwnd = int(getattr(capture, "client_hwnd", 0) or 0)
+                    except Exception:
+                        cap_hwnd = None
+
+                    evt = {
+                        "ts": float(time.time()),
+                        "capture": {
+                            "backend": cap_backend or None,
+                            "target_title": cap_title or None,
+                            "target_hwnd": cap_hwnd,
+                            "is_foreground": bool(target_window_active),
+                        },
+                        "healing": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
+                        "targeting": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
+                        "cavebot": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
+                        "action": {"note": None, "kind": None, "value": None, "sent_to_driver": False},
+                        "injection": {
+                            "state": "no_gamestate",
+                            "blocked_reason": "STALE_GS",
+                            "input_mode": str(asst_input_mode or "log"),
+                            "driver": None,
+                            "advance_pulse": bool(advance_pulse),
+                        },
+                    }
+                    evt = ensure_blocked_reason(evt)
+                    decision_trace.write(evt)
+                except Exception:
+                    pass
                 continue
 
             last_gs_ts = time.time()
@@ -3146,6 +3148,221 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         gating_enabled=bool(gating_enabled),
                         advance_pulse_pending=bool(advance_pending),
                     )
+            except Exception:
+                pass
+
+            # DecisionTrace (always-on): log one JSON line per tick.
+            try:
+                # Pick a representative action (prefer committed; else first).
+                picked = None
+                try:
+                    if isinstance(action_requests_struct, list):
+                        for a in action_requests_struct:
+                            if isinstance(a, dict) and bool(a.get("committed", False)):
+                                picked = a
+                                break
+                        if picked is None and action_requests_struct:
+                            if isinstance(action_requests_struct[0], dict):
+                                picked = action_requests_struct[0]
+                except Exception:
+                    picked = None
+
+                kind = None
+                value = None
+                note = None
+                if isinstance(picked, dict):
+                    kind = (picked.get("kind") if picked.get("kind") is not None else None)
+                    value = (picked.get("value") if picked.get("value") is not None else None)
+                    note = (picked.get("note") if picked.get("note") is not None else None)
+
+                # Map to coarse action group expected by the spec.
+                action_kind = None
+                try:
+                    k = str(kind or "").strip().lower()
+                    if k in {"heal", "mana"}:
+                        action_kind = "heal"
+                    elif k in {"target", "battlelist_target", "set_target", "clear_target", "follow_target", "stop_follow"}:
+                        action_kind = "target"
+                    elif k == "move":
+                        action_kind = "move"
+                    elif k:
+                        action_kind = "waypoint_action"
+                except Exception:
+                    action_kind = None
+
+                # Compute a non-silent blocked reason whenever we did NOT send inputs.
+                try:
+                    mgr1, inj_enabled1, dis1 = _im_snapshot()
+                except Exception:
+                    inj_enabled1, dis1 = False, ""
+
+                sent_to_driver = bool(action_committed)
+
+                br = ""
+                if sent_to_driver:
+                    br = "ok"
+                else:
+                    try:
+                        if not action_requests_struct:
+                            br = "no_action"
+                        elif bool(needs_confirm) and not bool(advance_pulse):
+                            br = "no_committed_pulse"
+                        elif str(asst_input_mode or "").strip().lower() in {"log", "mock"}:
+                            br = f"input_mode={str(asst_input_mode or 'log').strip().lower()}"
+                        elif not bool(inj_enabled1):
+                            br = "fail_closed" if str(dis1 or "").strip() else "disabled"
+                        elif bool(live_active) and not bool(target_window_active):
+                            br = "not_foreground"
+                        else:
+                            br = str(injection_reason_tick or "").strip() or "ok"
+                    except Exception:
+                        br = str(injection_reason_tick or "").strip() or "exception"
+
+                # Healing/targeting/cavebot trace (minimal, best-effort).
+                healing_eligible = bool(healing_cfg is not None and bool(getattr(healing_cfg, "enabled", False)))
+                healing_emitted = False
+                healing_req = None
+                try:
+                    if isinstance(action_requests_struct, list):
+                        for a in action_requests_struct:
+                            if not isinstance(a, dict):
+                                continue
+                            kk = str(a.get("kind", "") or "").strip().lower()
+                            if kk in {"heal", "mana"}:
+                                healing_emitted = True
+                                healing_req = {"kind": kk, "value": str(a.get("value", "") or "")}
+                                break
+                except Exception:
+                    healing_emitted = False
+                    healing_req = None
+                if not healing_eligible:
+                    healing_reason = "disabled"
+                else:
+                    try:
+                        healing_reason = "hp_unknown" if (sig is None or (sig.hp_current is None and sig.mp_current is None)) else "ok"
+                    except Exception:
+                        healing_reason = "hp_unknown"
+
+                targeting_eligible = False
+                targeting_emitted = False
+                targeting_req = None
+                try:
+                    at_enabled = bool(at_cfg is not None and bool(getattr(at_cfg, "enabled", False)))
+                except Exception:
+                    at_enabled = False
+                try:
+                    targeting_eligible = bool(at_enabled or bool(str(target_str or "").strip()))
+                except Exception:
+                    targeting_eligible = bool(at_enabled)
+                try:
+                    if isinstance(action_requests_struct, list):
+                        for a in action_requests_struct:
+                            if not isinstance(a, dict):
+                                continue
+                            kk = str(a.get("kind", "") or "").strip().lower()
+                            if kk in {"target", "battlelist_target", "set_target", "clear_target", "follow_target", "stop_follow"}:
+                                targeting_emitted = True
+                                targeting_req = {"kind": kk, "value": str(a.get("value", "") or "")}
+                                break
+                except Exception:
+                    targeting_emitted = False
+                    targeting_req = None
+                if not targeting_eligible:
+                    targeting_reason = "disabled"
+                else:
+                    targeting_reason = "ok" if targeting_emitted else "no_targets"
+
+                cavebot_eligible = bool(cavebot_cfg is not None and bool(getattr(cavebot_cfg, "enabled", False)))
+                cavebot_emitted = False
+                cavebot_req = None
+                try:
+                    if isinstance(action_requests_struct, list):
+                        for a in action_requests_struct:
+                            if not isinstance(a, dict):
+                                continue
+                            kk = str(a.get("kind", "") or "").strip().lower()
+                            if kk in {"move", "tool", "loot", "switch", "npc_trade", "depot", "bank", "supplies"}:
+                                cavebot_emitted = True
+                                cavebot_req = {"kind": kk, "value": str(a.get("value", "") or "")}
+                                break
+                except Exception:
+                    cavebot_emitted = False
+                    cavebot_req = None
+                if not cavebot_eligible:
+                    cavebot_reason = "disabled"
+                else:
+                    if not bool(navigator_route_path):
+                        cavebot_reason = "no_route"
+                    elif bool(needs_confirm) and not bool(advance_pulse):
+                        cavebot_reason = "waiting_confirm"
+                    else:
+                        cavebot_reason = "ok"
+
+                cap_backend = None
+                cap_title = None
+                cap_hwnd = None
+                try:
+                    cap_backend = str(getattr(capture, "capture_backend", "") or "")
+                except Exception:
+                    cap_backend = None
+                try:
+                    cap_title = str(getattr(capture, "client_title", "") or "")
+                except Exception:
+                    cap_title = None
+                try:
+                    cap_hwnd = int(getattr(capture, "client_hwnd", 0) or 0)
+                except Exception:
+                    cap_hwnd = None
+
+                drv_name = ""
+                try:
+                    if input_driver is not None:
+                        drv_name = type(input_driver).__name__
+                except Exception:
+                    drv_name = ""
+
+                evt = {
+                    "ts": float(time.time()),
+                    "capture": {
+                        "backend": cap_backend or None,
+                        "target_title": cap_title or None,
+                        "target_hwnd": cap_hwnd,
+                        "is_foreground": bool(target_window_active),
+                    },
+                    "healing": {
+                        "eligible": bool(healing_eligible),
+                        "emitted": bool(healing_emitted),
+                        "reason": str(healing_reason or ""),
+                        "request": healing_req,
+                    },
+                    "targeting": {
+                        "eligible": bool(targeting_eligible),
+                        "emitted": bool(targeting_emitted),
+                        "reason": str(targeting_reason or ""),
+                        "request": targeting_req,
+                    },
+                    "cavebot": {
+                        "eligible": bool(cavebot_eligible),
+                        "emitted": bool(cavebot_emitted),
+                        "reason": str(cavebot_reason or ""),
+                        "request": cavebot_req,
+                    },
+                    "action": {
+                        "note": (str(note) if note is not None else None),
+                        "kind": action_kind,
+                        "value": (str(value) if value is not None else None),
+                        "sent_to_driver": bool(sent_to_driver),
+                    },
+                    "injection": {
+                        "state": str(injection_state_tick or ""),
+                        "blocked_reason": str(br or "unknown"),
+                        "input_mode": str(asst_input_mode or "log"),
+                        "driver": (drv_name or None),
+                        "advance_pulse": bool(advance_pulse),
+                    },
+                }
+                evt = ensure_blocked_reason(evt)
+                decision_trace.write(evt)
             except Exception:
                 pass
 

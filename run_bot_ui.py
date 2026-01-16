@@ -10,6 +10,17 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 
+def _merge_keep_unknown(dst: dict[str, Any], src: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge src into dst, preserving unknown keys in dst."""
+
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            dst[k] = _merge_keep_unknown(dict(dst[k]), v)  # type: ignore[arg-type]
+        else:
+            dst[k] = v
+    return dst
+
+
 def _add_src_to_syspath() -> None:
     repo_root = Path(__file__).resolve().parent
     src_dir = repo_root / "src"
@@ -158,6 +169,51 @@ class BotUI:
         self.heal_mp_action = tk.StringVar(value="")
         self.heal_cooldown_s = tk.DoubleVar(value=1.0)
 
+        # UI-only richer healing table (classic-bot style). Persisted in ui_settings.
+        # Keep RuntimeConfig-backed vars as the source of truth for the core rows.
+        self.healing_table_rows: list[dict[str, Any]] = [
+            {
+                "name": "Spell Hi",
+                "health_pct": int(self.heal_hp_below_pct.get()),
+                "mana_pct": "",
+                "type": "spell",
+                "action": str(self.heal_hp_action.get() or ""),
+                "delay_ms": int(max(0.0, float(self.heal_cooldown_s.get())) * 1000.0),
+            },
+            {
+                "name": "Spell Lo",
+                "health_pct": "",
+                "mana_pct": "",
+                "type": "spell",
+                "action": "",
+                "delay_ms": 0,
+            },
+            {
+                "name": "UH Rune",
+                "health_pct": "",
+                "mana_pct": "",
+                "type": "rune",
+                "action": "",
+                "delay_ms": 0,
+            },
+            {
+                "name": "HP Potion",
+                "health_pct": "",
+                "mana_pct": "",
+                "type": "potion",
+                "action": "",
+                "delay_ms": 0,
+            },
+            {
+                "name": "MP Potion",
+                "health_pct": "",
+                "mana_pct": int(self.heal_mp_below_pct.get()),
+                "type": "potion",
+                "action": str(self.heal_mp_action.get() or ""),
+                "delay_ms": int(max(0.0, float(self.heal_cooldown_s.get())) * 1000.0),
+            },
+        ]
+
         self.cavebot_enabled = tk.BooleanVar(value=False)
         # Prefer scripts-master sample route when present.
         try:
@@ -219,6 +275,14 @@ class BotUI:
         # UI-only: live provider status (text + semáforo color).
         self.coords_provider_state_text = tk.StringVar(value="-")
         self._coords_provider_state_label = None
+
+        # UI-only cavebot alerts matrix (classic-style). Persisted in ui_settings.
+        self.alerts_matrix: list[dict[str, Any]] = [
+            {"condition": "Low HP", "beep": True, "stop": False, "note": ""},
+            {"condition": "Low MP", "beep": False, "stop": False, "note": ""},
+            {"condition": "Paralyzed", "beep": True, "stop": False, "note": ""},
+            {"condition": "Stuck", "beep": True, "stop": False, "note": ""},
+        ]
 
         # Cavebot stop conditions (assistant-only): low cap / low potions.
         try:
@@ -294,16 +358,14 @@ class BotUI:
         self.sim_utamo_active = tk.BooleanVar(value=False)
         self.sim_hungry = tk.BooleanVar(value=False)
 
-        # Modo asistente (sin inputs) + confirmacion humana
+        # Modo asistente + confirmacion humana
         self.asst_enabled = tk.BooleanVar(value=True)
         self.asst_confirm = tk.BooleanVar(value=True)
         self.asst_sound = tk.BooleanVar(value=True)
 
-        try:
-            _action_driver = os.getenv("ACTION_DRIVER", "log").strip().lower() or "log"
-        except Exception:
-            _action_driver = "log"
-        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "mock", "keyboard", "wininput", "bridge"} else "log")
+        # Input injection settings are intentionally NOT configurable via the UI.
+        # If you need to change these, do it in code/env.
+        self.asst_input_mode = tk.StringVar(value="keyboard")
         self.asst_target_hotkey = tk.StringVar(value=os.getenv("TARGET_HOTKEY", "").strip())
         self.asst_minimap_hotkey = tk.StringVar(value=os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
 
@@ -314,6 +376,11 @@ class BotUI:
         self.autotarget_retarget_lost_ms = tk.IntVar(value=800)
         self.autotarget_whitelist_text = tk.StringVar(value="")
         self.autotarget_blacklist_text = tk.StringVar(value="")
+
+        # UI-only targeting profiles (classic-bot style). Persisted in ui_settings.
+        self.targeting_profile_name = tk.StringVar(value="default")
+        self.targeting_rules: dict[str, Any] = {"monsters": []}
+        self.targeting_status_var = tk.StringVar(value="-")
 
         # Battlelist targeting (vision-based)
         self.bl_target_enabled = tk.BooleanVar(value=False)
@@ -327,6 +394,7 @@ class BotUI:
         # Text widgets are created later; keep placeholders here.
         self._autotarget_whitelist_box = None
         self._autotarget_blacklist_box = None
+        self._targeting_rules_box = None
 
         # Initialize from RuntimeConfig if supported.
         try:
@@ -359,24 +427,9 @@ class BotUI:
         except Exception:
             pass
 
-        # Live input mode (OS injection) must be explicitly armed.
-        _asst_titles = ["TibiaClone", "MyClient"]
-        _asst_armed = False
-        try:
-            _asst_cfg = self._config.assistant_snapshot()
-            try:
-                _asst_titles = list(getattr(_asst_cfg, "allowed_window_titles", None) or _asst_titles)
-            except Exception:
-                _asst_titles = _asst_titles
-            try:
-                _asst_armed = bool(getattr(_asst_cfg, "live_input_armed", False))
-            except Exception:
-                _asst_armed = False
-        except Exception:
-            pass
-
-        self.asst_live_input_armed = tk.BooleanVar(value=bool(_asst_armed))
-        self.asst_allowed_window_titles = tk.StringVar(value=",".join([str(x).strip() for x in _asst_titles if str(x).strip()]))
+        # Live input mode: forced by code/env (not by UI).
+        self.asst_live_input_armed = tk.BooleanVar(value=True)
+        self.asst_allowed_window_titles = tk.StringVar(value="Tibia")
         self.asst_auto_arm_on_cavebot_start = tk.BooleanVar(value=False)
         self.asst_auto_arm_no_confirm = tk.BooleanVar(value=False)
         self._last_cavebot_enabled = bool(self.cavebot_enabled.get())
@@ -1374,6 +1427,79 @@ class BotUI:
             row=3, column=1, sticky="w", pady=(6, 0)
         )
 
+        def copy_last_20_ticks_ui() -> None:
+            """Copy the last 20 DecisionTrace JSONL lines to clipboard (non-blocking)."""
+
+            import threading
+
+            def _tail_lines(path: str, n: int) -> list[str]:
+                try:
+                    from pathlib import Path
+
+                    p = Path(path)
+                    if not p.exists() or not p.is_file():
+                        return []
+                    n = max(0, int(n))
+                    if n <= 0:
+                        return []
+                    block = 64 * 1024
+                    data = b""
+                    with open(p, "rb") as f:
+                        f.seek(0, 2)
+                        pos = f.tell()
+                        while pos > 0 and data.count(b"\n") <= n:
+                            take = min(block, pos)
+                            pos -= take
+                            f.seek(pos)
+                            data = f.read(take) + data
+                            if pos == 0:
+                                break
+                    text = data.decode("utf-8", errors="replace")
+                    lines = [ln for ln in text.splitlines() if ln != ""]
+                    return lines[-n:]
+                except Exception:
+                    return []
+
+            def worker() -> None:
+                try:
+                    trace_path = str(self._repo_root / "logs" / "decision_trace.jsonl")
+                    lines = _tail_lines(trace_path, 20)
+                    payload = "\n".join(lines)
+
+                    def apply_clipboard() -> None:
+                        try:
+                            if not payload:
+                                try:
+                                    self._messagebox.showinfo("Información", "No hay DecisionTrace todavía.")
+                                except Exception:
+                                    pass
+                                return
+                            try:
+                                self.root.clipboard_clear()
+                                self.root.clipboard_append(payload)
+                                self.root.update_idletasks()
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+
+                    try:
+                        self.root.after(0, apply_clipboard)
+                    except Exception:
+                        # Worst-case fallback: try immediately.
+                        apply_clipboard()
+                except Exception:
+                    pass
+
+            try:
+                threading.Thread(target=worker, daemon=True).start()
+            except Exception:
+                pass
+
+        tk.Button(cb_right, text="Copiar últimos 20 ticks", width=22, command=copy_last_20_ticks_ui).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        )
+
         def request_advance() -> None:
             try:
                 self._config.request_advance()
@@ -1614,165 +1740,10 @@ class BotUI:
             row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
         )
 
-        input_frame = tk.LabelFrame(cb_tab_hotkeys, text="Atajos / Teclas", padx=10, pady=8)
-        input_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
-        tk.Label(input_frame, text="Modo de inputs").grid(row=0, column=0, sticky="w")
-        tk.OptionMenu(input_frame, self.asst_input_mode, "log", "mock", "keyboard", "wininput", "bridge").grid(
-            row=0, column=1, sticky="w"
-        )
-        tk.Label(input_frame, text="Hotkey de TARGET").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(input_frame, textvariable=self.asst_target_hotkey, width=10).grid(row=1, column=1, sticky="w", pady=(6, 0))
-        tk.Label(input_frame, text="Hotkey click minimapa").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(input_frame, textvariable=self.asst_minimap_hotkey, width=10).grid(row=2, column=1, sticky="w", pady=(6, 0))
-
-        live_frame = tk.LabelFrame(cb_tab_hotkeys, text="Seguridad de live input", padx=10, pady=8)
-        live_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
-
-        def _confirm_arm_live() -> None:
-            try:
-                if not bool(self.asst_live_input_armed.get()):
-                    return
-
-                msg = (
-                    "Vas a ARMAR live input (inyeccion real de teclas en Windows).\n\n"
-                    "Reglas de seguridad:\n"
-                    "- Solo ejecuta acciones COMMITTED (no preview).\n"
-                    "- Requiere un pulso humano (boton 'Siguiente accion').\n"
-                    "- Solo envia teclas si la ventana activa coincide con los titulos permitidos.\n\n"
-                    "Continuar?"
-                )
-                ok = bool(self._messagebox.askyesno("Armar live input", msg))
-                if not ok:
-                    self.asst_live_input_armed.set(False)
-                    return
-
-                # Ensure we are in keyboard/bridge mode when arming.
-                try:
-                    m = str(self.asst_input_mode.get() or "log").strip().lower()
-                except Exception:
-                    m = "log"
-                if m not in {"keyboard", "wininput", "bridge"}:
-                    self.asst_input_mode.set("keyboard")
-            except Exception:
-                try:
-                    self.asst_live_input_armed.set(False)
-                except Exception:
-                    pass
-
-        tk.Checkbutton(
-            live_frame,
-            text="ARMAR live input (entiendo el riesgo)",
-            variable=self.asst_live_input_armed,
-            command=_confirm_arm_live,
-        ).grid(row=0, column=0, columnspan=2, sticky="w")
-
-        tk.Checkbutton(
-            live_frame,
-            text="Auto-ARM al iniciar cavebot",
-            variable=self.asst_auto_arm_on_cavebot_start,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
-        tk.Checkbutton(
-            live_frame,
-            text="Auto-ARM sin confirmación",
-            variable=self.asst_auto_arm_no_confirm,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
-        # Expose confirmation hook for use by cavebot auto-arm.
-        try:
-            self._confirm_arm_live = _confirm_arm_live
-        except Exception:
-            pass
-
-        tk.Label(live_frame, text="Titulos de ventana permitidos (coma)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(live_frame, textvariable=self.asst_allowed_window_titles, width=34).grid(row=3, column=1, sticky="w", pady=(6, 0))
-        tk.Label(live_frame, text="Tip: usa 'TibiaClone Harness' para pruebas controladas").grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
-
-        def open_live_input_harness() -> None:
-            try:
-                # Convenience: ensure the harness title is allowlisted.
-                try:
-                    harness_title = "TibiaClone Harness"
-                    raw = str(self.asst_allowed_window_titles.get() or "")
-                    titles = [s.strip() for s in raw.split(",") if s.strip()]
-                    if harness_title not in titles:
-                        titles.append(harness_title)
-                        self.asst_allowed_window_titles.set(", ".join(titles))
-                except Exception:
-                    pass
-
-                script = self._repo_root / "tools" / "live_input_harness.py"
-                if not script.is_file():
-                    self._messagebox.showerror("Harness", f"No existe: {script}")
-                    return
-                subprocess.Popen(
-                    [sys.executable, str(script), "--title", "TibiaClone Harness"],
-                    cwd=str(self._repo_root),
-                )
-            except Exception as e:
-                try:
-                    self._messagebox.showerror("Harness", f"No pude abrir el harness: {e}")
-                except Exception:
-                    pass
-
-        def add_foreground_title_to_allowlist() -> None:
-            try:
-                from input_guard import get_foreground_window_title
-
-                title = str(get_foreground_window_title() or "").strip()
-            except Exception:
-                title = ""
-
-            if not title:
-                try:
-                    self._messagebox.showwarning(
-                        "Lista permitida",
-                        "No pude leer el titulo de la ventana activa.\n\n"
-                        "Tip: ejecuta como Windows, o agrega el titulo manualmente.",
-                    )
-                except Exception:
-                    pass
-                return
-
-            try:
-                raw = str(self.asst_allowed_window_titles.get() or "")
-                titles = [s.strip() for s in raw.split(",") if s.strip()]
-                if title not in titles:
-                    titles.append(title)
-                    self.asst_allowed_window_titles.set(", ".join(titles))
-            except Exception:
-                pass
-
-        def reset_allowlist_defaults() -> None:
-            try:
-                defaults = ["TibiaClone", "MyClient", "TibiaClone Harness"]
-                self.asst_allowed_window_titles.set(",".join(defaults))
-            except Exception:
-                pass
-
-        def clear_allowlist() -> None:
-            try:
-                self.asst_allowed_window_titles.set("")
-            except Exception:
-                pass
-
-        tk.Button(live_frame, text="Abrir harness", width=14, command=open_live_input_harness).grid(
-            row=5, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(live_frame, text="Agregar ventana activa", width=20, command=add_foreground_title_to_allowlist).grid(
-            row=5, column=1, sticky="w", pady=(6, 0)
-        )
-        tk.Button(live_frame, text="Restaurar lista", width=14, command=reset_allowlist_defaults).grid(
-            row=6, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(live_frame, text="Limpiar lista", width=14, command=clear_allowlist).grid(
-            row=6, column=1, sticky="w", pady=(6, 0)
-        )
+        # Input injection settings are forced by code/env; the UI only shows status.
 
         inj = tk.LabelFrame(cb_tab_hotkeys, text="Estado de inyeccion", padx=10, pady=8)
-        inj.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        inj.grid(row=1, column=0, sticky="w", pady=(10, 0))
         tk.Label(inj, text="Paso").grid(row=0, column=0, sticky="w")
         tk.Label(inj, textvariable=self.injection_step_var, width=34, anchor="w").grid(row=0, column=1, sticky="w")
         tk.Label(inj, text="Etiqueta").grid(row=1, column=0, sticky="w", pady=(2, 0))
@@ -1826,6 +1797,162 @@ class BotUI:
         )
         tk.Button(monsters_frame, text="Abrir creatures_registry.json", width=22, command=open_creatures_registry).grid(
             row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        # Targeting profiles (UI-only). Stored in configs/targeting_profiles/*.json.
+        profiles_frame = tk.LabelFrame(tgt_left, text="Targeting profile", padx=10, pady=8)
+        profiles_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+
+        def _profiles_dir() -> Path:
+            try:
+                from src.targeting_profiles import targeting_profiles_dir
+
+                return targeting_profiles_dir(repo_root=self._repo_root)
+            except Exception:
+                return self._repo_root / "configs" / "targeting_profiles"
+
+        def _list_profiles() -> list[str]:
+            try:
+                base = _profiles_dir()
+                if not base.exists():
+                    return ["default"]
+                names: list[str] = []
+                for p in base.glob("*.json"):
+                    try:
+                        if p.is_file():
+                            names.append(p.stem)
+                    except Exception:
+                        continue
+                names = sorted({n for n in names if n})
+                return names or ["default"]
+            except Exception:
+                return ["default"]
+
+        def _refresh_profiles_combo() -> None:
+            try:
+                combo = getattr(self, "_targeting_profile_combo", None)
+                if combo is not None:
+                    combo["values"] = _list_profiles()
+            except Exception:
+                pass
+
+        def _format_rules(rules: dict[str, Any]) -> str:
+            try:
+                return json.dumps(dict(rules or {}), ensure_ascii=False, indent=2)
+            except Exception:
+                return "{}"
+
+        def _sync_rules_from_box() -> None:
+            box = getattr(self, "_targeting_rules_box", None)
+            if box is None:
+                return
+            try:
+                raw = str(box.get("1.0", "end") or "").strip()
+            except Exception:
+                raw = ""
+            if not raw:
+                self.targeting_rules = {"monsters": []}
+                self.targeting_status_var.set("rules cleared")
+                try:
+                    self._save_ui_settings()
+                except Exception:
+                    pass
+                return
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, dict):
+                    raise ValueError("rules must be a JSON object")
+                self.targeting_rules = dict(parsed)
+                self.targeting_status_var.set("rules ok")
+                try:
+                    self._save_ui_settings()
+                except Exception:
+                    pass
+            except Exception as e:
+                self.targeting_status_var.set(f"rules invalid: {e}")
+
+        def _load_profile() -> None:
+            name = str(self.targeting_profile_name.get() or "default").strip() or "default"
+            try:
+                from src.targeting_profiles import load_targeting_profile, profile_path
+
+                p = profile_path(name, repo_root=self._repo_root)
+                data = load_targeting_profile(p)
+            except Exception as e:
+                self.targeting_status_var.set(f"load failed: {e}")
+                return
+
+            rules = data.get("rules", data)
+            if not isinstance(rules, dict):
+                rules = {}
+            self.targeting_rules = dict(rules)
+
+            box = getattr(self, "_targeting_rules_box", None)
+            if box is not None:
+                try:
+                    box.delete("1.0", "end")
+                    box.insert("1.0", _format_rules(self.targeting_rules))
+                except Exception:
+                    pass
+            self.targeting_status_var.set(f"loaded {name}")
+            try:
+                self._save_ui_settings()
+            except Exception:
+                pass
+
+        def _save_profile() -> None:
+            _sync_rules_from_box()
+            name = str(self.targeting_profile_name.get() or "default").strip() or "default"
+            try:
+                from src.targeting_profiles import profile_path, save_targeting_profile
+
+                p = profile_path(name, repo_root=self._repo_root)
+                save_targeting_profile(p, {"version": 1, "rules": dict(self.targeting_rules or {})})
+                self.targeting_status_var.set(f"saved {name}")
+                _refresh_profiles_combo()
+                try:
+                    self._save_ui_settings()
+                except Exception:
+                    pass
+            except Exception as e:
+                self.targeting_status_var.set(f"save failed: {e}")
+
+        tk.Label(profiles_frame, text="Perfil").grid(row=0, column=0, sticky="w")
+        profile_combo = ttk.Combobox(
+            profiles_frame,
+            textvariable=self.targeting_profile_name,
+            values=_list_profiles(),
+            width=22,
+        )
+        profile_combo.grid(row=0, column=1, sticky="w")
+        self._targeting_profile_combo = profile_combo
+
+        btns = tk.Frame(profiles_frame)
+        btns.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        tk.Button(btns, text="Cargar", width=10, command=_load_profile).grid(row=0, column=0)
+        tk.Button(btns, text="Guardar", width=10, command=_save_profile).grid(row=0, column=1, padx=(6, 0))
+        tk.Button(
+            btns,
+            text="Abrir carpeta",
+            width=14,
+            command=lambda: os.startfile(os.path.abspath(str(_profiles_dir()))),
+        ).grid(row=0, column=2, padx=(6, 0))
+
+        tk.Label(profiles_frame, text="Rules (JSON)").grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        rules_box = tk.Text(profiles_frame, width=46, height=8)
+        rules_box.grid(row=3, column=0, columnspan=2, sticky="w")
+        self._targeting_rules_box = rules_box
+        try:
+            rules_box.insert("1.0", _format_rules(self.targeting_rules))
+        except Exception:
+            pass
+        try:
+            rules_box.bind("<FocusOut>", lambda _e: _sync_rules_from_box())
+        except Exception:
+            pass
+
+        tk.Label(profiles_frame, textvariable=self.targeting_status_var, fg="#555").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
         # AutoTarget controls (assistant-only).
@@ -2665,43 +2792,26 @@ class BotUI:
             )
 
         def sync_assistant(*_args):
-            try:
-                mode = str(self.asst_input_mode.get() or "log").strip().lower()
-            except Exception:
-                mode = "log"
-
-            # Only allow arming when keyboard mode is selected.
-            live_armed = bool(self.asst_live_input_armed.get())
-            if mode not in {"keyboard", "wininput", "bridge"}:
-                live_armed = False
-
-            titles_raw = str(self.asst_allowed_window_titles.get() or "")
-            allowed_titles = [s.strip() for s in titles_raw.split(",") if s.strip()]
+            # UI does not control input injection settings. Those are forced by code/env.
+            # Keep this function focused on assistant behavior (confirm/sound) only.
+            mode = "keyboard"
+            live_armed = True
+            # Default allowlist can be adjusted via env, but is not editable via UI.
+            titles_raw = os.getenv("ALLOWED_WINDOW_TITLES", "Tibia").strip() or "Tibia"
+            allowed_titles = [s.strip() for s in str(titles_raw).split(",") if s.strip()]
 
             self._config.update_assistant(
                 enabled=bool(self.asst_enabled.get()),
                 confirm_actions=bool(self.asst_confirm.get()),
                 sound_alerts=bool(self.asst_sound.get()),
-                input_mode=str(self.asst_input_mode.get()),
-                target_hotkey=str(self.asst_target_hotkey.get()),
-                minimap_hotkey=str(self.asst_minimap_hotkey.get()),
+                input_mode=str(mode),
+                target_hotkey=str(os.getenv("TARGET_HOTKEY", "") or ""),
+                minimap_hotkey=str(os.getenv("MINIMAP_CLICK_HOTKEY", "") or ""),
                 live_input_armed=bool(live_armed),
                 allowed_window_titles=list(allowed_titles),
             )
 
-            # Allow auto-commit when live input is armed (UI-driven override).
-            try:
-                os.environ["ASSIST_AUTO_COMMIT_WHEN_ARMED"] = (
-                    "1" if bool(self.asst_auto_arm_no_confirm.get()) else "0"
-                )
-            except Exception:
-                pass
-
-            # Disable focus-guard blocking when live input is armed.
-            try:
-                os.environ["ALLOW_BACKGROUND_INPUT"] = "1" if bool(live_armed) else "0"
-            except Exception:
-                pass
+            # Do not let UI toggle focus-guard/background input.
 
         def sync_autotarget(*_args):
             upd = getattr(self._config, "update_autotarget", None)
@@ -3961,6 +4071,35 @@ class BotUI:
         except Exception:
             pass
 
+        # UI-only: rich healing table (classic style). Keep core rows in sync.
+        try:
+            ht = data.get("healing_table")
+            if isinstance(ht, list):
+                ht_rows: list[dict[str, Any]] = []
+                for r in ht:
+                    if not isinstance(r, dict):
+                        continue
+                    name = str(r.get("name", "") or "").strip()
+                    if not name:
+                        continue
+                    ht_rows.append(dict(r))
+                if ht_rows:
+                    # Merge into existing defaults by name (preserve unknown fields).
+                    by_name = {
+                        str(x.get("name")): dict(x)
+                        for x in (self.healing_table_rows or [])
+                        if isinstance(x, dict) and str(x.get("name", "") or "").strip()
+                    }
+                    for r in ht_rows:
+                        nm = str(r.get("name"))
+                        if nm in by_name:
+                            by_name[nm] = _merge_keep_unknown(by_name[nm], dict(r))
+                        else:
+                            by_name[nm] = dict(r)
+                    self.healing_table_rows = [by_name[k] for k in list(by_name.keys())]
+        except Exception:
+            pass
+
         try:
             cb = data.get("cavebot")
             if isinstance(cb, dict):
@@ -4024,6 +4163,69 @@ class BotUI:
                     self.cavebot_recovery_max_attempts.set(max(1, int(float(cb.get("recovery_max_attempts") or 1))))
                 if "recovery_stop_on_fail" in cb:
                     self.cavebot_recovery_stop_on_fail.set(bool(cb.get("recovery_stop_on_fail")))
+
+                # UI-only cavebot alerts matrix
+                try:
+                    am = cb.get("alerts_matrix")
+                    if isinstance(am, list):
+                        am_rows: list[dict[str, Any]] = []
+                        for r in am:
+                            if not isinstance(r, dict):
+                                continue
+                            cond = str(r.get("condition", "") or "").strip()
+                            if not cond:
+                                continue
+                            am_rows.append(
+                                {
+                                    "condition": cond,
+                                    "beep": bool(r.get("beep", False)),
+                                    "stop": bool(r.get("stop", False)),
+                                    "note": str(r.get("note", "") or ""),
+                                }
+                            )
+                        if am_rows:
+                            self.alerts_matrix = am_rows
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # UI-only: targeting profiles + extra rules
+        try:
+            t = data.get("targeting")
+            if isinstance(t, dict):
+                if "profile_name" in t:
+                    self.targeting_profile_name.set(str(t.get("profile_name") or "default"))
+                rules = t.get("rules")
+                if isinstance(rules, dict):
+                    self.targeting_rules = dict(rules)
+        except Exception:
+            pass
+
+        # RuntimeConfig-backed AutoTarget config (persisted for convenience)
+        try:
+            at = data.get("autotarget")
+            if isinstance(at, dict):
+                if "enabled" in at:
+                    self.autotarget_enabled.set(bool(at.get("enabled")))
+                if "follow_on_enable" in at:
+                    self.autotarget_follow_on_enable.set(bool(at.get("follow_on_enable")))
+                if "follow_distance_tiles" in at:
+                    self.autotarget_follow_distance_tiles.set(int(float(at.get("follow_distance_tiles") or 1)))
+                if "retarget_if_lost_ms" in at:
+                    self.autotarget_retarget_lost_ms.set(int(float(at.get("retarget_if_lost_ms") or 800)))
+                if "whitelist" in at:
+                    wl = at.get("whitelist")
+                    if isinstance(wl, list):
+                        self.autotarget_whitelist_text.set("\n".join([str(x).strip() for x in wl if str(x).strip()]))
+                    elif isinstance(wl, str):
+                        self.autotarget_whitelist_text.set(str(wl))
+                if "blacklist" in at:
+                    bl = at.get("blacklist")
+                    if isinstance(bl, list):
+                        self.autotarget_blacklist_text.set("\n".join([str(x).strip() for x in bl if str(x).strip()]))
+                    elif isinstance(bl, str):
+                        self.autotarget_blacklist_text.set(str(bl))
         except Exception:
             pass
 
@@ -4628,6 +4830,16 @@ class BotUI:
         except Exception:
             pass
 
+        # Preserve unknown keys already present on disk.
+        existing: dict[str, Any] = {}
+        try:
+            if p.exists():
+                raw = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    existing = dict(raw)
+        except Exception:
+            existing = {}
+
         try:
             payload = {
                 "version": 1,
@@ -4652,6 +4864,8 @@ class BotUI:
                     "mp_action": str(self.heal_mp_action.get()),
                     "cooldown_s": float(self.heal_cooldown_s.get()),
                 },
+                # UI-only rich table (fixed rows + optional extras)
+                "healing_table": list(self.healing_table_rows or []),
                 "cavebot": {
                     "enabled": bool(self.cavebot_enabled.get()),
                     "route_path": str(self.cavebot_route_path.get()),
@@ -4673,6 +4887,30 @@ class BotUI:
                     "recovery_idle_s": float(self.cavebot_recovery_idle_s.get()),
                     "recovery_max_attempts": int(self.cavebot_recovery_max_attempts.get()),
                     "recovery_stop_on_fail": bool(self.cavebot_recovery_stop_on_fail.get()),
+                    # UI-only alerts matrix
+                    "alerts_matrix": list(self.alerts_matrix or []),
+                },
+                # RuntimeConfig-backed AutoTarget config (persisted for convenience)
+                "autotarget": {
+                    "enabled": bool(self.autotarget_enabled.get()),
+                    "follow_on_enable": bool(self.autotarget_follow_on_enable.get()),
+                    "follow_distance_tiles": int(self.autotarget_follow_distance_tiles.get()),
+                    "retarget_if_lost_ms": int(self.autotarget_retarget_lost_ms.get()),
+                    "whitelist": [
+                        s.strip()
+                        for s in str(self.autotarget_whitelist_text.get() or "").splitlines()
+                        if s.strip()
+                    ],
+                    "blacklist": [
+                        s.strip()
+                        for s in str(self.autotarget_blacklist_text.get() or "").splitlines()
+                        if s.strip()
+                    ],
+                },
+                # UI-only targeting profiles/rules
+                "targeting": {
+                    "profile_name": str(self.targeting_profile_name.get() or "default"),
+                    "rules": dict(self.targeting_rules or {}),
                 },
                 "simulation": {
                     "enabled": bool(self.sim_enabled.get()),
@@ -4731,7 +4969,8 @@ class BotUI:
             return
 
         try:
-            p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            merged = _merge_keep_unknown(existing, payload)
+            p.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception:
             pass
 
