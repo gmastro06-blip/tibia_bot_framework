@@ -1,11 +1,20 @@
 import time
 import ctypes
+from ctypes import wintypes
 
 # WinAPI constants
 KEYEVENTF_SCANCODE = 0x0008
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
 INPUT_KEYBOARD = 1
+
+
+def _ulong_ptr_type():
+    # ULONG_PTR is pointer-sized (32-bit on x86, 64-bit on x64).
+    return ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+
+ULONG_PTR = _ulong_ptr_type()
 
 # Scan codes (US layout). Adjust if you use another layout.
 # Keep common WASD/letters, digits, modifiers, and F-keys used by the bot.
@@ -104,19 +113,47 @@ EXTENDED_KEYS = {
     "DELETE",
 }
 
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
 class KEYBDINPUT(ctypes.Structure):
     _fields_ = [
-        ("wVk", ctypes.c_ushort),
-        ("wScan", ctypes.c_ushort),
-        ("dwFlags", ctypes.c_uint),
-        ("time", ctypes.c_uint),
-        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
     ]
+
+
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", wintypes.DWORD),
+        ("wParamL", wintypes.WORD),
+        ("wParamH", wintypes.WORD),
+    ]
+
+
+class INPUT_I(ctypes.Union):
+    _fields_ = [
+        ("mi", MOUSEINPUT),
+        ("ki", KEYBDINPUT),
+        ("hi", HARDWAREINPUT),
+    ]
+
 
 class INPUT(ctypes.Structure):
     _fields_ = [
-        ("type", ctypes.c_uint),
-        ("ki", KEYBDINPUT),
+        ("type", wintypes.DWORD),
+        ("ii", INPUT_I),
     ]
 
 
@@ -125,26 +162,37 @@ class KeyboardSender:
 
     def __init__(self) -> None:
         self._send_input = ctypes.windll.user32.SendInput
+        try:
+            self._send_input.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+            self._send_input.restype = wintypes.UINT
+        except Exception:
+            pass
 
-    def _send_key(self, scan: int, flags: int, *, extended: bool = False) -> None:
+    def _send_key(self, scan: int, flags: int, *, extended: bool = False) -> bool:
         if extended:
             flags = int(flags) | KEYEVENTF_EXTENDEDKEY
-        ki = KEYBDINPUT(0, scan, flags, 0, None)
-        inp = INPUT(INPUT_KEYBOARD, ki)
-        self._send_input(1, ctypes.byref(inp), ctypes.sizeof(inp))
+        ii = INPUT_I()
+        ii.ki = KEYBDINPUT(0, int(scan), int(flags), 0, 0)
+        inp = INPUT(int(INPUT_KEYBOARD), ii)
+        try:
+            sent = int(self._send_input(1, ctypes.byref(inp), ctypes.sizeof(inp)) or 0)
+            return sent == 1
+        except Exception:
+            return False
 
-    def press(self, key: str) -> None:
+    def press(self, key: str) -> bool:
         scan = SCANCODES[key]
-        self._send_key(scan, KEYEVENTF_SCANCODE, extended=(key in EXTENDED_KEYS))
+        return self._send_key(scan, KEYEVENTF_SCANCODE, extended=(key in EXTENDED_KEYS))
 
-    def release(self, key: str) -> None:
+    def release(self, key: str) -> bool:
         scan = SCANCODES[key]
-        self._send_key(scan, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, extended=(key in EXTENDED_KEYS))
+        return self._send_key(scan, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, extended=(key in EXTENDED_KEYS))
 
-    def tap(self, key: str, hold_s: float = 0.05) -> None:
-        self.press(key)
+    def tap(self, key: str, hold_s: float = 0.05) -> bool:
+        ok_down = self.press(key)
         time.sleep(max(0.0, hold_s))
-        self.release(key)
+        ok_up = self.release(key)
+        return bool(ok_down and ok_up)
 
     def tap_combo(self, keys: list[str], hold_s: float = 0.05) -> bool:
         # Press modifiers first, then base, release in reverse.
@@ -161,14 +209,18 @@ class KeyboardSender:
         try:
             # All but last are treated as modifiers.
             for sc in scans[:-1]:
-                self._send_key(sc, KEYEVENTF_SCANCODE)
+                if not self._send_key(sc, KEYEVENTF_SCANCODE):
+                    return False
 
-            self._send_key(scans[-1], KEYEVENTF_SCANCODE)
+            if not self._send_key(scans[-1], KEYEVENTF_SCANCODE):
+                return False
             time.sleep(max(0.0, hold_s))
-            self._send_key(scans[-1], KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP)
+            if not self._send_key(scans[-1], KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP):
+                return False
 
             for sc in reversed(scans[:-1]):
-                self._send_key(sc, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP)
+                if not self._send_key(sc, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP):
+                    return False
             return True
         except Exception:
             return False

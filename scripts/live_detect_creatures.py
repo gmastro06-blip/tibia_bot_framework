@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 
 def _add_src_to_syspath() -> None:

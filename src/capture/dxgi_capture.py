@@ -1,5 +1,6 @@
-from typing import Tuple, Optional, Sequence, Union
+from typing import Optional, Sequence, Union
 import cv2
+import win32api
 import win32gui
 import win32ui
 import win32con
@@ -51,6 +52,17 @@ class DXGICapture:
         self._verbose = os.getenv("CAPTURE_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
         self._last_hwnd_state: Optional[bool] = None
         self._last_ok_log_ts = 0.0
+        # Remember a known-good monitor index (MSS indexing).
+        # Helps recover from wrong monitor selection / multi-monitor setups.
+        self._last_good_monitor_index: Optional[int] = None
+
+        # Optional: pick the most "active" monitor when window monitor cannot
+        # be inferred. Default ON for runtime robustness.
+        self._scan_active_monitor = os.getenv("CAPTURE_SCAN_ACTIVE_MONITOR", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+        }
 
     def _log_ok(self, msg: str) -> None:
         if not self._verbose:
@@ -102,12 +114,30 @@ class DXGICapture:
                     if pm != 0:
                         monitor_indices.append(pm)
 
+                # Prefer last known-good monitor.
+                try:
+                    lg = int(self._last_good_monitor_index) if self._last_good_monitor_index is not None else None
+                except Exception:
+                    lg = None
+                if lg is not None and 0 < lg < len(sct.monitors):
+                    if lg not in monitor_indices:
+                        monitor_indices.append(lg)
+
                 # Primero, intentar el monitor donde está la ventana de Tibia (si se encontró)
                 tibia_monitor = self.find_window_monitor()
                 if tibia_monitor is not None and tibia_monitor < len(sct.monitors) and tibia_monitor != 0:
                     monitor_indices.append(tibia_monitor)
                     if self._verbose:
                         print(f"Priorizando monitor {tibia_monitor} donde está la ventana")
+
+                # If we still don't have a good hint, optionally pick the most active monitor.
+                try:
+                    if self._scan_active_monitor:
+                        best_idx = self._find_most_active_monitor_index(sct)
+                        if best_idx is not None and best_idx not in monitor_indices:
+                            monitor_indices.append(best_idx)
+                except Exception:
+                    pass
 
                 # Luego priorizar monitores individuales (1..n) antes del monitor 0 combinado
                 for i in range(1, len(sct.monitors)):
@@ -126,11 +156,12 @@ class DXGICapture:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
                         # Verificar que la captura es válida antes de retornarla
-                        if self.validate_capture(frame):
+                        if self.validate_capture(frame, min_width=800, min_height=600):
                             monitor_info = f"{monitor.get('width', 'unknown')}x{monitor.get('height', 'unknown')}"
                             if self._verbose:
                                 print(f"Captura de pantalla completa exitosa en monitor {i} ({monitor_info}): {frame.shape}")
                             self.capture_monitor_index = int(i)
+                            self._last_good_monitor_index = int(i)
                             return frame
                         else:
                             if self._verbose:
@@ -233,11 +264,12 @@ class DXGICapture:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
                 # Verificar que la captura es válida
-                if self.validate_capture(frame):
+                if self.validate_capture(frame, min_width=800, min_height=600):
                     monitor_info = f"{monitor.get('width', 'unknown')}x{monitor.get('height', 'unknown')}"
                     self._log_ok(
                         f"Captura de monitor específico exitosa en monitor {monitor_index} ({monitor_info}): {frame.shape}"
                     )
+                    self._last_good_monitor_index = int(monitor_index)
                     return frame
                 else:
                     if self._verbose:
@@ -249,33 +281,42 @@ class DXGICapture:
                 print(f"Error capturando monitor {monitor_index}: {e}")
             return None
 
-    def find_most_active_monitor(self, sct) -> Optional[dict]:
-        """Encuentra el monitor con más actividad/contenido basado en variación de color"""
-        best_monitor = None
-        max_variation = 0.0
+    def _find_most_active_monitor_index(self, sct) -> Optional[int]:
+        """Devuelve el índice MSS (1..n) del monitor con más "actividad".
 
-        # Empezar desde el monitor 1 (índice 1 en la lista de monitors)
+        Heurística: suma de std-dev por canal en una captura rápida.
+        Es un fallback para setups multi-monitor cuando no podemos inferir
+        el monitor por HWND/bounds.
+        """
+
+        best_i: Optional[int] = None
+        best_score = 0.0
+
         for i in range(1, len(sct.monitors)):
             try:
                 monitor = sct.monitors[i]
-                # Tomar una captura rápida del monitor para analizar
                 screenshot = sct.grab(monitor)
                 frame = np.frombuffer(screenshot.bgra, dtype=np.uint8)
                 frame = frame.reshape((screenshot.height, screenshot.width, 4))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
 
-                # Calcular variación de color como indicador de actividad
-                if len(frame.shape) == 3:
-                    variation = float(sum(float(np.std(frame[:, :, c])) for c in range(3)))
-                    if variation > max_variation:
-                        max_variation = variation
-                        best_monitor = monitor
+                # Si es inválida según nuestra validación de fullscreen, no cuenta.
+                if not self.validate_capture(frame, min_width=800, min_height=600):
+                    continue
 
-            except Exception as e:
-                print(f"Error analizando monitor {i}: {e}")
+                variation = 0.0
+                try:
+                    variation = float(sum(float(np.std(frame[:, :, c])) for c in range(3)))
+                except Exception:
+                    variation = 0.0
+
+                if variation > best_score:
+                    best_score = variation
+                    best_i = int(i)
+            except Exception:
                 continue
 
-        return best_monitor
+        return best_i
 
     def capture(self) -> Optional[np.ndarray]:
         frame: Optional[np.ndarray] = None
@@ -319,11 +360,39 @@ class DXGICapture:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR).astype(np.uint8, copy=False)
                         # Window crops can be smaller than full monitors.
                         if frame is not None and frame.size > 0 and frame.shape[1] >= 80 and frame.shape[0] >= 80:
-                            if self.capture_monitor_index is not None:
-                                self.capture_state = f"window_crop@mon{int(self.capture_monitor_index)}"
-                            else:
-                                self.capture_state = "window_crop"
-                            return frame
+                            # IMPORTANT: window-crop capture can return black/empty
+                            # content even when the window exists (occlusion/minimized/
+                            # GPU surface quirks). Validate and fall back to fullscreen.
+                            if self.validate_capture(frame, min_width=80, min_height=80):
+                                if self.capture_monitor_index is not None:
+                                    self.capture_state = f"window_crop@mon{int(self.capture_monitor_index)}"
+                                else:
+                                    self.capture_state = "window_crop"
+                                return frame
+                            if self._verbose:
+                                print("Window-crop inválido; fallback a fullscreen")
+                            self.capture_state = "window_crop_invalid"
+
+                            # Fallback #1: try BitBlt against the target HWND.
+                            # This can work when MSS returns a black surface.
+                            try:
+                                bb = self.capture_window(hwnd=self.client_hwnd)
+                                if bb is not None and self.validate_capture(bb, min_width=80, min_height=80):
+                                    self.capture_state = "bitblt"
+                                    return bb
+                            except Exception:
+                                pass
+
+                            # Fallback #2 (most general): capture from the desktop
+                            # DC (screen) and crop to the window bounds.
+                            # This works even when window DC capture fails.
+                            try:
+                                sc = self.capture_screen_crop(bounds=(int(l), int(t), int(r), int(b)))
+                                if sc is not None and self.validate_capture(sc, min_width=80, min_height=80):
+                                    self.capture_state = "screen_crop"
+                                    return sc
+                            except Exception:
+                                pass
         except Exception:
             # Fall back to monitor/fullscreen capture.
             pass
@@ -352,16 +421,33 @@ class DXGICapture:
         self.capture_state = f"fullscreen@mon{int(pref)}" if pref is not None else "fullscreen"
         return self.capture_fullscreen(preferred_monitor=pref)
 
-    def capture_window(self) -> Optional[np.ndarray]:
-        """Captura la ventana específica usando BitBlt"""
+    def capture_window(self, hwnd: Optional[int] = None) -> Optional[np.ndarray]:
+        """Captura una ventana específica usando BitBlt.
+
+        Nota: BitBlt puede funcionar cuando MSS entrega frames negros.
+        """
         start = time.time()
         frame = None
         wDC = dcObj = cDC = bitmap = None
         try:
-            wDC = win32gui.GetWindowDC(self.hwnd)
+            h = int(hwnd or 0)
+            if not h:
+                try:
+                    h = int(self.client_hwnd or 0)
+                except Exception:
+                    h = 0
+            if not h:
+                try:
+                    h = int(self.hwnd or 0)
+                except Exception:
+                    h = 0
+            if not h:
+                return None
+
+            wDC = win32gui.GetWindowDC(h)
             dcObj = win32ui.CreateDCFromHandle(wDC)
             cDC = dcObj.CreateCompatibleDC()
-            rect = win32gui.GetClientRect(self.hwnd)
+            rect = win32gui.GetClientRect(h)
             width, height = rect[2], rect[3]
             bitmap = win32ui.CreateBitmap()
             bitmap.CreateCompatibleBitmap(dcObj, width, height)
@@ -375,8 +461,13 @@ class DXGICapture:
             print(f"BitBlt failed: {e}")
         finally:
             try:
-                if wDC is not None and self.hwnd:
-                    win32gui.ReleaseDC(self.hwnd, wDC)
+                if wDC is not None and (hwnd or self.client_hwnd or self.hwnd):
+                    try:
+                        h = int(hwnd or self.client_hwnd or self.hwnd or 0)
+                    except Exception:
+                        h = 0
+                    if h:
+                        win32gui.ReleaseDC(h, wDC)
             except:
                 pass
             try:
@@ -400,8 +491,87 @@ class DXGICapture:
             self.fps = 1 / (self.latency_ms / 1000) if self.latency_ms > 0 else 0
         return frame
 
-    def validate_capture(self, frame: np.ndarray) -> bool:
-        """Valida que la captura contiene contenido real y no es negra/vacía"""
+    def capture_screen_crop(self, *, bounds: tuple[int, int, int, int]) -> Optional[np.ndarray]:
+        """Captura el escritorio (screen DC) y recorta a `bounds`.
+
+        `bounds` debe estar en coordenadas de pantalla (virtual screen), igual
+        que las que entrega `update_capture_target_state`.
+        """
+
+        start = time.time()
+        frame: Optional[np.ndarray] = None
+        wDC = dcObj = cDC = bitmap = None
+
+        try:
+            l, t, r, b = bounds
+            w = max(1, int(r) - int(l))
+            h = max(1, int(b) - int(t))
+            if w < 80 or h < 80:
+                return None
+
+            # Virtual screen origin (can be negative on multi-monitor setups).
+            vx = int(win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN))
+            vy = int(win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN))
+
+            src_x = int(l) - int(vx)
+            src_y = int(t) - int(vy)
+
+            # Desktop DC
+            wDC = win32gui.GetDC(0)
+            dcObj = win32ui.CreateDCFromHandle(wDC)
+            cDC = dcObj.CreateCompatibleDC()
+
+            bitmap = win32ui.CreateBitmap()
+            bitmap.CreateCompatibleBitmap(dcObj, int(w), int(h))
+            cDC.SelectObject(bitmap)
+
+            # Copy only the region we need (avoid huge virtual-screen bitmaps).
+            cDC.BitBlt((0, 0), (int(w), int(h)), dcObj, (int(src_x), int(src_y)), win32con.SRCCOPY)
+
+            signedIntsArray = bitmap.GetBitmapBits(True)
+            img = np.frombuffer(signedIntsArray, dtype="uint8")
+            img.shape = (int(h), int(w), 4)
+            frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        except Exception as e:
+            if self._verbose:
+                try:
+                    print(f"Screen-crop failed: {e}")
+                except Exception:
+                    pass
+            frame = None
+        finally:
+            try:
+                if wDC is not None:
+                    win32gui.ReleaseDC(0, wDC)
+            except Exception:
+                pass
+            try:
+                if dcObj is not None:
+                    dcObj.DeleteDC()
+            except Exception:
+                pass
+            try:
+                if cDC is not None:
+                    cDC.DeleteDC()
+            except Exception:
+                pass
+            try:
+                if bitmap is not None:
+                    win32gui.DeleteObject(bitmap.GetHandle())
+            except Exception:
+                pass
+
+        if frame is not None:
+            self.latency_ms = (time.time() - start) * 1000
+            self.fps = 1 / (self.latency_ms / 1000) if self.latency_ms > 0 else 0
+        return frame
+
+    def validate_capture(self, frame: np.ndarray, *, min_width: int = 800, min_height: int = 600) -> bool:
+        """Valida que la captura contiene contenido real y no es negra/vacía.
+
+        `min_width/min_height` permite validar crops de ventana más pequeños
+        sin forzar resolución de monitor.
+        """
         if frame is None or frame.size == 0:
             return False
 
@@ -424,7 +594,6 @@ class DXGICapture:
                 return False
 
         # Verificar resolución mínima
-        min_width, min_height = 800, 600
         if frame.shape[1] < min_width or frame.shape[0] < min_height:
             print(f"Warning: Resolución demasiado baja: {frame.shape}")
             return False

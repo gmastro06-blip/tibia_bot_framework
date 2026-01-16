@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from gamestate.builder import GameState
     from runtime_config import HealingConfig, SimulationConfig
 
 

@@ -15,7 +15,7 @@ Defaults are designed to work out-of-the-box (no manual config).
 from dataclasses import dataclass
 import os
 import time
-from typing import Iterable, Optional
+from typing import Iterable
 
 import win_window
 

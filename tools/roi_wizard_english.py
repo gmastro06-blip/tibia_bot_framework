@@ -253,8 +253,6 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     _add_src_to_syspath()
 
-    import cv2
-
     from capture.dxgi_capture import DXGICapture
 
     args = _parse_args()

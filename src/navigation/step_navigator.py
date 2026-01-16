@@ -422,21 +422,25 @@ class StepNavigator:
         # IMPORTANT: Do not let ambient env vars (e.g. CAVEBOT_MODE=steps) change
         # pure unit-test/simulation behavior when no GameState is provided.
         strict_no_coords_progress = False
-        if gamestate is not None:
-            try:
-                mode = str(getattr(config, "mode", "") or "").strip().lower()
-                force_steps = bool(getattr(config, "force_steps", False))
-                strict_no_coords_progress = force_steps or (mode in {"steps", "step"})
-            except Exception:
-                strict_no_coords_progress = False
+        # If config explicitly enables steps-mode, do NOT invent progress even
+        # when GameState is missing (headless runtime can temporarily have no
+        # vision feedback).
+        try:
+            mode = str(getattr(config, "mode", "") or "").strip().lower()
+            force_steps = bool(getattr(config, "force_steps", False))
+            strict_no_coords_progress = force_steps or (mode in {"steps", "step"})
+        except Exception:
+            strict_no_coords_progress = False
 
-            if not strict_no_coords_progress:
-                try:
-                    env_mode = str(os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
-                    if env_mode in {"steps", "step"}:
-                        strict_no_coords_progress = True
-                except Exception:
-                    pass
+        # Avoid letting ambient env vars affect pure unit-test/simulation
+        # behavior when no GameState is provided.
+        if gamestate is not None and not strict_no_coords_progress:
+            try:
+                env_mode = str(os.getenv("CAVEBOT_MODE", "") or "").strip().lower()
+                if env_mode in {"steps", "step"}:
+                    strict_no_coords_progress = True
+            except Exception:
+                pass
 
         if pos is None and (not progressed) and (not strict_no_coords_progress):
             progressed = True

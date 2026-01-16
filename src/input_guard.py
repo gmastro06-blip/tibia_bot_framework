@@ -19,7 +19,6 @@ def get_foreground_window_title() -> str:
 
     try:
         import ctypes
-        from ctypes import wintypes
 
         user32 = ctypes.windll.user32
         hwnd = user32.GetForegroundWindow()

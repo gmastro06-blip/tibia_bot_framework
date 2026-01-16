@@ -561,7 +561,6 @@ def main() -> int:
     # Diagnostics window.
     diag_resp_max = 0.0
     diag_last: tuple[float | None, float | None, float | None, int | None, int | None] = (None, None, None, None, None)
-    diag_last_ts = time.time()
 
     try:
         while time.time() < t_end:
@@ -666,7 +665,6 @@ def main() -> int:
                 accepted += 1
                 last_acc = time.time()
                 diag_resp_max = 0.0
-                diag_last_ts = time.time()
 
                 ev_abs = None
                 if abs_enabled and abs_coords is not None:

@@ -87,8 +87,7 @@ class WindowsKeyboardDriver:
             if len(parts) == 1:
                 if parts[0] not in SCANCODES:
                     return False
-                self.ks.tap(parts[0])
-                return True
+                return bool(self.ks.tap(parts[0]))
             # Combo (e.g., CTRL+L)
             if any(p not in SCANCODES for p in parts):
                 return False
@@ -123,6 +122,14 @@ class WindowsKeyboardDriver:
     def _send_action(self, action: ActionRequest) -> bool:
         kind = (action.kind or "").strip().lower()
         val = (action.value or "").strip()
+
+        # UI-configured spell hotkeys (value can be "<spell>:<hotkey>").
+        if kind.startswith("spell_"):
+            try:
+                hotkey = val.split(":", 1)[1].strip() if ":" in val else val
+            except Exception:
+                hotkey = val
+            return self._tap_hotkey(hotkey)
 
         if kind in {"heal", "maintenance", "keyboard_sim", "loot", "tool", "switch", "npc_trade", "depot", "bank", "supplies"}:
             return self._tap_hotkey(val)

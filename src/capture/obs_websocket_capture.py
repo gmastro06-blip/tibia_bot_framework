@@ -1,6 +1,5 @@
 import obsws_python as obs
 from typing import Optional, Dict, Any, cast
-import time
 import numpy as np
 import base64
 import cv2

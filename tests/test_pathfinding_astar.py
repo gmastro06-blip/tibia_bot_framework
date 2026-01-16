@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from navigation.pathfinding import astar, make_bounded_walkable
 from navigation.navigator import Navigator
 from navigation.route import Waypoint

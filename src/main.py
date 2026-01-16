@@ -15,8 +15,6 @@ from queue import Queue, Empty
 from queue import Full
 import time
 import json
-from queue_utils import put_latest
-from queue_health import put_latest_health
 from capture.dxgi_capture import DXGICapture
 from gamestate.builder import GameStateBuilder
 from runtime_config import RuntimeConfig
@@ -160,7 +158,29 @@ def build_capture_backend(*, force_monitor: int | None):
       - This is extracted for unit testing (no threads started here).
     """
 
-    capture_backend = (os.getenv("CAPTURE_BACKEND", "dxgi") or "dxgi").strip().lower()
+    def _has_obs_env() -> bool:
+        # Heurística: si el usuario configuró cualquier parámetro de OBS,
+        # asumimos que quiere capturar vía OBS (proyector/fuente).
+        keys = [
+            "OBS_HOST",
+            "OBS_PORT",
+            "OBS_PASSWORD",
+            "OBS_CAPTURE_METHOD",
+            "OBS_SOURCE_NAME",
+        ]
+        try:
+            for k in keys:
+                if (os.getenv(k, "") or "").strip():
+                    return True
+        except Exception:
+            return False
+        return False
+
+    capture_backend_raw = (os.getenv("CAPTURE_BACKEND", "") or "").strip().lower()
+    if capture_backend_raw in {"", "auto"}:
+        capture_backend = "obs_websocket" if _has_obs_env() else "dxgi"
+    else:
+        capture_backend = capture_backend_raw
     if capture_backend in {"", "default", "dxgi", "win", "window"}:
         return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
 
@@ -707,13 +727,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                         # Publish commands for decision thread (real actions).
                         try:
-                            cmds_payload = []
+                            cmds_payload: list[dict[str, object]] = []
                             for c in list(_cmds or []):
                                 try:
+                                    payload_raw = getattr(c, "payload", {})
+                                    if not isinstance(payload_raw, dict):
+                                        payload_raw = {}
                                     cmds_payload.append(
                                         {
                                             "type": str(getattr(c, "type", "") or ""),
-                                            "payload": dict(getattr(c, "payload", {}) or {}),
+                                            "payload": dict(payload_raw),
                                         }
                                     )
                                 except Exception:
@@ -929,8 +952,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     # Battlelist rows overlay (from vision targeting debug).
                     try:
                         if bl_dbg is not None:
-                            if getattr(bl_dbg, "roi_rect", None) is not None:
-                                rx0, ry0, rx1, ry1 = bl_dbg.roi_rect
+                            roi_rect = getattr(bl_dbg, "roi_rect", None)
+                            if isinstance(roi_rect, (list, tuple)) and len(roi_rect) == 4:
+                                rx0, ry0, rx1, ry1 = roi_rect
                                 for r in (bl_rows or []):
                                     try:
                                         x0 = int(rx0 + r.row_bbox[0])
@@ -1471,7 +1495,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         try:
             from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver, is_committed
             from action.input_bridge_driver import InputBridgeDriver
-            from input_bridge_client import InputBridgeClient
             from action.input_manager import InputManager
             from fail_closed import fail_closed
             from input_focus_guard import get_client_hwnd, is_allowed_to_inject, update_client_state
@@ -1518,12 +1541,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             is_allowed_to_inject = None  # type: ignore[assignment]
             update_client_state = None  # type: ignore[assignment]
 
-        # Track applied assistant input settings (UI can change these at runtime).
-        applied_input_mode = str(driver_name or "log").strip().lower() if "driver_name" in locals() else "log"
-        applied_target_hotkey = str(target_hotkey or "") if "target_hotkey" in locals() else ""
-        applied_minimap_hotkey = str(minimap_hotkey or "") if "minimap_hotkey" in locals() else ""
-        applied_live_input_armed = bool(live_input_armed) if "live_input_armed" in locals() else False
-        applied_allowed_titles = "|".join([str(x).strip() for x in (allowed_titles if "allowed_titles" in locals() else []) if str(x).strip()])
+        # Optional: UI-configured spell hotkeys -> ActionRequests.
+        try:
+            from decision.spell_rotation import build_spell_requests
+        except Exception:
+            build_spell_requests = None
 
         def _sync_input_driver_from_ui() -> None:
             """Apply assistant input settings live (RuntimeConfig/UI).
@@ -1533,125 +1555,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             - Switching to 'log' mode is always allowed.
             """
 
-            nonlocal applied_input_mode, applied_target_hotkey, applied_minimap_hotkey, applied_live_input_armed, applied_allowed_titles, input_driver, input_bridge_client
-
-            # Input mode/hotkeys/titles are not controlled via UI.
+            # Input mode/hotkeys/titles are code/env controlled only (not UI-driven).
+            # Keep the function as a no-op, since it's still called each tick.
             return
-
-            try:
-                asst_cfg = runtime_config.assistant_snapshot()
-            except Exception:
-                return
-
-            try:
-                desired_mode = str(getattr(asst_cfg, "input_mode", "log") or "log").strip().lower()
-            except Exception:
-                desired_mode = "log"
-            if desired_mode == "wininput":
-                desired_mode = "keyboard"
-            if desired_mode == "input_bridge":
-                desired_mode = "bridge"
-            if desired_mode not in {"log", "mock", "keyboard", "bridge"}:
-                desired_mode = "log"
-
-            try:
-                desired_armed = bool(getattr(asst_cfg, "live_input_armed", False))
-            except Exception:
-                desired_armed = False
-            try:
-                desired_titles_list = list(getattr(asst_cfg, "allowed_window_titles", None) or [])
-            except Exception:
-                desired_titles_list = []
-            desired_titles = "|".join([str(x).strip() for x in desired_titles_list if str(x).strip()])
-
-            try:
-                desired_target = str(getattr(asst_cfg, "target_hotkey", "") or "").strip()
-            except Exception:
-                desired_target = ""
-            try:
-                desired_minimap = str(getattr(asst_cfg, "minimap_hotkey", "") or "").strip()
-            except Exception:
-                desired_minimap = ""
-
-            if (
-                desired_mode == applied_input_mode
-                and desired_target == applied_target_hotkey
-                and desired_minimap == applied_minimap_hotkey
-                and bool(desired_armed) == bool(applied_live_input_armed)
-                and str(desired_titles) == str(applied_allowed_titles)
-            ):
-                return
-
-            # Always allow switching back to safe modes.
-            if desired_mode in {"log", "mock"} or not bool(desired_armed):
-                try:
-                    input_driver = mock_driver
-                    input_mgr.set_driver(mock_driver, injection_enabled=False)
-                    try:
-                        input_mgr.set_live_policy(live_input_armed=False, allowed_window_titles=desired_titles_list)
-                    except Exception:
-                        pass
-                    _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
-                except Exception:
-                    pass
-            else:
-                # Sticky fail-closed: don't re-arm injection automatically.
-                try:
-                    if str(getattr(input_mgr, "disabled_reason", "") or ""):
-                        # Still update the remembered settings so UI reflects intent.
-                        applied_input_mode = desired_mode
-                        applied_target_hotkey = desired_target
-                        applied_minimap_hotkey = desired_minimap
-                        applied_live_input_armed = bool(desired_armed)
-                        applied_allowed_titles = str(desired_titles)
-                        _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
-                        return
-                except Exception:
-                    pass
-
-                try:
-                    # (Re)build OS-injecting driver with latest hotkeys.
-                    if desired_mode == "bridge":
-                        host = (os.getenv("INPUT_BRIDGE_HOST", "127.0.0.1") or "127.0.0.1").strip()
-                        try:
-                            port = int(float((os.getenv("INPUT_BRIDGE_PORT", "7777") or "7777").strip() or "7777"))
-                        except Exception:
-                            port = 7777
-                        token = os.getenv("INPUT_BRIDGE_TOKEN", "") or ""
-                        input_bridge_client = InputBridgeClient(host=host, port=port, token=token)
-                        input_driver = InputBridgeDriver(
-                            client=input_bridge_client,
-                            target_hotkey=(desired_target or None),
-                        )
-                    else:
-                        input_driver = WindowsKeyboardDriver(
-                            target_hotkey=(desired_target or None),
-                            minimap_hotkey=(desired_minimap or None),
-                        )
-                    input_mgr.set_driver(input_driver, injection_enabled=True)
-                    try:
-                        input_mgr.set_live_policy(live_input_armed=True, allowed_window_titles=desired_titles_list)
-                    except Exception:
-                        pass
-                    _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
-                except Exception:
-                    # Fail-safe: if anything goes wrong, fall back to mock.
-                    try:
-                        input_driver = mock_driver
-                        input_mgr.set_driver(mock_driver, injection_enabled=False)
-                        try:
-                            input_mgr.set_live_policy(live_input_armed=False, allowed_window_titles=desired_titles_list)
-                        except Exception:
-                            pass
-                        _im_set(input_mgr, bool(input_mgr.injection_enabled), str(getattr(input_mgr, "disabled_reason", "") or ""))
-                    except Exception:
-                        pass
-
-            applied_input_mode = desired_mode
-            applied_target_hotkey = desired_target
-            applied_minimap_hotkey = desired_minimap
-            applied_live_input_armed = bool(desired_armed)
-            applied_allowed_titles = str(desired_titles)
 
         # Simulation-only auto-input generator (logs-only, no real injection).
         sim_inputs_auto = os.getenv("SIM_INPUTS_AUTO", "1").strip().lower() not in {"0", "false", "no"}
@@ -1679,7 +1585,25 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             food_interval_s = 0.0
         food_trigger = PeriodicTrigger(interval_s=max(0.0, food_interval_s))
 
+        # Cooldowns / rate-limits for input presses (improves movement fluidity
+        # and prevents spamming hotkeys).
+        try:
+            from decision.cooldowns import CooldownManager
+
+            cooldowns = CooldownManager()
+        except Exception:
+            cooldowns = None
+
         critical_missing_since: float | None = None
+        critical_missing_warned = False
+
+        # Headless observability (optional): print a concise status line periodically.
+        try:
+            headless_status_every_s = float(os.getenv("ASSIST_HEADLESS_STATUS_EVERY_S", "0").strip() or "0")
+        except Exception:
+            headless_status_every_s = 0.0
+        headless_status_every_s = max(0.0, float(headless_status_every_s))
+        headless_status_last_ts = 0.0
 
         while not stop_event.is_set():
             loop_t0 = time.time()
@@ -1706,6 +1630,39 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             healing_cfg, cavebot_cfg = (
                 runtime_config.snapshot() if runtime_config is not None else (None, None)
             )
+
+            # Headless/CLI mode: allow enabling cavebot via env vars when there is
+            # no UI/RuntimeConfig attached.
+            if runtime_config is None and cavebot_cfg is None:
+                try:
+                    raw_enabled = (os.getenv("CAVEBOT_ENABLED", "0") or "0").strip().lower()
+                    enabled_env = raw_enabled in {"1", "true", "yes", "y", "on"}
+                    if enabled_env:
+                        from types import SimpleNamespace
+
+                        route_path = (os.getenv("CAVEBOT_ROUTE_PATH", "configs/route.json") or "configs/route.json").strip()
+                        mode = (os.getenv("CAVEBOT_MODE", "pos") or "pos").strip().lower() or "pos"
+                        force_steps = mode in {"steps", "step"}
+
+                        # Auto-steps tuning (optional; matches UI fields used later).
+                        auto_steps_enabled_env = (os.getenv("CAVEBOT_AUTO_STEPS", "1") or "1").strip().lower() not in {
+                            "0",
+                            "false",
+                            "no",
+                        }
+                        cavebot_cfg = SimpleNamespace(
+                            enabled=True,
+                            route_path=route_path,
+                            mode=mode,
+                            force_steps=bool(force_steps),
+                            auto_steps_enabled=bool(auto_steps_enabled_env),
+                            auto_steps_activate_level=(os.getenv("CAVEBOT_AUTO_STEPS_ACTIVATE_LEVEL", "red") or "red").strip(),
+                            auto_steps_recover_level=(os.getenv("CAVEBOT_AUTO_STEPS_RECOVER_LEVEL", "amber") or "amber").strip(),
+                            auto_steps_activate_s=float(os.getenv("CAVEBOT_AUTO_STEPS_ACTIVATE_S", "1.5") or 1.5),
+                            auto_steps_recover_s=float(os.getenv("CAVEBOT_AUTO_STEPS_RECOVER_S", "2.0") or 2.0),
+                        )
+                except Exception:
+                    cavebot_cfg = None
 
             if cavebot_cfg is not None:
                 try:
@@ -1801,6 +1758,98 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 print(line)
 
             if gamestate is None:
+                # Headless robustness: in steps-mode we can still emit movement
+                # suggestions even when vision fails to produce a GameState.
+                # This keeps the bot from appearing idle under STALE_GS.
+                no_gs_action = None
+                no_gs_sent = False
+                no_gs_blocked_reason = "STALE_GS"
+                try:
+                    cavebot_enabled_now = bool(cavebot_cfg is not None and bool(getattr(cavebot_cfg, "enabled", False)))
+                except Exception:
+                    cavebot_enabled_now = False
+
+                use_steps_mode = False
+                try:
+                    if cavebot_cfg is not None:
+                        mode = str(getattr(cavebot_cfg, "mode", "") or "").strip().lower()
+                        force_steps = bool(getattr(cavebot_cfg, "force_steps", False))
+                        use_steps_mode = bool(force_steps or (mode in {"steps", "step"}))
+                except Exception:
+                    use_steps_mode = False
+
+                cavebot_dir = None
+                try:
+                    if cavebot_enabled_now and use_steps_mode and cavebot_cfg is not None and ActionRequest is not None:
+                        # Ensure StepNavigator is loaded even without GameState.
+                        if step_navigator is None or navigator_route_path != cavebot_cfg.route_path:
+                            try:
+                                route = load_route(cavebot_cfg.route_path)
+                                step_navigator = StepNavigator(route)
+                                navigator = None
+                                navigator_route_path = cavebot_cfg.route_path
+                                try:
+                                    print(f"🧭 Cavebot(headless/no_gs): ruta cargada ({len(route)} waypoints)")
+                                except Exception:
+                                    pass
+                            except Exception:
+                                step_navigator = None
+
+                        if step_navigator is not None:
+                            # Decide vs preview: keep semantics consistent with confirm mode.
+                            if needs_confirm:
+                                dec0 = step_navigator.preview(gamestate=None, config=cavebot_cfg)
+                            else:
+                                dec0 = step_navigator.decide(gamestate=None, config=cavebot_cfg)
+                            cavebot_dir = str(getattr(dec0, "direction", None) or "").strip().lower() or None
+
+                except Exception:
+                    cavebot_dir = None
+
+                # Commit policy (same invariants as normal planner path): commit
+                # only when commit_flag is set and OS injection is enabled.
+                try:
+                    mgr0, inj_enabled0, dis0 = _im_snapshot()
+                    can_commit = (
+                        bool(commit_flag)
+                        and bool(inj_enabled0)
+                        and not bool(str(dis0 or "").strip())
+                        and (bool(target_window_active) if bool(live_active) else True)
+                    )
+                except Exception:
+                    can_commit = False
+
+                try:
+                    if cavebot_dir and ActionRequest is not None:
+                        no_gs_action = ActionRequest(
+                            kind="move",
+                            value=str(cavebot_dir),
+                            note=("committed" if bool(can_commit) else "preview"),
+                        )
+
+                        if bool(can_commit) and input_mgr is not None:
+                            try:
+                                no_gs_sent = bool(input_mgr.send(no_gs_action))
+                            except Exception:
+                                no_gs_sent = False
+
+                        if not bool(no_gs_sent):
+                            if not bool(can_commit):
+                                if bool(needs_confirm) and not bool(advance_pulse):
+                                    no_gs_blocked_reason = "no_committed_pulse"
+                                else:
+                                    no_gs_blocked_reason = "blocked"
+                            else:
+                                no_gs_blocked_reason = "send_failed"
+                        else:
+                            no_gs_blocked_reason = "ok"
+                    else:
+                        no_gs_blocked_reason = "STALE_GS"
+                except Exception:
+                    no_gs_action = None
+                    no_gs_sent = False
+                    no_gs_blocked_reason = "STALE_GS"
+
                 # Update a minimal telemetry note if no gamestate arrives for a while.
                 if runtime_config is not None:
                     now = time.time()
@@ -1846,11 +1895,25 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         },
                         "healing": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
                         "targeting": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
-                        "cavebot": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
-                        "action": {"note": None, "kind": None, "value": None, "sent_to_driver": False},
+                        "cavebot": {
+                            "eligible": bool(cavebot_enabled_now and use_steps_mode),
+                            "emitted": bool(no_gs_action is not None),
+                            "reason": "no_gamestate_steps_fallback" if bool(no_gs_action is not None) else "no_gamestate",
+                            "request": (
+                                {"kind": "move", "value": str(getattr(no_gs_action, "value", "") or "")}
+                                if no_gs_action is not None
+                                else None
+                            ),
+                        },
+                        "action": {
+                            "note": (str(getattr(no_gs_action, "note", "") or "") if no_gs_action is not None else None),
+                            "kind": ("move" if no_gs_action is not None else None),
+                            "value": (str(getattr(no_gs_action, "value", "") or "") if no_gs_action is not None else None),
+                            "sent_to_driver": bool(no_gs_sent),
+                        },
                         "injection": {
-                            "state": "no_gamestate",
-                            "blocked_reason": "STALE_GS",
+                            "state": ("ARMED" if bool(no_gs_sent) else "no_gamestate"),
+                            "blocked_reason": str(no_gs_blocked_reason or "STALE_GS"),
                             "input_mode": str(asst_input_mode or "log"),
                             "driver": None,
                             "advance_pulse": bool(advance_pulse),
@@ -1885,38 +1948,65 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 sig = None
 
             # Fail-closed safety: if OS injection is enabled, stop on missing critical signals.
+            #
+            # IMPORTANT: "missing" is evaluated using both absolute and percentage signals.
+            # Some HUD layouts may provide bar percentages even when OCR values are absent.
             try:
                 mgr, inj_enabled, _reason = _im_snapshot()
-                if inj_enabled and mgr is not None:
+
+                # Unsafe debug override (explicit env opt-in): allow injecting without HP/MP.
+                allow_inject_without_signals = (
+                    os.getenv("ASSIST_ALLOW_INJECT_WITHOUT_SIGNALS", "0").strip().lower() in {"1", "true", "yes"}
+                )
+                stop_on_missing = (
+                    os.getenv("ASSIST_STOP_ON_CRITICAL_SIGNALS_MISSING", "1").strip().lower()
+                    not in {"0", "false", "no"}
+                )
+
+                if inj_enabled and mgr is not None and not bool(allow_inject_without_signals):
                     # Treat total lack of HP/MP as a critical vision failure.
                     missing = False
                     try:
                         if sig is None:
                             missing = True
                         else:
-                            missing = (sig.hp_current is None and sig.mp_current is None)
+                            missing = (
+                                (sig.hp_current is None and sig.mp_current is None)
+                                and (sig.hp_pct is None and sig.mp_pct is None)
+                            )
                     except Exception:
                         missing = True
 
                     if missing:
                         if critical_missing_since is None:
                             critical_missing_since = time.time()
-                        else:
-                            if (time.time() - float(critical_missing_since)) >= 2.0:
-                                fail_closed(
-                                    stop_event=stop_event,
-                                    input_manager=mgr,
-                                    reason="CRITICAL_SIGNALS_MISSING",
-                                    set_stop=True,
-                                )
-                                _im_set(mgr, False, "CRITICAL_SIGNALS_MISSING")
+                            critical_missing_warned = False
+                        elif (time.time() - float(critical_missing_since)) >= 2.0:
+                            if not bool(critical_missing_warned):
+                                critical_missing_warned = True
                                 try:
-                                    if runtime_config is not None:
-                                        runtime_config.update_assistant(live_input_armed=False)
+                                    print(
+                                        "⛔ Fail-closed: CRITICAL_SIGNALS_MISSING (HP/MP no disponibles). "
+                                        "Ajusta ROIs/OCR/barras. "
+                                        "Override (unsafe): ASSIST_ALLOW_INJECT_WITHOUT_SIGNALS=1"
+                                    )
                                 except Exception:
                                     pass
+                            fail_closed(
+                                stop_event=stop_event,
+                                input_manager=mgr,
+                                reason="CRITICAL_SIGNALS_MISSING",
+                                set_stop=bool(stop_on_missing),
+                            )
+                            _im_set(mgr, False, "CRITICAL_SIGNALS_MISSING")
+                            try:
+                                if runtime_config is not None:
+                                    runtime_config.update_assistant(live_input_armed=False)
+                            except Exception:
+                                pass
                     else:
                         critical_missing_since = None
+                        critical_missing_warned = False
             except Exception:
                 pass
 
@@ -1943,7 +2033,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 at_actions = []
 
             # Battlelist targeting commands (vision-based) -> ActionRequest(s).
-            bl_actions = []
+            bl_actions: list[object] = []
             try:
                 if ActionRequest is None:
                     bl_actions = []
@@ -1952,13 +2042,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     if bl_counter != last_bl_counter:
                         last_bl_counter = int(bl_counter)
                         for cmd in list(bl_cmds or []):
+                            if not isinstance(cmd, dict):
+                                continue
                             try:
                                 ctype = str(cmd.get("type", "") or "").strip().lower()
                             except Exception:
                                 ctype = ""
                             if ctype == "select_row":
                                 try:
-                                    row_idx = cmd.get("payload", {}).get("row_index", None)
+                                    payload0 = cmd.get("payload", {})
+                                    if isinstance(payload0, dict):
+                                        row_idx = payload0.get("row_index", None)
+                                    else:
+                                        row_idx = None
                                     val = "" if row_idx is None else f"row:{row_idx}"
                                 except Exception:
                                     val = ""
@@ -2200,7 +2296,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     f"Cap {cap_str}{extra_str}"
                 )
             except Exception:
-                extras: list[str] = []
+                extras = []
                 try:
                     if ring_equipped is not None:
                         extras.append(f"Ring {'Y' if bool(ring_equipped) else 'N'}")
@@ -2499,7 +2595,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     px_raw = os.getenv("PLAYER_X", "").strip()
                     py_raw = os.getenv("PLAYER_Y", "").strip()
                     pz_raw = os.getenv("PLAYER_Z", "").strip()
-                    pos = None
+                    pos: tuple[int, int] | tuple[int, int, int] | None = None
                     if gx is not None and gy is not None:
                         try:
                             if gz is not None:
@@ -2700,14 +2796,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             action_source = ""
             input_plan_str = ""
             action_requests_struct: list[dict[str, object]] = []
-            reqs: list[ActionRequest] = []
+            reqs: list[object] = []
             action_source = "planner"
             try:
                 if ActionRequest is None:
                     reqs = []
                 else:
-                    def _fallback_planner() -> list[ActionRequest]:
-                        out: list[ActionRequest] = []
+                    def _fallback_planner() -> list[object]:
+                        out: list[object] = []
 
                         # --- 1) Healing (highest priority) ---
                         try:
@@ -2740,6 +2836,43 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         try:
                             if at_actions:
                                 out.extend(list(at_actions))
+                        except Exception:
+                            pass
+
+                        # --- 1.7) Spells (UI-configured hotkeys) ---
+                        # Emits spell_* requests based on configured hotkeys.
+                        # Cooldowns + commit policy still apply later.
+                        try:
+                            if build_spell_requests is not None and healing_cfg is not None:
+                                enabled = bool(getattr(healing_cfg, "spells_enabled", False))
+                                hotkeys = getattr(healing_cfg, "spell_hotkeys", None)
+
+                                # Determine if we currently have a target.
+                                has_target = False
+                                try:
+                                    ts = str(target_str or "").strip().lower()
+                                    has_target = bool(ts and ts != "none")
+                                except Exception:
+                                    has_target = False
+                                try:
+                                    st_at = auto_target_ctrl.snapshot()
+                                    at_t = str(getattr(st_at, "current_target_name", "") or "").strip()
+                                    if at_t:
+                                        has_target = True
+                                except Exception:
+                                    pass
+
+                                out.extend(
+                                    list(
+                                        build_spell_requests(
+                                            hotkeys=hotkeys,
+                                            enabled=enabled,
+                                            has_target=bool(has_target),
+                                            committed=False,
+                                        )
+                                        or []
+                                    )
+                                )
                         except Exception:
                             pass
 
@@ -2840,7 +2973,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 # Reorder actions so targeting happens before healing when live input is armed.
                 try:
-                    def _prio(r: ActionRequest) -> int:
+                    def _prio(r) -> int:
                         k = str(getattr(r, "kind", "") or "").strip().lower()
                         order = {
                             "battlelist_target": 0,
@@ -2895,21 +3028,45 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 # Normalize planner output: never allow multi-commit; when we can't
                 # commit (wrong window/disabled), force everything to preview.
                 try:
-                    reqs = [ActionRequest(kind=str(r.kind), value=str(r.value), note="preview") for r in (reqs or [])]
+                    reqs = [
+                        ActionRequest(
+                            kind=str(getattr(r, "kind", "") or ""),
+                            value=str(getattr(r, "value", "") or ""),
+                            note="preview",
+                        )
+                        for r in (reqs or [])
+                    ]
                 except Exception:
                     reqs = list(reqs or [])
 
+                # Commit at most one action when allowed, but respect cooldowns.
+                # If a higher-priority action is on cooldown, we can commit the
+                # next eligible action instead (keeps movement fluid).
                 if can_commit and reqs:
-                    new_reqs: list[ActionRequest] = []
+                    new_reqs: list[object] = []
                     committed_one = False
                     for r in reqs:
                         try:
                             k = str(getattr(r, "kind", "") or "").strip().lower()
                         except Exception:
                             k = ""
-                        if (not committed_one) and k in injectable_kinds:
+
+                        ready = True
+                        try:
+                            if (cooldowns is not None) and (k in injectable_kinds):
+                                ready = bool(cooldowns.is_ready(k, str(getattr(r, "value", "") or "")))
+                        except Exception:
+                            ready = True
+
+                        if (not committed_one) and (k in injectable_kinds) and bool(ready):
                             try:
-                                new_reqs.append(ActionRequest(kind=str(r.kind), value=str(r.value), note="committed"))
+                                new_reqs.append(
+                                    ActionRequest(
+                                        kind=str(getattr(r, "kind", "") or ""),
+                                        value=str(getattr(r, "value", "") or ""),
+                                        note="committed",
+                                    )
+                                )
                             except Exception:
                                 new_reqs.append(r)
                             committed_one = True
@@ -2980,7 +3137,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 try:
                     action_req_str = ";".join(
-                        f"{r.kind}:{r.value}{'*' if bool(is_committed(r)) else ''}" for r in reqs
+                        f"{getattr(r, 'kind', '')}:{getattr(r, 'value', '')}{'*' if bool(is_committed(r)) else ''}"
+                        for r in reqs
                     )
                 except Exception:
                     action_req_str = ""
@@ -3007,9 +3165,19 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 pass
                             try:
                                 if input_mgr is not None:
-                                    input_mgr.send(r)
+                                    ok = bool(input_mgr.send(r))
                                 else:
-                                    send_sink.send(r)
+                                    ok = bool(send_sink.send(r))
+
+                                # Update cooldowns only for committed actions
+                                # that were actually sent successfully.
+                                try:
+                                    if ok and (cooldowns is not None) and bool(is_committed(r)):
+                                        rk = str(getattr(r, "kind", "") or "").strip().lower()
+                                        rv = str(getattr(r, "value", "") or "")
+                                        cooldowns.mark_sent(rk, rv)
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
                         except Exception:
@@ -3033,41 +3201,111 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 pass
 
+            # Compute injection state/reason *even headless* so DecisionTrace can
+            # always explain why inputs were (not) sent.
+            try:
+                from runtime_config import compute_injection_state
+
+                try:
+                    mgr1, inj_enabled1, dis1 = _im_snapshot()
+                except Exception:
+                    mgr1, inj_enabled1, dis1 = None, False, ""
+
+                drv_name = ""
+                try:
+                    if input_driver is not None:
+                        drv_name = type(input_driver).__name__
+                except Exception:
+                    drv_name = ""
+
+                has_injectable_action = False
+                try:
+                    has_injectable_action = any(
+                        str(a.get("kind", "") or "").strip().lower()
+                        in {
+                            "heal",
+                            "mana",
+                            "target",
+                            "battlelist_target",
+                            "move",
+                            "tool",
+                            "loot",
+                            "switch",
+                            "npc_trade",
+                            "depot",
+                            "bank",
+                            "supplies",
+                        }
+                        for a in (action_requests_struct or [])
+                        if isinstance(a, dict)
+                    )
+                except Exception:
+                    has_injectable_action = False
+
+                gating_enabled = False
+                try:
+                    gating_enabled = bool(
+                        assistant_cfg is not None and bool(getattr(assistant_cfg, "enabled", False)) and bool(getattr(assistant_cfg, "confirm_actions", False))
+                    )
+                except Exception:
+                    gating_enabled = False
+
+                st_state, st_reason = compute_injection_state(
+                    input_mode=str(asst_input_mode or "log"),
+                    driver_name=str(drv_name),
+                    injection_enabled=bool(inj_enabled1),
+                    disabled_reason=str(dis1 or ""),
+                    gating_enabled=bool(gating_enabled),
+                    advance_pulse_pending=bool(advance_pulse),
+                    has_injectable_action=bool(has_injectable_action),
+                    live_input_armed=bool(live_input_armed),
+                    target_window_active=bool(target_window_active),
+                    allow_live_autocommit=bool(allow_live_autocommit),
+                )
+                injection_state_tick = str(st_state)
+                injection_reason_tick = str(st_reason)
+            except Exception:
+                # Never leave these empty (DecisionTrace consumers rely on them).
+                if not injection_state_tick:
+                    injection_state_tick = "unknown"
+                if not injection_reason_tick:
+                    injection_reason_tick = "exception"
+
             # Publish assistant status snapshot for UI/overlay (steps-mode indicator).
             try:
-                if runtime_config is not None:
-                    from runtime_config import compute_injection_state
+                # Always compute injection state/reason (used by DecisionTrace even headless).
+                from runtime_config import compute_injection_state
 
-                    # Describe next step.
-                    next_step_text = ""
-                    cur_label = ""
-                    try:
-                        # Prefer decision.waypoint (already computed) to avoid peeking into StepNavigator internals.
-                        wp = getattr(decision, "waypoint", None)
-                        if wp is not None:
-                            if not bool(getattr(wp, "has_xy", True)):
-                                if getattr(wp, "label", None):
-                                    cur_label = str(getattr(wp, "label", "") or "")
-                                    next_step_text = f"label {cur_label}".strip()
-                                elif getattr(wp, "action", None):
-                                    next_step_text = f"action {str(getattr(wp, 'action', '') or '').strip()}".strip()
-                                elif getattr(wp, "call", None):
-                                    next_step_text = f"call {str(getattr(wp, 'call', '') or '').strip()}".strip()
-                                elif getattr(wp, "load", None):
-                                    next_step_text = f"load {str(getattr(wp, 'load', '') or '').strip()}".strip()
-                                else:
-                                    next_step_text = "step"
+                # Describe next step.
+                next_step_text = ""
+                cur_label = ""
+                try:
+                    # Prefer decision.waypoint (already computed) to avoid peeking into StepNavigator internals.
+                    wp = getattr(decision, "waypoint", None)
+                    if wp is not None:
+                        if not bool(getattr(wp, "has_xy", True)):
+                            if getattr(wp, "label", None):
+                                cur_label = str(getattr(wp, "label", "") or "")
+                                next_step_text = f"label {cur_label}".strip()
+                            elif getattr(wp, "action", None):
+                                next_step_text = f"action {str(getattr(wp, 'action', '') or '').strip()}".strip()
+                            elif getattr(wp, "call", None):
+                                next_step_text = f"call {str(getattr(wp, 'call', '') or '').strip()}".strip()
+                            elif getattr(wp, "load", None):
+                                next_step_text = f"load {str(getattr(wp, 'load', '') or '').strip()}".strip()
                             else:
-                                stype = str(getattr(wp, "type", "") or "node").strip().lower() or "node"
-                                tx = int(getattr(wp, "x", 0) or 0)
-                                ty = int(getattr(wp, "y", 0) or 0)
-                                tz = getattr(wp, "z", None)
-                                if tz is None:
-                                    next_step_text = f"{stype} ({tx}, {ty})"
-                                else:
-                                    next_step_text = f"{stype} ({tx}, {ty}, {int(tz)})"
-                    except Exception:
-                        next_step_text = ""
+                                next_step_text = "step"
+                        else:
+                            stype = str(getattr(wp, "type", "") or "node").strip().lower() or "node"
+                            tx = int(getattr(wp, "x", 0) or 0)
+                            ty = int(getattr(wp, "y", 0) or 0)
+                            tz = getattr(wp, "z", None)
+                            if tz is None:
+                                next_step_text = f"{stype} ({tx}, {ty})"
+                            else:
+                                next_step_text = f"{stype} ({tx}, {ty}, {int(tz)})"
+                except Exception:
+                    next_step_text = ""
 
                     try:
                         mgr1, inj_enabled1, dis1 = _im_snapshot()
@@ -3133,21 +3371,35 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     injection_state_tick = str(st_state)
                     injection_reason_tick = str(st_reason)
 
-                    runtime_config.update_assistant_status(
-                        cavebot_mode=str(getattr(cavebot_cfg, "mode", "") or ""),
-                        step_index=int(cavebot_step_idx) if cavebot_step_idx is not None else None,
-                        total_steps=int(cavebot_step_total) if cavebot_step_total is not None else None,
-                        current_label=str(cur_label or ""),
-                        next_step_text=str(next_step_text or ""),
-                        injection_state=str(st_state),
-                        injection_reason=str(st_reason),
-                        foreground_title=str(fg_title or ""),
-                        input_block_reason=str(block_reason or ""),
-                        input_mode=str(asst_input_mode or "log"),
-                        driver_name=str(drv_name),
-                        gating_enabled=bool(gating_enabled),
-                        advance_pulse_pending=bool(advance_pending),
-                    )
+                    if runtime_config is not None:
+                        runtime_config.update_assistant_status(
+                            cavebot_mode=str(getattr(cavebot_cfg, "mode", "") or ""),
+                            step_index=int(cavebot_step_idx) if cavebot_step_idx is not None else None,
+                            total_steps=int(cavebot_step_total) if cavebot_step_total is not None else None,
+                            current_label=str(cur_label or ""),
+                            next_step_text=str(next_step_text or ""),
+                            injection_state=str(st_state),
+                            injection_reason=str(st_reason),
+                            foreground_title=str(fg_title or ""),
+                            input_block_reason=str(block_reason or ""),
+                            input_mode=str(asst_input_mode or "log"),
+                            driver_name=str(drv_name),
+                            gating_enabled=bool(gating_enabled),
+                            advance_pulse_pending=bool(advance_pending),
+                        )
+
+                    # Optional: headless periodic status line.
+                    try:
+                        if runtime_config is None and headless_status_every_s > 0.0:
+                            now_s = float(time.time())
+                            if (now_s - float(headless_status_last_ts)) >= float(headless_status_every_s):
+                                headless_status_last_ts = now_s
+                                ar0 = str(action_req_str or "")
+                                if len(ar0) > 180:
+                                    ar0 = ar0[:177] + "..."
+                                print(f"🧩 headless injection={injection_state_tick} ({injection_reason_tick}) action={ar0}")
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -3205,6 +3457,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     try:
                         if not action_requests_struct:
                             br = "no_action"
+                        # If we were allowed to commit this tick but none was
+                        # committed, cooldown is the most likely reason.
+                        elif bool(commit_flag) and not bool(action_committed):
+                            br = "cooldown"
                         elif bool(needs_confirm) and not bool(advance_pulse):
                             br = "no_committed_pulse"
                         elif str(asst_input_mode or "").strip().lower() in {"log", "mock"}:
@@ -3485,23 +3741,6 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                         import winsound
 
                                         winsound.Beep(600, 140)
-                                    except Exception:
-                                        try:
-                                            print("\a", end="")
-                                        except Exception:
-                                            pass
-                        except Exception:
-                            pass
-
-                        # Optional beep, only if assistant sound alerts are enabled.
-                        try:
-                            if assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.sound_alerts:
-                                if now - last_idle_beep_ts >= max(1.0, float(idle_repeat_s)):
-                                    last_idle_beep_ts = now
-                                    try:
-                                        import winsound
-
-                                        winsound.Beep(660, 120)
                                     except Exception:
                                         try:
                                             print("\a", end="")
@@ -3801,15 +4040,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 ats = None
                             try:
                                 mgr_dbg, inj_enabled_dbg, disabled_dbg = _im_snapshot()
-                                fg_title = None
-                                block_reason = None
+                                fg_title = ""
+                                block_reason = ""
                                 try:
                                     if mgr_dbg is not None:
                                         fg_title = str(getattr(mgr_dbg, "last_foreground_title", "") or "")
                                         block_reason = str(getattr(mgr_dbg, "last_block_reason", "") or "")
                                 except Exception:
-                                    fg_title = None
-                                    block_reason = None
+                                    fg_title = ""
+                                    block_reason = ""
 
                                 inj_dbg = {
                                     "input_injection_enabled": bool(inj_enabled_dbg),
@@ -4273,7 +4512,28 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     if dead:
                         msg = f"⚠️  Watchdog: dead threads={dead}"
                     elif gs_age is not None and gs_age >= stale_gs_s:
-                        msg = f"⚠️  Watchdog: stale GameState ({gs_age:.1f}s)"
+                        # Enrich stale warnings with a compact health snapshot.
+                        frame_age_s: float | None = None
+                        try:
+                            last_frame = float(snap.get("last_frame_ts", 0.0) or 0.0)
+                            frame_age_s = (now - last_frame) if last_frame > 0 else None
+                        except Exception:
+                            frame_age_s = None
+                        try:
+                            qf = int(getattr(frame_queue, "qsize", lambda: 0)())
+                        except Exception:
+                            qf = 0
+                        try:
+                            qg = int(getattr(gs_queue, "qsize", lambda: 0)())
+                        except Exception:
+                            qg = 0
+                        msg = (
+                            f"⚠️  Watchdog: stale GameState ({gs_age:.1f}s)"
+                            f" | frame_age={'' if frame_age_s is None else f'{frame_age_s:.1f}s'}"
+                            f" q_frame={qf} q_gs={qg}"
+                            f" cap_ok={int(snap.get('capture_ok', 0.0))} cap_none={int(snap.get('capture_none', 0.0))}"
+                            f" vis_ok={int(snap.get('vision_ok', 0.0))} vis_ex={int(snap.get('vision_ex', 0.0))}"
+                        )
                     try:
                         print(msg)
                     except Exception:
@@ -4290,7 +4550,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         reason = "WATCHDOG_DEAD_THREADS" if dead else "WATCHDOG_STALE_GS"
                         # Stop by default on stale pipeline when injection is enabled.
                         must_stop = bool((dead and stop_on_dead) or ((gs_age is not None and gs_age >= stale_gs_s) and stop_on_stale))
-                        fail_closed(stop_event=stop_event, input_manager=mgr, reason=reason, set_stop=must_stop)
+                        # Typing: mgr is stored as object in a thread-safe dict.
+                        # Runtime: it is an InputManager instance when injection is enabled.
+                        try:
+                            from typing import cast
+
+                            from action.input_manager import InputManager
+
+                            mgr_typed = cast(InputManager | None, mgr)
+                        except Exception:
+                            mgr_typed = mgr  # type: ignore[assignment]
+
+                        fail_closed(stop_event=stop_event, input_manager=mgr_typed, reason=reason, set_stop=must_stop)
                         _im_set(mgr, False, reason)
                         try:
                             if runtime_config is not None:

@@ -45,8 +45,8 @@ def test_minimap_provider_confidence_fallback_steps(monkeypatch):
     rois = {"minimap_content": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}}
     resolution = (60, 60)
 
-    gs1 = b.update_from_frame(frame, rois, resolution)
-    gs2 = b.update_from_frame(frame, rois, resolution)
+    b.update_from_frame(frame, rois, resolution)
+    b.update_from_frame(frame, rois, resolution)
     gs3 = b.update_from_frame(frame, rois, resolution)
 
     # Fallback should have activated by the 3rd low-confidence tick.

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import types
 
-import pytest
-
 
 def _mk_win_window(*, windows: list[dict]):
     """Build a minimal fake win_window module."""

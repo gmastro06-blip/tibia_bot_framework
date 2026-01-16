@@ -103,7 +103,6 @@ def generate_route_timeline(
     loot_enabled = False
 
     phase = "unknown"  # hunt|refill|deposit|unknown
-    deposit_step = False
 
     ql_profile: QuickLootProfile | None = None
     ql_summary: dict | None = None
@@ -157,8 +156,6 @@ def generate_route_timeline(
                 loot_enabled = False
             elif a == "refill":
                 phase = "refill"
-            elif a == "deposit":
-                deposit_step = True
 
         entry = {
             "time": round(current_time, 1),

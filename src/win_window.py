@@ -240,7 +240,9 @@ def get_extended_frame_bounds(hwnd: int) -> tuple[int, int, int, int] | None:
             ctypes.c_void_p,
             wintypes.DWORD,
         ]
-        dwmapi.DwmGetWindowAttribute.restype = wintypes.HRESULT
+        # ctypes.wintypes.HRESULT exists at runtime, but typeshed may not expose it.
+        # HRESULT is a signed 32-bit integer.
+        dwmapi.DwmGetWindowAttribute.restype = ctypes.c_long
 
         hr = dwmapi.DwmGetWindowAttribute(
             wintypes.HWND(int(hwnd)),

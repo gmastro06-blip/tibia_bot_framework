@@ -89,12 +89,19 @@ class BattlelistParser:
             # Focus on left strip where bars/icons usually appear.
             x1 = max(2, int(w * 0.35))
             crop = row[:, :x1]
-            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+            hsv = np.asarray(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV))
             # green
-            g_mask = cv2.inRange(hsv, (35, 80, 60), (85, 255, 255))
+            hsv_mat: Any = hsv
+            g_low: Any = np.array([35, 80, 60], dtype=np.uint8)
+            g_high: Any = np.array([85, 255, 255], dtype=np.uint8)
+            g_mask = cv2.inRange(hsv_mat, g_low, g_high)
             # red (two ranges)
-            r1 = cv2.inRange(hsv, (0, 80, 60), (10, 255, 255))
-            r2 = cv2.inRange(hsv, (170, 80, 60), (180, 255, 255))
+            r1_low: Any = np.array([0, 80, 60], dtype=np.uint8)
+            r1_high: Any = np.array([10, 255, 255], dtype=np.uint8)
+            r2_low: Any = np.array([170, 80, 60], dtype=np.uint8)
+            r2_high: Any = np.array([180, 255, 255], dtype=np.uint8)
+            r1 = cv2.inRange(hsv_mat, r1_low, r1_high)
+            r2 = cv2.inRange(hsv_mat, r2_low, r2_high)
             r_mask = cv2.bitwise_or(r1, r2)
             mask = cv2.bitwise_or(g_mask, r_mask)
             ratio = float(np.count_nonzero(mask)) / float(mask.size)
@@ -113,9 +120,9 @@ class BattlelistParser:
             x0 = max(0, int(w * 0.35))
             crop = row[:, x0:] if x0 < w else row
 
-            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-            v_mean = float(np.mean(hsv[:, :, 2]))
-            s_mean = float(np.mean(hsv[:, :, 1]))
+            hsv = np.asarray(cv2.cvtColor(crop, cv2.COLOR_BGR2HSV))
+            v_mean = float(hsv[:, :, 2].mean())
+            s_mean = float(hsv[:, :, 1].mean())
             # highlight usually brighter + saturated
             score = (v_mean - baseline_v) / 30.0 + (s_mean / 255.0) * 0.5
             return max(0.0, min(1.0, score))
@@ -133,8 +140,8 @@ class BattlelistParser:
 
             v_means = []
             for r in rows:
-                hsv = cv2.cvtColor(r, cv2.COLOR_BGR2HSV)
-                v_means.append(float(np.mean(hsv[:, :, 2])))
+                hsv = np.asarray(cv2.cvtColor(r, cv2.COLOR_BGR2HSV))
+                v_means.append(float(hsv[:, :, 2].mean()))
             if v_means:
                 baseline_v = float(np.median(v_means))
         except Exception:
@@ -249,7 +256,7 @@ class TargetingController:
             else:
                 self._dead_frames = 0
 
-        # Dead condition
+        # Target lost condition (dead or missing for N frames)
         if (self._dead_frames >= dead_frames) or (self._missing_frames >= dead_frames):
             self.state = "DEAD"
             dbg.reason = "dead"

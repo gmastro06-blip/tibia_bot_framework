@@ -42,4 +42,6 @@ def test_layout_tracker_update_sets_changed_flag() -> None:
     st = lt.update(frame=None, rois=rois, resolution=(100, 100), roi_to_px=roi_to_px)
     assert st.changed is True
     assert rois.get("_layout_changed") is True
-    assert rois.get("_layout_state")["roi_offset_px"] == [5.0, 6.0]
+    layout_state = rois.get("_layout_state")
+    assert isinstance(layout_state, dict)
+    assert layout_state["roi_offset_px"] == [5.0, 6.0]

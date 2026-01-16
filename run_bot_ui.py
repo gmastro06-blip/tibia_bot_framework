@@ -169,6 +169,27 @@ class BotUI:
         self.heal_mp_action = tk.StringVar(value="")
         self.heal_cooldown_s = tk.DoubleVar(value=1.0)
 
+        # Healing: UI-configured spell hotkeys (assistant-only)
+        self.heal_spells_enabled = tk.BooleanVar(value=False)
+        self.heal_spells_preset = tk.StringVar(value="")
+        self._healing_spell_names: list[str] = []
+        self.heal_spell_hotkeys_vars: dict[str, tk.StringVar] = {}
+        try:
+            from decision.spell_rotation import OFFENSIVE_SPELLS, SUPPORT_SPELLS, UTILITY_SPELLS
+
+            self._healing_spell_names = list(OFFENSIVE_SPELLS) + list(SUPPORT_SPELLS) + list(UTILITY_SPELLS)
+        except Exception:
+            self._healing_spell_names = []
+        try:
+            self._healing_spell_names = [str(s) for s in (self._healing_spell_names or []) if str(s).strip()]
+        except Exception:
+            self._healing_spell_names = []
+        for s in self._healing_spell_names:
+            try:
+                self.heal_spell_hotkeys_vars[str(s)] = tk.StringVar(value="")
+            except Exception:
+                pass
+
         # UI-only richer healing table (classic-bot style). Persisted in ui_settings.
         # Keep RuntimeConfig-backed vars as the source of truth for the core rows.
         self.healing_table_rows: list[dict[str, Any]] = [
@@ -1300,6 +1321,167 @@ class BotUI:
         ttk.Combobox(heal_right, textvariable=self.heal_action, values=f_keys, width=8, state="normal").grid(
             row=3, column=1, sticky="w", pady=(6, 0)
         )
+
+        # Spells hotkeys (UI-driven)
+        spells_frame = tk.LabelFrame(tab_healing, text="Spells (Hotkeys)", padx=10, pady=8)
+        spells_frame.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        tk.Checkbutton(
+            spells_frame,
+            text="Habilitar spells (usa hotkeys configuradas)",
+            variable=self.heal_spells_enabled,
+        ).grid(row=0, column=0, columnspan=4, sticky="w")
+
+        # Presets (optional): quickly fill common hotkey layouts.
+        preset_choices = [
+            "",
+            "Vacío (limpiar)",
+            "EK (AOE) - sugerido",
+            "EK (Single) - sugerido",
+            "RP (mínimo)",
+            "MS (mínimo)",
+            "ED (mínimo)",
+        ]
+
+        def _apply_spell_preset() -> None:
+            try:
+                name = str(self.heal_spells_preset.get() or "").strip()
+            except Exception:
+                name = ""
+
+            def set_hotkeys(mapping: dict[str, str]) -> None:
+                # Clear everything first, then apply mapping.
+                try:
+                    for v in list((self.heal_spell_hotkeys_vars or {}).values()):
+                        try:
+                            if v is not None:
+                                v.set("")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                for spell, hk in (mapping or {}).items():
+                    try:
+                        var = self.heal_spell_hotkeys_vars.get(str(spell))
+                        if var is not None:
+                            var.set(str(hk or "").strip().upper())
+                    except Exception:
+                        continue
+
+            if not name or name == "Vacío (limpiar)":
+                set_hotkeys({})
+                return
+
+            # NOTE: These are intentionally conservative defaults.
+            # You can override any field after applying.
+            if name.startswith("EK"):
+                if "AOE" in name:
+                    set_hotkeys(
+                        {
+                            # Offensive
+                            "exori gran": "F5",
+                            "exori": "F6",
+                            "exori min": "F7",
+                            "exori mas": "F8",
+                            "exori ico": "F9",
+                            "exori hur": "F10",
+                            "exori gran ico": "F11",
+                            # Support / utility (optional)
+                            "utani hur": "F2",
+                            "exana kor": "F1",
+                            "exeta res": "F3",
+                        }
+                    )
+                else:
+                    set_hotkeys(
+                        {
+                            # Offensive
+                            "exori": "F5",
+                            "exori min": "F6",
+                            "exori ico": "F7",
+                            "exori hur": "F8",
+                            "exori gran": "F9",
+                            "exori gran ico": "F10",
+                            # Support / utility (optional)
+                            "utani hur": "F2",
+                            "exana kor": "F1",
+                            "exeta res": "F3",
+                        }
+                    )
+                return
+
+            # Minimal presets for non-EK vocations: only common utility.
+            if name.startswith("RP"):
+                set_hotkeys({"utani hur": "F2", "exana kor": "F1"})
+                return
+            if name.startswith("MS"):
+                set_hotkeys({"utani hur": "F2", "exana kor": "F1", "utamo tempo": "F3"})
+                return
+            if name.startswith("ED"):
+                set_hotkeys({"utani hur": "F2", "exana kor": "F1", "utamo tempo": "F3"})
+                return
+
+        preset_row = tk.Frame(spells_frame)
+        preset_row.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        tk.Label(preset_row, text="Preset:").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(preset_row, textvariable=self.heal_spells_preset, values=preset_choices, width=22, state="readonly").grid(
+            row=0, column=1, sticky="w", padx=(6, 0)
+        )
+        tk.Button(preset_row, text="Aplicar", width=10, command=_apply_spell_preset).grid(
+            row=0, column=2, sticky="w", padx=(8, 0)
+        )
+
+        def _clear_spell_preset() -> None:
+            try:
+                self.heal_spells_preset.set("Vacío (limpiar)")
+            except Exception:
+                pass
+            _apply_spell_preset()
+
+        tk.Button(preset_row, text="Limpiar", width=10, command=_clear_spell_preset).grid(
+            row=0, column=3, sticky="w", padx=(6, 0)
+        )
+
+        # Allow common hotkeys + free typing (CTRL+F1, ALT+1, etc.)
+        hotkey_values = [""] + list(f_keys)
+        try:
+            hotkey_values += [f"CTRL+F{i}" for i in range(1, 13)]
+            hotkey_values += [f"ALT+F{i}" for i in range(1, 13)]
+            hotkey_values += [f"SHIFT+F{i}" for i in range(1, 13)]
+        except Exception:
+            pass
+
+        try:
+            spells = list(self._healing_spell_names or [])
+        except Exception:
+            spells = []
+        if spells:
+            tk.Label(spells_frame, text="Spell").grid(row=2, column=0, sticky="w", pady=(6, 0))
+            tk.Label(spells_frame, text="Hotkey").grid(row=2, column=1, sticky="w", pady=(6, 0))
+            tk.Label(spells_frame, text="Spell").grid(row=2, column=2, sticky="w", pady=(6, 0), padx=(18, 0))
+            tk.Label(spells_frame, text="Hotkey").grid(row=2, column=3, sticky="w", pady=(6, 0))
+
+            per_col = (len(spells) + 1) // 2
+            for i, spell in enumerate(spells):
+                col = 0 if i < per_col else 2
+                row = 3 + (i if i < per_col else (i - per_col))
+                try:
+                    var = self.heal_spell_hotkeys_vars.get(str(spell))
+                    if var is None:
+                        var = tk.StringVar(value="")
+                        self.heal_spell_hotkeys_vars[str(spell)] = var
+                except Exception:
+                    continue
+
+                tk.Label(spells_frame, text=str(spell)).grid(row=row, column=col, sticky="w")
+                ttk.Combobox(
+                    spells_frame,
+                    textvariable=var,
+                    values=hotkey_values,
+                    width=12,
+                    state="normal",
+                ).grid(row=row, column=col + 1, sticky="w", padx=((0, 0) if col == 0 else (0, 0)))
+        else:
+            tk.Label(spells_frame, text="(Sin lista de spells disponible)").grid(row=1, column=0, sticky="w")
 
         # --- TAB: Cavebot ---
         # Layout inspirado en bots clásicos: sub-tabs para reducir clutter.
@@ -2613,6 +2795,19 @@ class BotUI:
 
         # Aplicacion en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
+            # Spell hotkeys snapshot (only non-empty keys)
+            spell_hotkeys: dict[str, str] = {}
+            try:
+                for spell, var in dict(self.heal_spell_hotkeys_vars or {}).items():
+                    try:
+                        hk = str(var.get() if var is not None else "").strip().upper()
+                    except Exception:
+                        hk = ""
+                    if hk:
+                        spell_hotkeys[str(spell)] = hk
+            except Exception:
+                spell_hotkeys = {}
+
             self._config.update_healing(
                 enabled=bool(self.healing_enabled.get()),
                 hp_below_pct=int(self.heal_hp_below_pct.get()),
@@ -2623,6 +2818,8 @@ class BotUI:
                 hp_action=str(self.heal_hp_action.get()),
                 mp_action=str(self.heal_mp_action.get()),
                 cooldown_s=float(self.heal_cooldown_s.get()),
+                spells_enabled=bool(self.heal_spells_enabled.get()),
+                spell_hotkeys=spell_hotkeys,
             )
 
         def sync_cavebot(*_args):
@@ -2896,8 +3093,19 @@ class BotUI:
             self.heal_hp_action,
             self.heal_mp_action,
             self.heal_cooldown_s,
+            self.heal_spells_enabled,
         ]:
             v.trace_add("write", sync_healing)
+
+        try:
+            for v in list((self.heal_spell_hotkeys_vars or {}).values()):
+                try:
+                    if v is not None:
+                        v.trace_add("write", sync_healing)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         for v in [
             self.cavebot_enabled,
             self.cavebot_route_path,
@@ -4068,6 +4276,36 @@ class BotUI:
                     self.heal_mp_action.set(str(h.get("mp_action") or ""))
                 if "cooldown_s" in h:
                     self.heal_cooldown_s.set(float(h.get("cooldown_s") or 0.0))
+                if "spells_enabled" in h:
+                    try:
+                        self.heal_spells_enabled.set(bool(h.get("spells_enabled")))
+                    except Exception:
+                        pass
+                if "spell_hotkeys" in h and isinstance(h.get("spell_hotkeys"), dict):
+                    try:
+                        raw_hk = dict(h.get("spell_hotkeys") or {})
+
+                        def _norm(s: object) -> str:
+                            try:
+                                return " ".join(str(s or "").strip().lower().split())
+                            except Exception:
+                                return str(s or "").strip().lower()
+
+                        idx: dict[str, str] = {}
+                        for k, v in raw_hk.items():
+                            key = _norm(k)
+                            val = str(v or "").strip().upper()
+                            if key:
+                                idx[key] = val
+
+                        for spell in list(self._healing_spell_names or []):
+                            n = _norm(spell)
+                            val = str(idx.get(n, "") or "")
+                            var = self.heal_spell_hotkeys_vars.get(str(spell))
+                            if var is not None:
+                                var.set(val)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -4863,6 +5101,12 @@ class BotUI:
                     "hp_action": str(self.heal_hp_action.get()),
                     "mp_action": str(self.heal_mp_action.get()),
                     "cooldown_s": float(self.heal_cooldown_s.get()),
+                    "spells_enabled": bool(self.heal_spells_enabled.get()),
+                    "spell_hotkeys": {
+                        str(spell): str(var.get()).strip().upper()
+                        for spell, var in dict(self.heal_spell_hotkeys_vars or {}).items()
+                        if var is not None and str(var.get()).strip()
+                    },
                 },
                 # UI-only rich table (fixed rows + optional extras)
                 "healing_table": list(self.healing_table_rows or []),
@@ -5121,6 +5365,20 @@ class BotUI:
             self.heal_hp_action.set("")
             self.heal_mp_action.set("")
             self.heal_cooldown_s.set(1.0)
+            self.heal_spells_enabled.set(False)
+            try:
+                self.heal_spells_preset.set("")
+            except Exception:
+                pass
+            try:
+                for v in list((self.heal_spell_hotkeys_vars or {}).values()):
+                    try:
+                        if v is not None:
+                            v.set("")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         except Exception:
             pass
 

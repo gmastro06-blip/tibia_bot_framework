@@ -5,7 +5,6 @@ import re
 import os
 from typing import Optional, Tuple, Dict, Any, List, Sequence, Mapping, cast
 import json
-from vision.roi import roi_to_px
 from vision.hud_parsing import parse_current_and_max_with_reason
 
 
@@ -378,7 +377,6 @@ class OCRProcessor:
             # - trusted: CAP-specific parse (anchored to CAP label)
             # - weak: heuristic max-number fallback inside skills_panel (ONLY useful when ROI is missing)
             trusted_panel = src in {"regex", "bbox_row"}
-            weak_panel = src in {"max_any"}
 
             # Common failure mode: cap_ocr ROI captures only the last digits.
             # If panel value ends with roi value and is longer, trust the panel.
@@ -678,18 +676,18 @@ class OCRProcessor:
                             return None, float(label_conf)
 
                     # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
-                    candidates: list[tuple[int | None, float, str]] = []
+                    cap_candidates: list[tuple[int | None, float, str]] = []
                     try:
                         res_raw = self.reader.readtext(crop, detail=1, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_raw)
-                        candidates.append((v, lc, "raw"))
+                        cap_candidates.append((v, lc, "raw"))
                     except Exception:
                         pass
                     try:
                         processed = self.preprocess_image(crop)
                         res_proc = self.reader.readtext(processed, detail=1, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_proc)
-                        candidates.append((v, lc, "proc"))
+                        cap_candidates.append((v, lc, "proc"))
                     except Exception:
                         pass
                     try:
@@ -697,12 +695,12 @@ class OCRProcessor:
                         inv = cv2.bitwise_not(processed)
                         res_inv = self.reader.readtext(inv, detail=1, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_inv)
-                        candidates.append((v, lc, "inv"))
+                        cap_candidates.append((v, lc, "inv"))
                     except Exception:
                         pass
 
                     best = None
-                    for v, lc, _src in candidates:
+                    for v, lc, _src in cap_candidates:
                         if v is None:
                             continue
                         key = (float(lc), int(v))
@@ -1095,7 +1093,6 @@ class OCRProcessor:
 
                                 # Prefer candidates that include max (cur/max). If none, skip to fallback.
                                 with_max = [t for t in parsed if t[2] is not None]
-                                any_num = list(parsed)
                                 if not with_max:
                                     if hp_current is None:
                                         self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_max_candidates")

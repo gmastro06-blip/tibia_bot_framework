@@ -16,6 +16,7 @@ def compute_injection_state(
     gating_enabled: bool,
     advance_pulse_pending: bool,
     has_injectable_action: bool,
+    allow_live_autocommit: bool = False,
 ) -> tuple[str, str]:
     """Compute assistant injection state + reason.
 
@@ -28,10 +29,6 @@ def compute_injection_state(
         mode = str(input_mode or "").strip().lower() or "log"
     except Exception:
         mode = "log"
-    try:
-        drv = str(driver_name or "").strip() or ""
-    except Exception:
-        drv = ""
     try:
         dis = str(disabled_reason or "").strip()
     except Exception:
@@ -62,12 +59,15 @@ def compute_injection_state(
     if bool(advance_pulse_pending):
         return "ARMED", "advance_pulse_pending"
 
-    # For safety, when live input is armed we require a human pulse even if
-    # the UI toggled gating off.
-    effective_gating = bool(gating_enabled) or bool(live_input_armed)
+    # For safety, when live input is armed we require a human pulse unless the
+    # operator explicitly enables auto-commit.
+    effective_gating = bool(gating_enabled) or (bool(live_input_armed) and (not bool(allow_live_autocommit)))
     if bool(effective_gating):
         return "WAITING_CONFIRM", "no_committed_pulse"
-    return "DISABLED", "no_committed_pulse"
+
+    # Auto-commit allowed (or not armed): we are ready to send as soon as the
+    # planner marks an action as committed.
+    return "ARMED", "auto_commit_enabled"
 
 
 @dataclass
@@ -81,6 +81,10 @@ class HealingConfig:
     hp_action: str = ""
     mp_action: str = ""
     cooldown_s: float = 1.0
+    # Optional spell hotkeys (used by assistant spell rotation).
+    # Keys are spell formulas (e.g. "exori gran"), values are hotkeys (e.g. "F5" or "CTRL+1").
+    spells_enabled: bool = False
+    spell_hotkeys: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -394,6 +398,8 @@ class RuntimeConfig:
                     hp_action=str(getattr(self.healing, "hp_action", "")),
                     mp_action=str(getattr(self.healing, "mp_action", "")),
                     cooldown_s=float(getattr(self.healing, "cooldown_s", 1.0)),
+                    spells_enabled=bool(getattr(self.healing, "spells_enabled", False)),
+                    spell_hotkeys=dict(getattr(self.healing, "spell_hotkeys", None) or {}),
                 ),
                 CavebotConfig(
                     enabled=bool(self.cavebot.enabled),
@@ -676,6 +682,8 @@ class RuntimeConfig:
         hp_action: str | None = None,
         mp_action: str | None = None,
         cooldown_s: float | None = None,
+        spells_enabled: bool | None = None,
+        spell_hotkeys: dict[str, str] | None = None,
     ) -> None:
         with self._lock:
             if enabled is not None:
@@ -696,6 +704,13 @@ class RuntimeConfig:
                 self.healing.mp_action = str(mp_action)
             if cooldown_s is not None:
                 self.healing.cooldown_s = float(cooldown_s)
+            if spells_enabled is not None:
+                self.healing.spells_enabled = bool(spells_enabled)
+            if spell_hotkeys is not None:
+                try:
+                    self.healing.spell_hotkeys = dict(spell_hotkeys)
+                except Exception:
+                    self.healing.spell_hotkeys = {}
 
     def update_cavebot(
         self,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import sys
 import tkinter as tk
-from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Any, List, Optional, Tuple

@@ -185,7 +185,11 @@ class ViewportTracker:
             win_edges = g
 
         try:
-            res = cv2.matchTemplate(np.asarray(win_edges, dtype=np.uint8), tmpl_edges, cv2.TM_CCOEFF_NORMED)
+            from typing import cast
+
+            win_u8 = cast("cv2.Mat", np.asarray(win_edges, dtype=np.uint8))
+            tmpl_u8 = cast("cv2.Mat", tmpl_edges)
+            res = cv2.matchTemplate(win_u8, tmpl_u8, cv2.TM_CCOEFF_NORMED)
             _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(res)
         except Exception:
             return None

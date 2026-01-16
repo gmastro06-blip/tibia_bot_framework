@@ -209,7 +209,6 @@ class TargetSelector:
             for cls in self.priority:
                 cls_cands = [t for t in cands if t.cls == cls]
                 if cls_cands:
-                    best = self._pick_best(cls_cands, resolution)
                     # still allow sticky within same class (below)
                     cands = cls_cands
                     break

@@ -7,9 +7,9 @@ import numpy as np
 from dataclasses import dataclass
 from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
-from vision.bar_analysis import estimate_bar_fill_ratio, estimate_bar_fill_ratio_with_reason
+from vision.bar_analysis import estimate_bar_fill_ratio_with_reason
 from vision.obstacles import compute_viewport_tile_offsets
-from vision.presence import is_hungry_hsv, is_nonempty_icon, is_nonempty_equipment_slot, detect_status_icons
+from vision.presence import is_hungry_hsv, is_nonempty_equipment_slot, detect_status_icons
 from vision.minimap_motion import MinimapMotionTracker
 from vision import battlelist
 from vision.roi import roi_to_px_result
@@ -138,8 +138,6 @@ class GameStateBuilder:
         self._minimap_last_resp: float = 0.0
         self._minimap_confidence: float = 0.0
         self._minimap_status: str = ""
-        self._minimap_accept_streak: int = 0
-        self._minimap_last_resp: float = 0.0
         self._minimap_last_update_ts: float = 0.0
         self._minimap_low_conf_streak: int = 0
         self._minimap_force_disable_coords: bool = False

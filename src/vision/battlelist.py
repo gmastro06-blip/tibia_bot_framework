@@ -4,7 +4,7 @@ from collections import defaultdict
 import os
 from pathlib import Path
 import time
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, MutableMapping
 
 import numpy as np
 
@@ -261,7 +261,7 @@ def _alt_preprocess(row_img: np.ndarray, *, invert: bool) -> np.ndarray | None:
         # Upscale aggressively for small fonts.
         scale = _env_float("BATTLELIST_UPSCALE", 4.0)
         scale = max(1.0, min(8.0, float(scale)))
-        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
 
         # Contrast + threshold.
         gray = cv2.GaussianBlur(gray, (3, 3), 0)
