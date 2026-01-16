@@ -17,6 +17,15 @@ class OCRProcessor:
 
         self._last_cap_debug_ts = 0.0
 
+        # Último debug de CAP (para observabilidad y tuning).
+        # Estructura típica:
+        # {
+        #   'roi': 123, 'panel': 456, 'panel_source': 'regex'|'bbox_row'|'',
+        #   'chosen': 456, 'chosen_source': 'roi'|'panel'|'none',
+        #   'decision': 'roi_only'|'panel_only'|'panel_suffix'|'panel_diff'|'roi_default'|'none'
+        # }
+        self.last_cap_debug: Dict[str, Any] = {}
+
         # Inicializar EasyOCR con GPU si está disponible
         try:
             self.reader = easyocr.Reader(['en'], gpu=True)
@@ -156,15 +165,22 @@ class OCRProcessor:
         except Exception:
             return None
 
-        nums = [int(n) for n in re.findall(r"\d{1,6}", s)]
-        if not nums:
-            return None
-
-        # CAP tends to be a moderate integer; choose the max to avoid catching small timers.
+        # CAP is usually displayed as a labeled field (e.g. "Cap: 2800").
+        # Avoid the old "max number anywhere" heuristic: the skills panel contains
+        # many unrelated numbers (level, skills, timers), which can create large
+        # false positives.
         try:
-            return int(max(nums))
+            m = re.search(
+                r"(?:\bcap\b|capac(?:ity)?)\D{0,12}(\d{1,6})",
+                s,
+                flags=re.IGNORECASE,
+            )
+            if m:
+                return int(m.group(1))
         except Exception:
-            return None
+            pass
+
+        return None
 
     @staticmethod
     def _parse_coords_from_text(text: str) -> tuple[int, int, int | None] | None:
@@ -340,40 +356,69 @@ class OCRProcessor:
         def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
             return self._roi_to_px(frame, rois, resolution, roi_def)
 
-        def _reconcile(v_roi: Optional[int], v_panel: Optional[int]) -> Optional[int]:
+        def _reconcile(v_roi: Optional[int], v_panel: Optional[int], *, panel_source: str) -> tuple[Optional[int], str, str]:
+            """Return (chosen_value, chosen_source, decision_reason)."""
+
+            if v_roi is None and v_panel is None:
+                return None, "none", "none"
             if v_roi is None:
-                return v_panel
+                return v_panel, "panel", "panel_only"
             if v_panel is None:
-                return v_roi
+                return v_roi, "roi", "roi_only"
 
             try:
                 s_roi = str(int(v_roi))
                 s_pan = str(int(v_panel))
             except Exception:
-                return v_roi
+                return v_roi, "roi", "roi_default"
+
+            src = str(panel_source or "").strip().lower()
+
+            # Trust levels:
+            # - trusted: CAP-specific parse (anchored to CAP label)
+            # - weak: heuristic max-number fallback inside skills_panel (ONLY useful when ROI is missing)
+            trusted_panel = src in {"regex", "bbox_row"}
+            weak_panel = src in {"max_any"}
 
             # Common failure mode: cap_ocr ROI captures only the last digits.
             # If panel value ends with roi value and is longer, trust the panel.
             try:
-                if len(s_pan) > len(s_roi) and s_pan.endswith(s_roi):
-                    return int(v_panel)
+                if trusted_panel and len(s_pan) > len(s_roi) and s_pan.endswith(s_roi):
+                    return int(v_panel), "panel", "panel_suffix"
             except Exception:
                 pass
 
-            # If panel is significantly larger, prefer it (likely full number).
+            # Another common truncation case: ROI reads a short (<=3 digit) tail
+            # while the panel (CAP-labeled) shows a 4+ digit number.
             try:
-                if int(v_panel) > int(v_roi):
-                    diff = int(v_panel) - int(v_roi)
-                    thr = max(50, int(abs(int(v_roi)) * 0.5))
-                    if diff >= thr:
-                        return int(v_panel)
+                if trusted_panel and len(s_pan) > len(s_roi) and len(s_roi) <= 3 and len(s_pan) >= 4:
+                    return int(v_panel), "panel", "panel_more_digits"
             except Exception:
                 pass
 
-            return int(v_roi)
+            # Optional heuristic: if panel is significantly larger, it may be the full number.
+            # This is risky because skills_panel can contain many unrelated numbers.
+            # Keep it OFF by default.
+            try:
+                allow_diff = (os.getenv("CAP_RECONCILE_ALLOW_DIFF", "") or "").strip().lower() in {"1", "true", "yes"}
+            except Exception:
+                allow_diff = False
+
+            if allow_diff:
+                try:
+                    if int(v_panel) > int(v_roi):
+                        diff = int(v_panel) - int(v_roi)
+                        thr = max(50, int(abs(int(v_roi)) * 0.5))
+                        if trusted_panel and diff >= thr:
+                            return int(v_panel), "panel", "panel_diff"
+                except Exception:
+                    pass
+
+            return int(v_roi), "roi", "roi_default"
 
         cap_from_roi: Optional[int] = None
         cap_from_panel: Optional[int] = None
+        panel_source: str = ""
 
         # (1) ROI específico de cap (recomendado)
         try:
@@ -570,13 +615,19 @@ class OCRProcessor:
                 cap = self._parse_capacity_from_text(joined)
                 if cap is not None:
                     cap_from_panel = int(cap)
+                    panel_source = "regex"
 
                 # BBox-based fallback: find the cap/capacity label and read the number on the same row.
                 try:
-                    if re.search(r"\bcap\b|capac", joined, flags=re.IGNORECASE):
-                        processed = self.preprocess_image(crop)
-                        # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
-                        results = self.reader.readtext(processed, detail=1, allowlist=None)
+                    def _norm_label(s: str) -> str:
+                        try:
+                            return re.sub(r"[^a-z]", "", str(s or "").lower())
+                        except Exception:
+                            return ""
+
+                    def _extract_bbox_row_cap(results) -> tuple[int | None, float]:
+                        """Return (cap_value, label_conf)."""
+
                         entries: list[tuple[str, float, float, float, float, float]] = []
                         for bbox, text, conf in results or []:
                             try:
@@ -593,46 +644,104 @@ class OCRProcessor:
                             except Exception:
                                 continue
 
-                        cap_labels = [e for e in entries if "cap" in e[0].lower() or "capac" in e[0].lower()]
-                        if cap_labels:
-                            cap_label = max(cap_labels, key=lambda e: e[1])
-                            _s, _c, lx0, ly0, lx1, ly1 = cap_label
-                            ly_mid = (ly0 + ly1) / 2.0
+                        cap_labels = [
+                            e
+                            for e in entries
+                            if (lambda t: ("cap" in t or "capac" in t))(_norm_label(e[0]))
+                        ]
+                        if not cap_labels:
+                            return None, 0.0
 
-                            num_pairs: list[tuple[int, float]] = []
-                            for s, conf, bx0, by0, bx1, by1 in entries:
-                                if bx0 <= lx1:
-                                    continue
-                                y_mid = (by0 + by1) / 2.0
-                                if abs(y_mid - ly_mid) > max(10.0, (ly1 - ly0) * 1.5):
-                                    continue
-                                found = [int(n) for n in re.findall(r"\d{1,6}", s)]
-                                for v in found:
-                                    num_pairs.append((v, conf))
+                        cap_label = max(cap_labels, key=lambda e: e[1])
+                        _s, label_conf, lx0, ly0, lx1, ly1 = cap_label
+                        ly_mid = (ly0 + ly1) / 2.0
 
-                            if num_pairs:
-                                # Prefer higher confidence; if ties, larger value.
-                                num_pairs.sort(key=lambda t: (t[1], t[0]), reverse=True)
-                                try:
-                                    cap_from_panel = int(num_pairs[0][0])
-                                except Exception:
-                                    cap_from_panel = cap_from_panel
+                        num_pairs: list[tuple[int, float]] = []
+                        for s, conf, bx0, by0, bx1, by1 in entries:
+                            if bx0 <= lx1:
+                                continue
+                            y_mid = (by0 + by1) / 2.0
+                            if abs(y_mid - ly_mid) > max(10.0, (ly1 - ly0) * 1.5):
+                                continue
+                            found = [int(n) for n in re.findall(r"\d{1,6}", s)]
+                            for v in found:
+                                num_pairs.append((v, conf))
 
-                        # Last resort: digit-only OCR on full panel and pick a reasonable maximum.
-                        digit_texts = self._readtext_strings(crop, allowlist="0123456789")
-                        djoined = " ".join(digit_texts)
-                        vals = [int(n) for n in re.findall(r"\d{1,6}", djoined)]
-                        if vals:
-                            try:
-                                cap_from_panel = int(max(vals))
-                            except Exception:
-                                cap_from_panel = cap_from_panel
+                        if not num_pairs:
+                            return None, float(label_conf)
+
+                        # Prefer higher confidence; if ties, larger value.
+                        num_pairs.sort(key=lambda t: (t[1], t[0]), reverse=True)
+                        try:
+                            return int(num_pairs[0][0]), float(label_conf)
+                        except Exception:
+                            return None, float(label_conf)
+
+                    # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
+                    candidates: list[tuple[int | None, float, str]] = []
+                    try:
+                        res_raw = self.reader.readtext(crop, detail=1, allowlist=None)
+                        v, lc = _extract_bbox_row_cap(res_raw)
+                        candidates.append((v, lc, "raw"))
+                    except Exception:
+                        pass
+                    try:
+                        processed = self.preprocess_image(crop)
+                        res_proc = self.reader.readtext(processed, detail=1, allowlist=None)
+                        v, lc = _extract_bbox_row_cap(res_proc)
+                        candidates.append((v, lc, "proc"))
+                    except Exception:
+                        pass
+                    try:
+                        processed = self.preprocess_image(crop)
+                        inv = cv2.bitwise_not(processed)
+                        res_inv = self.reader.readtext(inv, detail=1, allowlist=None)
+                        v, lc = _extract_bbox_row_cap(res_inv)
+                        candidates.append((v, lc, "inv"))
+                    except Exception:
+                        pass
+
+                    best = None
+                    for v, lc, _src in candidates:
+                        if v is None:
+                            continue
+                        key = (float(lc), int(v))
+                        if best is None or key > best[0]:
+                            best = (key, int(v))
+                    if best is not None:
+                        cap_from_panel = int(best[1])
+                        panel_source = "bbox_row"
+                except Exception:
+                    pass
+
+                # Last-resort panel fallback: pick the largest number in the skills panel.
+                # This is intentionally NOT treated as fully trusted, but it can rescue
+                # cases where the CAP label isn't recognized while the number is.
+                try:
+                    if cap_from_panel is None:
+                        nums = [int(n) for n in re.findall(r"\d{1,6}", joined)]
+                        if nums:
+                            cap_from_panel = int(max(nums))
+                            panel_source = "max_any"
                 except Exception:
                     pass
         except Exception:
             pass
 
-        return _reconcile(cap_from_roi, cap_from_panel)
+        chosen, chosen_source, decision = _reconcile(cap_from_roi, cap_from_panel, panel_source=panel_source)
+        try:
+            self.last_cap_debug = {
+                "roi": cap_from_roi,
+                "panel": cap_from_panel,
+                "panel_source": panel_source,
+                "chosen": chosen,
+                "chosen_source": chosen_source,
+                "decision": decision,
+            }
+        except Exception:
+            pass
+
+        return chosen
 
     def extract_hp_mp(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Tuple[Optional[int], Optional[int]]:
         """Compat: devuelve solo HP/MP actuales."""

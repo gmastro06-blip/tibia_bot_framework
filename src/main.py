@@ -3418,6 +3418,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         hp_reason=str(getattr(gamestate, "hp_reason", "") or ""),
                         mp_method=str(getattr(gamestate, "mp_method", "") or ""),
                         mp_reason=str(getattr(gamestate, "mp_reason", "") or ""),
+                        cap_method=str(getattr(gamestate, "cap_method", "") or ""),
+                        cap_reason=str(getattr(gamestate, "cap_reason", "") or ""),
+                        cap_roi=(
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("roi")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else None
+                        ),
+                        cap_panel=(
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("panel")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else None
+                        ),
+                        cap_panel_source=(
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("panel_source")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else None
+                        ),
                         cap_current=cap_current,
                         pos_x=getattr(gamestate, "pos_x", None),
                         pos_y=getattr(gamestate, "pos_y", None),
@@ -3670,6 +3687,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "hp_reason": getattr(tel, "hp_reason", ""),
                         "mp_method": getattr(tel, "mp_method", ""),
                         "mp_reason": getattr(tel, "mp_reason", ""),
+                        "cap_method": getattr(tel, "cap_method", ""),
+                        "cap_reason": getattr(tel, "cap_reason", ""),
+                        "cap_roi": getattr(tel, "cap_roi", None),
+                        "cap_panel": getattr(tel, "cap_panel", None),
+                        "cap_panel_source": getattr(tel, "cap_panel_source", ""),
                         "cap_current": getattr(tel, "cap_current", None),
                         "pos_x": getattr(tel, "pos_x", None),
                         "pos_y": getattr(tel, "pos_y", None),
@@ -3759,6 +3781,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "hp_reason": getattr(gamestate, "hp_reason", ""),
                         "mp_method": getattr(gamestate, "mp_method", ""),
                         "mp_reason": getattr(gamestate, "mp_reason", ""),
+                        "cap_method": getattr(gamestate, "cap_method", ""),
+                        "cap_reason": getattr(gamestate, "cap_reason", ""),
+                        "cap_roi": (
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("roi")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else None
+                        ),
+                        "cap_panel": (
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("panel")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else None
+                        ),
+                        "cap_panel_source": (
+                            (getattr(gamestate, "hud_debug", {}) or {}).get("cap", {}).get("panel_source")
+                            if isinstance(getattr(gamestate, "hud_debug", None), dict)
+                            else ""
+                        ),
                         "cap_current": getattr(gamestate, "cap_current", None),
                         "pos_x": getattr(gamestate, "pos_x", None),
                         "pos_y": getattr(gamestate, "pos_y", None),

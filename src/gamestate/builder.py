@@ -634,12 +634,27 @@ class GameStateBuilder:
 
             try:
                 cap_current = self.ocr_processor.extract_capacity(frame, rois, resolution)
-                if cap_current is not None:
-                    cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
-                    cap_reason = "ok"
+                dbg = None
+                try:
+                    dbg = getattr(self.ocr_processor, "last_cap_debug", None)
+                except Exception:
+                    dbg = None
+
+                if isinstance(dbg, dict) and dbg:
+                    try:
+                        cap_method = str(dbg.get("chosen_source", "") or "")
+                        cap_reason = str(dbg.get("decision", "") or "")
+                    except Exception:
+                        cap_method = ""
+                        cap_reason = ""
                 else:
-                    cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
-                    cap_reason = "no_digits"
+                    # Fallback (legacy): we only know whether cap_ocr exists.
+                    if cap_current is not None:
+                        cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
+                        cap_reason = "ok"
+                    else:
+                        cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
+                        cap_reason = "no_digits"
             except Exception:
                 cap_current = None
                 cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
@@ -777,6 +792,9 @@ class GameStateBuilder:
                 "method": cap_method,
                 "reason": cap_reason,
                 "cur": cap_current,
+                "roi": (dbg.get("roi") if isinstance(dbg, dict) else None),
+                "panel": (dbg.get("panel") if isinstance(dbg, dict) else None),
+                "panel_source": (dbg.get("panel_source") if isinstance(dbg, dict) else None),
             }
         except Exception:
             pass

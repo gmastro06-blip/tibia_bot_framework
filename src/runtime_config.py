@@ -181,6 +181,11 @@ class TelemetrySnapshot:
     mp_method: str = ""
     mp_reason: str = ""
     cap_current: int | None = None
+    cap_method: str = ""  # roi|panel|cached|...
+    cap_reason: str = ""  # roi_only|panel_only|panel_suffix|panel_diff|roi_default|...
+    cap_roi: int | None = None
+    cap_panel: int | None = None
+    cap_panel_source: str = ""  # regex|bbox_row|""
     pos_x: int | None = None
     pos_y: int | None = None
     pos_z: int | None = None
@@ -947,6 +952,11 @@ class RuntimeConfig:
         mp_method: str | None = None,
         mp_reason: str | None = None,
         cap_current: int | None = None,
+        cap_method: str | None = None,
+        cap_reason: str | None = None,
+        cap_roi: int | None = None,
+        cap_panel: int | None = None,
+        cap_panel_source: str | None = None,
         pos_x: int | None = None,
         pos_y: int | None = None,
         pos_z: int | None = None,
@@ -1064,6 +1074,22 @@ class RuntimeConfig:
                 self.telemetry.mp_reason = str(mp_reason)
             if cap_current is not None:
                 self.telemetry.cap_current = int(cap_current)
+            if cap_method is not None:
+                self.telemetry.cap_method = str(cap_method)
+            if cap_reason is not None:
+                self.telemetry.cap_reason = str(cap_reason)
+            if cap_roi is not None:
+                try:
+                    self.telemetry.cap_roi = int(cap_roi)
+                except Exception:
+                    self.telemetry.cap_roi = None
+            if cap_panel is not None:
+                try:
+                    self.telemetry.cap_panel = int(cap_panel)
+                except Exception:
+                    self.telemetry.cap_panel = None
+            if cap_panel_source is not None:
+                self.telemetry.cap_panel_source = str(cap_panel_source)
             if pos_x is not None:
                 self.telemetry.pos_x = int(pos_x)
             if pos_y is not None:

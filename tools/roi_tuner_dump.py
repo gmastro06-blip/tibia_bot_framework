@@ -152,18 +152,8 @@ def main() -> int:
     ap.add_argument("--monitor", type=int, default=int(os.getenv("FORCE_MONITOR", "2") or "2"))
     ap.add_argument(
         "--names",
-        default=(
-            "coords_ocr,"
-            "minimap_content,"
-            "right_hud_panel,"
-            "hpmp_top_strip,"
-            "hpmp_low_panel,"
-            "skills_panel,"
-            "battlelist_rows,"
-            "chat_panel,"
-            "game_viewport"
-        ),
-        help="Comma-separated ROI names to dump",
+        default="equipment_slots,ring_slot,amulet_slot,hp_top_ocr,mp_top_ocr,states_icons,cap_ocr,coords_ocr,battlelist_rows,minimap_content",
+        help="Comma-separated ROI names to dump (default: useful set)",
     )
     args = ap.parse_args()
 

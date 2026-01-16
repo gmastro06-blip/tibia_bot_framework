@@ -448,6 +448,14 @@ class BotUI:
         # ROI config override (applied at bot start via env var)
         self.rois_config_override = tk.StringVar(value=os.getenv("ROIS_CONFIG", "").strip())
 
+        # ROI picker (interactive calibration helpers)
+        self.roi_pick_name = tk.StringVar(value=(os.getenv("ROI_PICK_NAME", "ring_slot") or "ring_slot").strip())
+        try:
+            _roi_mon = int((os.getenv("FORCE_MONITOR", "2") or "2").strip() or "2")
+        except Exception:
+            _roi_mon = 2
+        self.roi_pick_monitor = tk.IntVar(value=int(_roi_mon))
+
         # UI settings persistence (best-effort): load last overlay settings.
         try:
             self._load_ui_settings()
@@ -1019,88 +1027,71 @@ class BotUI:
                 pass
 
         # --- TAB: Herramientas ---
-        tk.Label(tab_tools, text="Sanity checks").grid(row=0, column=0, sticky="w", pady=(4, 0))
-        tk.Button(tab_tools, text="ROI sanity", width=12, command=run_roi_sanity_ui).grid(
-            row=1, column=1, sticky="w", pady=(4, 0)
+        tools_grid = tk.Frame(tab_tools)
+        tools_grid.grid(row=0, column=0, sticky="nw")
+
+        sanity_frame = tk.LabelFrame(tools_grid, text="Sanity checks", padx=10, pady=8)
+        sanity_frame.grid(row=0, column=0, sticky="w")
+        tk.Button(sanity_frame, text="ROI sanity", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
+        tk.Button(sanity_frame, text="OCR test", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Coords test", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Anchor test", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Anchor setup", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
+
+        artifacts_frame = tk.LabelFrame(tools_grid, text="Abrir artefactos", padx=10, pady=8)
+        artifacts_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+
+        tk.Button(artifacts_frame, text="ROI overlay", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(
+            row=0, column=0, sticky="w"
         )
-        tk.Button(tab_tools, text="OCR test", width=12, command=run_ocr_sanity_ui).grid(
-            row=1, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        tk.Button(artifacts_frame, text="ROI report", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(
+            row=0, column=1, sticky="w", padx=(8, 0)
         )
-        tk.Button(tab_tools, text="Coords OCR test", width=14, command=run_coords_sanity_ui).grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+        tk.Button(artifacts_frame, text="OCR overlay", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
+            row=0, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(tab_tools, text="Anchor test", width=12, command=run_anchor_sanity_ui).grid(
-            row=1, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
-        )
-        tk.Button(tab_tools, text="Anchor setup", width=12, command=run_anchor_setup_ui).grid(
-            row=1, column=4, sticky="w", padx=(8, 0), pady=(4, 0)
+        tk.Button(artifacts_frame, text="OCR report", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(
+            row=0, column=3, sticky="w", padx=(8, 0)
         )
 
-        tk.Label(tab_tools, text="Abrir artefactos").grid(row=2, column=0, sticky="w", pady=(10, 0))
-        tk.Button(tab_tools, text="ROI overlay", width=12, command=lambda: _open_last_artifact("overlay", "roi")).grid(
-            row=3, column=1, sticky="w", pady=(4, 0)
+        tk.Button(artifacts_frame, text="Coords overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(tab_tools, text="ROI report", width=12, command=lambda: _open_last_artifact("report", "roi")).grid(
-            row=3, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        tk.Button(artifacts_frame, text="Coords report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
+            row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(tab_tools, text="Coords overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
-            row=3, column=0, sticky="w", pady=(4, 0)
+        tk.Button(artifacts_frame, text="Anchor overlay", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(tab_tools, text="Coords report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
-            row=4, column=0, sticky="w", pady=(4, 0)
-        )
-        tk.Button(tab_tools, text="Anchor overlay", width=12, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
-            row=3, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
-        )
-        tk.Button(tab_tools, text="Anchor report", width=12, command=lambda: _open_last_artifact("report", "anchor")).grid(
-            row=4, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
-        )
-        tk.Button(tab_tools, text="OCR overlay", width=12, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
-            row=4, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Button(tab_tools, text="OCR report", width=12, command=lambda: _open_last_artifact("report", "ocr")).grid(
-            row=4, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        tk.Button(artifacts_frame, text="Anchor report", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(
+            row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Label(tab_tools, text="Ultimos resultados").grid(row=5, column=0, sticky="w", pady=(10, 0))
-        tk.Label(tab_tools, text="Ultimo ROI:").grid(row=6, column=0, sticky="w", pady=(4, 0))
-        tk.Label(tab_tools, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(
-            row=6, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Label(tab_tools, textvariable=self.last_roi_dir_var, width=52, anchor="w").grid(
-            row=7, column=1, columnspan=3, sticky="w"
-        )
+        last_frame = tk.LabelFrame(tools_grid, text="Ultimos resultados", padx=10, pady=8)
+        last_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
-        tk.Label(tab_tools, text="Ultimo OCR:").grid(row=8, column=0, sticky="w", pady=(4, 0))
-        tk.Label(tab_tools, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(
-            row=8, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Label(tab_tools, textvariable=self.last_ocr_dir_var, width=52, anchor="w").grid(
-            row=9, column=1, columnspan=3, sticky="w"
-        )
+        tk.Label(last_frame, text="ROI:").grid(row=0, column=0, sticky="w")
+        tk.Label(last_frame, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(last_frame, textvariable=self.last_roi_dir_var, width=60, anchor="w").grid(row=1, column=1, columnspan=3, sticky="w")
 
-        tk.Label(tab_tools, text="Ultimo Coords:").grid(row=10, column=0, sticky="w", pady=(4, 0))
-        tk.Label(tab_tools, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(
-            row=10, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Label(tab_tools, textvariable=self.last_coords_dir_var, width=52, anchor="w").grid(
-            row=11, column=1, columnspan=3, sticky="w"
-        )
+        tk.Label(last_frame, text="OCR:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_ocr_dir_var, width=60, anchor="w").grid(row=3, column=1, columnspan=3, sticky="w")
 
-        tk.Label(tab_tools, text="Ultimo Anchor:").grid(row=12, column=0, sticky="w", pady=(4, 0))
-        tk.Label(tab_tools, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(
-            row=12, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Label(tab_tools, textvariable=self.last_anchor_dir_var, width=52, anchor="w").grid(
-            row=13, column=1, columnspan=3, sticky="w"
-        )
+        tk.Label(last_frame, text="Coords:").grid(row=4, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_coords_dir_var, width=60, anchor="w").grid(row=5, column=1, columnspan=3, sticky="w")
+
+        tk.Label(last_frame, text="Anchor:").grid(row=6, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(row=6, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, textvariable=self.last_anchor_dir_var, width=60, anchor="w").grid(row=7, column=1, columnspan=3, sticky="w")
 
         # --- TAB: Healing ---
         tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
             row=0, column=0, columnspan=2, sticky="w"
         )
 
-        heal_frame = tk.Frame(tab_healing)
+        heal_frame = tk.LabelFrame(tab_healing, text="Configuracion", padx=10, pady=8)
         heal_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
         heal_left = tk.Frame(heal_frame)
         heal_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
@@ -1147,7 +1138,7 @@ class BotUI:
         )
 
         # --- TAB: Cavebot ---
-        cb_top = tk.Frame(tab_cavebot)
+        cb_top = tk.LabelFrame(tab_cavebot, text="Navegacion", padx=10, pady=8)
         cb_top.grid(row=0, column=0, columnspan=4, sticky="w")
         cb_left = tk.Frame(cb_top)
         cb_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
@@ -1503,26 +1494,10 @@ class BotUI:
         cfg_right = tk.Frame(cfg_grid)
         cfg_right.grid(row=0, column=1, sticky="nw")
 
-        # Simulacion y ROIs (izquierda)
-        tk.Checkbutton(cfg_left, text="Habilitar simulacion de senales", variable=self.sim_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Checkbutton(cfg_left, text="Paralyzed", variable=self.sim_paralyzed).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
-        )
-        tk.Checkbutton(cfg_left, text="Haste activo", variable=self.sim_haste_active).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Checkbutton(cfg_left, text="Utamo activo", variable=self.sim_utamo_active).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Checkbutton(cfg_left, text="Hungry", variable=self.sim_hungry).grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-
-        tk.Label(cfg_left, text="ROIs config (override)").grid(row=5, column=0, sticky="w", pady=(10, 0))
+        # ROIs (izquierda) - lo esencial primero
+        tk.Label(cfg_left, text="ROIs config (override)").grid(row=0, column=0, sticky="w", pady=(4, 0))
         tk.Entry(cfg_left, textvariable=self.rois_config_override, width=30).grid(
-            row=5, column=1, sticky="w", pady=(10, 0)
+            row=0, column=1, sticky="w", pady=(4, 0)
         )
 
         def browse_rois() -> None:
@@ -1540,23 +1515,97 @@ class BotUI:
                 pass
 
         tk.Button(cfg_left, text="Browse", width=8, command=browse_rois).grid(
-            row=5, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
+            row=0, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        )
+
+        # ROI picker UI (writes into the selected ROIs config file).
+        tk.Label(cfg_left, text="Editar ROI").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        tk.Entry(cfg_left, textvariable=self.roi_pick_name, width=18).grid(row=1, column=1, sticky="w", pady=(8, 0))
+
+        def _ensure_rois_path_for_tools() -> str:
+            rois_path = str(self.rois_config_override.get()).strip()
+            if rois_path:
+                return rois_path
+            # Default to the most common profile; user can override anytime.
+            fallback = str(self._repo_root / "configs" / "rois_guess_1920x1080.json")
+            try:
+                self.rois_config_override.set(fallback)
+            except Exception:
+                pass
+            return fallback
+
+        def pick_one_roi() -> None:
+            roi_name = str(self.roi_pick_name.get()).strip()
+            if not roi_name:
+                try:
+                    self._messagebox.showinfo("ROI Picker", "Define un nombre de ROI (ej: ring_slot, chat_panel, hpmp_top_strip)")
+                except Exception:
+                    pass
+                return
+
+            rois_path = _ensure_rois_path_for_tools()
+            try:
+                mon = int(self.roi_pick_monitor.get())
+            except Exception:
+                mon = _monitor_default()
+
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "roi_pick_one.py"),
+                "--rois",
+                str(rois_path),
+                "--out",
+                str(rois_path),
+                "--roi",
+                str(roi_name),
+                "--monitor",
+                str(int(mon)),
+            ]
+            _run_tool_async(cmd, title=f"ROI Picker ({roi_name})")
+
+        def pick_ring_amulet() -> None:
+            rois_path = _ensure_rois_path_for_tools()
+            try:
+                mon = int(self.roi_pick_monitor.get())
+            except Exception:
+                mon = _monitor_default()
+            cmd = [
+                sys.executable,
+                str(self._repo_root / "tools" / "roi_pick_slots.py"),
+                "--rois",
+                str(rois_path),
+                "--out",
+                str(rois_path),
+                "--monitor",
+                str(int(mon)),
+            ]
+            _run_tool_async(cmd, title="ROI Picker (ring/amulet)")
+
+        tk.Button(cfg_left, text="Ajustar interface", width=14, command=pick_one_roi).grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=(8, 0)
+        )
+
+        tk.Label(cfg_left, text="Monitor").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(cfg_left, from_=0, to=9, increment=1, textvariable=self.roi_pick_monitor, width=6).grid(
+            row=2, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(cfg_left, text="Ajustar ring/amulet", width=14, command=pick_ring_amulet).grid(
+            row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         tk.Label(
             cfg_left,
             text="(Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        tk.Label(
-            cfg_left,
-            text=(
-                "Tip estable (sin coords visibles): usa CAVEBOT_MODE=steps. "
-                "Para minimap_motion: define seed X/Y (y opcional Z) y una policy de fallback."
-            ),
-            wraplength=320,
-            justify="left",
-        ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        # Debug (opcional): simulación de señales
+        sim_frame = tk.LabelFrame(cfg_left, text="Simulacion (debug)", padx=8, pady=6)
+        sim_frame.grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        tk.Checkbutton(sim_frame, text="Habilitar", variable=self.sim_enabled).grid(row=0, column=0, sticky="w")
+        tk.Checkbutton(sim_frame, text="Paralyzed", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Checkbutton(sim_frame, text="Haste", variable=self.sim_haste_active).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(6, 0))
+        tk.Checkbutton(sim_frame, text="Utamo", variable=self.sim_utamo_active).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Checkbutton(sim_frame, text="Hungry", variable=self.sim_hungry).grid(row=2, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
 
         # Asistente + Replay/Log (derecha)
         tk.Checkbutton(cfg_right, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(

@@ -635,5 +635,113 @@ class ViewportTracker:
                     "n_states": int(len(self._states)),
                 },
             }
+
+            # Optional: propagate the learned viewport left/right bounds to related UI ROIs.
+            # This helps when side panels open/close (main area width changes), keeping
+            # top bars + chat horizontally aligned.
+            try:
+                enabled = os.getenv("VIEWPORT_AUTO_UPDATE_UI_ROIS", "1").strip().lower() not in {"0", "false", "no"}
+            except Exception:
+                enabled = True
+
+            if enabled:
+                main_left = float(x_src)
+                main_w = float(w_src)
+                main_right = float(x_src) + float(w_src)
+
+                def _src_rect(name: str) -> tuple[float, float, float, float] | None:
+                    try:
+                        v = rois.get(name)
+                    except Exception:
+                        return None
+                    if not isinstance(v, Mapping):
+                        return None
+                    try:
+                        unit = str(v.get("unit", "") or "").strip().lower()
+                    except Exception:
+                        unit = ""
+
+                    def _f(x: Any) -> float | None:
+                        try:
+                            if x is None:
+                                return None
+                            return float(x)
+                        except Exception:
+                            return None
+
+                    x = _f(v.get("x"))
+                    y = _f(v.get("y"))
+                    w = _f(v.get("w"))
+                    h = _f(v.get("h"))
+                    if x is None or y is None or w is None or h is None:
+                        return None
+
+                    is_norm = unit != "px" and 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 and 0.0 <= w <= 1.0 and 0.0 <= h <= 1.0
+                    if is_norm:
+                        return (x * float(source_w), y * float(source_h), w * float(source_w), h * float(source_h))
+                    return (float(x), float(y), float(w), float(h))
+
+                def _set_px(name: str, x: float, y: float, w: float, h: float) -> None:
+                    try:
+                        if name not in rois:
+                            return
+                        rois[name] = {
+                            "unit": "px",
+                            "x": float(max(0.0, min(float(source_w - 1), x))),
+                            "y": float(max(0.0, min(float(source_h - 1), y))),
+                            "w": float(max(1.0, min(float(source_w) - max(0.0, x), w))),
+                            "h": float(max(1.0, min(float(source_h) - max(0.0, y), h))),
+                        }
+                    except Exception:
+                        return
+
+                # 1) Top strip spans exactly the main area (same left/right as viewport).
+                top = _src_rect("hpmp_top_strip")
+                if top is not None:
+                    tx, ty, tw, th = top
+                    if float(tw) > 1.0:
+                        _set_px("hpmp_top_strip", main_left, float(ty), main_w, float(th))
+
+                        # Adjust child ROIs within the strip (HP/MP OCR) proportionally.
+                        for child in ("hp_top_ocr", "mp_top_ocr"):
+                            c = _src_rect(child)
+                            if c is None:
+                                continue
+                            cx, cy, cw, ch = c
+                            try:
+                                rel_x = (float(cx) - float(tx)) / float(tw)
+                                rel_w = float(cw) / float(tw)
+                            except Exception:
+                                continue
+                            # Keep vertical placement stable (relative to strip if possible).
+                            try:
+                                rel_y = (float(cy) - float(ty)) / float(th) if float(th) > 0 else 0.0
+                                rel_h = float(ch) / float(th) if float(th) > 0 else 1.0
+                            except Exception:
+                                rel_y, rel_h = 0.0, 1.0
+                            _set_px(
+                                child,
+                                float(main_left + rel_x * main_w),
+                                float(ty + rel_y * th),
+                                float(rel_w * main_w),
+                                float(rel_h * th),
+                            )
+
+                # 2) Chat panel spans exactly the main area (keep y/h as configured).
+                chat = _src_rect("chat_panel")
+                if chat is not None:
+                    cx, cy, cw, ch = chat
+                    _set_px("chat_panel", main_left, float(cy), main_w, float(ch))
+
+                # 3) Convenience: expose main right edge in debug meta.
+                try:
+                    if isinstance(rois.get("_viewport_auto"), dict):
+                        rois["_viewport_auto"]["main"] = {
+                            "left_px": float(main_left),
+                            "right_px": float(main_right),
+                            "w_px": float(main_w),
+                        }
+                except Exception:
+                    pass
         except Exception:
             pass

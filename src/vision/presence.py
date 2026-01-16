@@ -151,6 +151,8 @@ def is_nonempty_equipment_slot(
     sat_thr: int = 30,
     v_thr: int = 40,
     high_std: float = 45.0,
+    gray_dark_thr: int = 55,
+    gray_min_dark_pct: float = 0.01,
 ) -> bool:
     """Heuristic for equipment slots (ring/amulet) that reduces false positives.
 
@@ -184,8 +186,17 @@ def is_nonempty_equipment_slot(
     if float(sat_pct) >= float(min_sat_pct):
         return True
 
-    # Allow high-texture grayscale icons (some rings/amulets can be mostly gray).
-    return std >= float(high_std)
+    # Allow high-texture grayscale icons (some rings/amulets can be mostly gray),
+    # but require some dark pixels in the interior; empty slot textures can be
+    # high-std without having any dark strokes.
+    if std < float(high_std):
+        return False
+
+    try:
+        dark_pct = float(np.count_nonzero(gray < int(gray_dark_thr))) / float(gray.size)
+    except Exception:
+        dark_pct = 0.0
+    return dark_pct >= float(gray_min_dark_pct)
 
 
 def is_hungry_hsv(
