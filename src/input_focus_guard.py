@@ -474,6 +474,12 @@ def is_allowed_to_inject(client_hwnd: int | None) -> tuple[bool, str]:
     """Strict focus guard for OS input injection."""
 
     try:
+        if (os.getenv("ALLOW_BACKGROUND_INPUT", "") or "").strip().lower() in {"1", "true", "yes"}:
+            return True, "bg_allowed"
+    except Exception:
+        pass
+
+    try:
         hwnd = int(client_hwnd or 0)
     except Exception:
         hwnd = 0

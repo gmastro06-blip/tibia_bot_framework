@@ -303,7 +303,7 @@ class BotUI:
             _action_driver = os.getenv("ACTION_DRIVER", "log").strip().lower() or "log"
         except Exception:
             _action_driver = "log"
-        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "mock", "keyboard", "wininput"} else "log")
+        self.asst_input_mode = tk.StringVar(value=_action_driver if _action_driver in {"log", "mock", "keyboard", "wininput", "bridge"} else "log")
         self.asst_target_hotkey = tk.StringVar(value=os.getenv("TARGET_HOTKEY", "").strip())
         self.asst_minimap_hotkey = tk.StringVar(value=os.getenv("MINIMAP_CLICK_HOTKEY", "").strip())
 
@@ -314,6 +314,15 @@ class BotUI:
         self.autotarget_retarget_lost_ms = tk.IntVar(value=800)
         self.autotarget_whitelist_text = tk.StringVar(value="")
         self.autotarget_blacklist_text = tk.StringVar(value="")
+
+        # Battlelist targeting (vision-based)
+        self.bl_target_enabled = tk.BooleanVar(value=False)
+        self.bl_target_alive_threshold = tk.DoubleVar(value=0.5)
+        self.bl_target_dead_debounce = tk.IntVar(value=6)
+        self.bl_target_select_debounce = tk.IntVar(value=3)
+        self.bl_target_scroll_cooldown_ms = tk.IntVar(value=800)
+        self.bl_target_target_cooldown_ms = tk.IntVar(value=500)
+        self.bl_target_ocr_names = tk.BooleanVar(value=False)
 
         # Text widgets are created later; keep placeholders here.
         self._autotarget_whitelist_box = None
@@ -332,6 +341,21 @@ class BotUI:
                 bl = list(getattr(cfg, "blacklist", None) or [])
                 self.autotarget_whitelist_text.set("\n".join([str(x).strip() for x in wl if str(x).strip()]))
                 self.autotarget_blacklist_text.set("\n".join([str(x).strip() for x in bl if str(x).strip()]))
+        except Exception:
+            pass
+
+        # Initialize battlelist targeting defaults from RuntimeConfig if supported.
+        try:
+            blt = getattr(self._config, "battlelist_targeting_snapshot", None)
+            if callable(blt):
+                cfg = blt()
+                self.bl_target_enabled.set(bool(getattr(cfg, "autotarget_enabled", False)))
+                self.bl_target_alive_threshold.set(float(getattr(cfg, "battlelist_alive_threshold", 0.5) or 0.5))
+                self.bl_target_dead_debounce.set(int(getattr(cfg, "dead_debounce_frames", 6) or 6))
+                self.bl_target_select_debounce.set(int(getattr(cfg, "select_debounce_frames", 3) or 3))
+                self.bl_target_scroll_cooldown_ms.set(int(getattr(cfg, "scroll_cooldown_ms", 800) or 800))
+                self.bl_target_target_cooldown_ms.set(int(getattr(cfg, "target_cooldown_ms", 500) or 500))
+                self.bl_target_ocr_names.set(bool(getattr(cfg, "ocr_names", False)))
         except Exception:
             pass
 
@@ -1546,7 +1570,7 @@ class BotUI:
         )
 
         tk.Label(cfg_right, text="Modo de inputs").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "mock", "keyboard", "wininput").grid(
+        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "mock", "keyboard", "wininput", "bridge").grid(
             row=3, column=1, sticky="w", pady=(6, 0)
         )
 
@@ -1621,9 +1645,70 @@ class BotUI:
         except Exception:
             pass
 
+        # Battlelist targeting (vision-based).
+        blt_frame = tk.LabelFrame(cfg_right, text="Battlelist Targeting", padx=8, pady=6)
+        blt_frame.grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        tk.Checkbutton(blt_frame, text="AutoTarget (vision) ON", variable=self.bl_target_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Label(blt_frame, text="Alive threshold").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0.1,
+            to=1.0,
+            increment=0.05,
+            textvariable=self.bl_target_alive_threshold,
+            width=6,
+        ).grid(row=1, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Dead debounce (frames)").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=1,
+            to=30,
+            increment=1,
+            textvariable=self.bl_target_dead_debounce,
+            width=6,
+        ).grid(row=2, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Select debounce (frames)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=1,
+            to=20,
+            increment=1,
+            textvariable=self.bl_target_select_debounce,
+            width=6,
+        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Scroll cooldown (ms)").grid(row=4, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0,
+            to=5000,
+            increment=50,
+            textvariable=self.bl_target_scroll_cooldown_ms,
+            width=6,
+        ).grid(row=4, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Target cooldown (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0,
+            to=5000,
+            increment=50,
+            textvariable=self.bl_target_target_cooldown_ms,
+            width=6,
+        ).grid(row=5, column=1, sticky="w", pady=(4, 0))
+
+        tk.Checkbutton(blt_frame, text="OCR names", variable=self.bl_target_ocr_names).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
         # Live input guardrails (must not shift the rest of the layout).
         live_frame = tk.LabelFrame(cfg_right, text="Live input safety", padx=8, pady=6)
-        live_frame.grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        live_frame.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         def _confirm_arm_live() -> None:
             try:
@@ -1648,7 +1733,7 @@ class BotUI:
                     m = str(self.asst_input_mode.get() or "log").strip().lower()
                 except Exception:
                     m = "log"
-                if m not in {"keyboard", "wininput"}:
+                if m not in {"keyboard", "wininput", "bridge"}:
                     self.asst_input_mode.set("keyboard")
             except Exception:
                 try:
@@ -2256,7 +2341,7 @@ class BotUI:
                                 m = str(self.asst_input_mode.get() or "log").strip().lower()
                             except Exception:
                                 m = "log"
-                            if m not in {"keyboard", "wininput"}:
+                            if m not in {"keyboard", "wininput", "bridge"}:
                                 try:
                                     self.asst_input_mode.set("keyboard")
                                 except Exception:
@@ -2400,7 +2485,7 @@ class BotUI:
 
             # Only allow arming when keyboard mode is selected.
             live_armed = bool(self.asst_live_input_armed.get())
-            if mode not in {"keyboard", "wininput"}:
+            if mode not in {"keyboard", "wininput", "bridge"}:
                 live_armed = False
 
             titles_raw = str(self.asst_allowed_window_titles.get() or "")
@@ -2416,6 +2501,20 @@ class BotUI:
                 live_input_armed=bool(live_armed),
                 allowed_window_titles=list(allowed_titles),
             )
+
+            # Allow auto-commit when live input is armed (UI-driven override).
+            try:
+                os.environ["ASSIST_AUTO_COMMIT_WHEN_ARMED"] = (
+                    "1" if bool(self.asst_auto_arm_no_confirm.get()) else "0"
+                )
+            except Exception:
+                pass
+
+            # Disable focus-guard blocking when live input is armed.
+            try:
+                os.environ["ALLOW_BACKGROUND_INPUT"] = "1" if bool(live_armed) else "0"
+            except Exception:
+                pass
 
         def sync_autotarget(*_args):
             upd = getattr(self._config, "update_autotarget", None)
@@ -2458,6 +2557,24 @@ class BotUI:
                 retarget_if_lost_ms=int(self.autotarget_retarget_lost_ms.get()),
                 whitelist=list(wl),
                 blacklist=list(bl),
+            )
+
+        def sync_battlelist_targeting(*_args):
+            upd = getattr(self._config, "update_battlelist_targeting", None)
+            if not callable(upd):
+                return
+            try:
+                alive_thr = float(self.bl_target_alive_threshold.get())
+            except Exception:
+                alive_thr = 0.5
+            upd(
+                autotarget_enabled=bool(self.bl_target_enabled.get()),
+                battlelist_alive_threshold=float(max(0.05, min(1.0, float(alive_thr)))),
+                dead_debounce_frames=int(self.bl_target_dead_debounce.get()),
+                select_debounce_frames=int(self.bl_target_select_debounce.get()),
+                scroll_cooldown_ms=int(self.bl_target_scroll_cooldown_ms.get()),
+                target_cooldown_ms=int(self.bl_target_target_cooldown_ms.get()),
+                ocr_names=bool(self.bl_target_ocr_names.get()),
             )
 
         def sync_replay_and_logging(*_args):
@@ -2533,6 +2650,19 @@ class BotUI:
             except Exception:
                 pass
         for v in [
+            self.bl_target_enabled,
+            self.bl_target_alive_threshold,
+            self.bl_target_dead_debounce,
+            self.bl_target_select_debounce,
+            self.bl_target_scroll_cooldown_ms,
+            self.bl_target_target_cooldown_ms,
+            self.bl_target_ocr_names,
+        ]:
+            try:
+                v.trace_add("write", sync_battlelist_targeting)
+            except Exception:
+                pass
+        for v in [
             self.replay_enabled,
             self.replay_interval_ms,
             self.replay_out_dir,
@@ -2548,6 +2678,7 @@ class BotUI:
         sync_simulation()
         sync_assistant()
         sync_autotarget()
+        sync_battlelist_targeting()
         sync_replay_and_logging()
 
         def poll_telemetry() -> None:  # pyright: ignore[reportGeneralTypeIssues]
@@ -3742,7 +3873,7 @@ class BotUI:
                     self.asst_sound.set(bool(a.get("sound_alerts")))
                 if "input_mode" in a:
                     mode = str(a.get("input_mode") or "log").strip().lower()
-                    if mode not in {"log", "mock", "keyboard", "wininput"}:
+                    if mode not in {"log", "mock", "keyboard", "wininput", "bridge"}:
                         mode = "log"
                     self.asst_input_mode.set(mode)
                 if "target_hotkey" in a:
@@ -3786,6 +3917,29 @@ class BotUI:
                     self.replay_interval_ms.set(int(float(r.get("interval_ms") or 0)))
                 if "out_dir" in r:
                     self.replay_out_dir.set(str(r.get("out_dir") or self.replay_out_dir.get()))
+        except Exception:
+            pass
+
+        try:
+            bt = data.get("battlelist_targeting")
+            if isinstance(bt, dict):
+                if "autotarget_enabled" in bt:
+                    self.bl_target_enabled.set(bool(bt.get("autotarget_enabled")))
+                if "alive_threshold" in bt:
+                    try:
+                        self.bl_target_alive_threshold.set(float(bt.get("alive_threshold") or 0.5))
+                    except Exception:
+                        pass
+                if "dead_debounce_frames" in bt:
+                    self.bl_target_dead_debounce.set(int(float(bt.get("dead_debounce_frames") or 6)))
+                if "select_debounce_frames" in bt:
+                    self.bl_target_select_debounce.set(int(float(bt.get("select_debounce_frames") or 3)))
+                if "scroll_cooldown_ms" in bt:
+                    self.bl_target_scroll_cooldown_ms.set(int(float(bt.get("scroll_cooldown_ms") or 800)))
+                if "target_cooldown_ms" in bt:
+                    self.bl_target_target_cooldown_ms.set(int(float(bt.get("target_cooldown_ms") or 500)))
+                if "ocr_names" in bt:
+                    self.bl_target_ocr_names.set(bool(bt.get("ocr_names")))
         except Exception:
             pass
 
@@ -4349,6 +4503,15 @@ class BotUI:
                         s.strip() for s in str(self.asst_allowed_window_titles.get() or "").split(",") if s.strip()
                     ],
                 },
+                "battlelist_targeting": {
+                    "autotarget_enabled": bool(self.bl_target_enabled.get()),
+                    "alive_threshold": float(self.bl_target_alive_threshold.get()),
+                    "dead_debounce_frames": int(self.bl_target_dead_debounce.get()),
+                    "select_debounce_frames": int(self.bl_target_select_debounce.get()),
+                    "scroll_cooldown_ms": int(self.bl_target_scroll_cooldown_ms.get()),
+                    "target_cooldown_ms": int(self.bl_target_target_cooldown_ms.get()),
+                    "ocr_names": bool(self.bl_target_ocr_names.get()),
+                },
                 "replay": {
                     "enabled": bool(self.replay_enabled.get()),
                     "interval_ms": int(self.replay_interval_ms.get()),
@@ -4757,6 +4920,22 @@ class BotUI:
         self._reset_idle_ui()
         self._reset_cavebot_ui()
 
+        # Capture defaults for dual-monitor setup (OBS on monitor 1, Tibia on monitor 2).
+        # User requested forcing monitor 1 and OBS source name Tibia_Fuente.
+        try:
+            if not (os.getenv("CAPTURE_TARGET", "") or "").strip():
+                os.environ["CAPTURE_TARGET"] = "obs_projector"
+        except Exception:
+            pass
+        try:
+            os.environ["CAPTURE_TITLE_HINTS"] = "Tibia_Fuente"
+        except Exception:
+            pass
+        try:
+            os.environ["FORCE_MONITOR"] = "1"
+        except Exception:
+            pass
+
         # Apply cavebot mode + coords provider for this run.
         try:
             os.environ["CAVEBOT_MODE"] = str(self.cavebot_mode.get() or "").strip() or "steps"
@@ -5009,6 +5188,15 @@ class BotUI:
 
     def run(self) -> None:
         try:
+            try:
+                auto_start = (os.getenv("UI_AUTO_START", "") or "").strip().lower() in {"1", "true", "yes"}
+            except Exception:
+                auto_start = False
+            if auto_start:
+                try:
+                    self.root.after(200, self.start)
+                except Exception:
+                    pass
             self.root.mainloop()
         except KeyboardInterrupt:
             # Permite cerrar la UI desde consola sin traceback ruidoso

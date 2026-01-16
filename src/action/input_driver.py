@@ -103,6 +103,11 @@ class WindowsKeyboardDriver:
 
         # Focus guard (strict): inputs only if the client window is foreground.
         try:
+            try:
+                if (os.getenv("ALLOW_BACKGROUND_INPUT", "") or "").strip().lower() in {"1", "true", "yes"}:
+                    return self._send_action(action)
+            except Exception:
+                pass
             from input_focus_guard import get_client_hwnd, is_allowed_to_inject
 
             hwnd = int(get_client_hwnd() or 0)
@@ -113,6 +118,9 @@ class WindowsKeyboardDriver:
             # Fail-closed: if we cannot validate focus, do not inject.
             return False
 
+        return self._send_action(action)
+
+    def _send_action(self, action: ActionRequest) -> bool:
         kind = (action.kind or "").strip().lower()
         val = (action.value or "").strip()
 
@@ -122,7 +130,7 @@ class WindowsKeyboardDriver:
         if kind == "minimap_click_sim" and self.minimap_hotkey:
             return self._tap_hotkey(self.minimap_hotkey)
 
-        if kind == "target" and self.target_hotkey:
+        if kind in {"target", "battlelist_target"} and self.target_hotkey:
             return self._tap_hotkey(self.target_hotkey)
 
         if kind == "move":

@@ -82,7 +82,7 @@ class InputPlanner:
                 value = _env("ASSIST_EAT_FOOD", value)
             return [PlannedInput(kind="hotkey", value=value or kind)]
 
-        if kind == "target":
+        if kind in {"target", "battlelist_target"}:
             # Target selection hotkey (commonly "next target").
             # Value may carry the desired target name for UI/telemetry; the
             # actual hotkey is configured externally.

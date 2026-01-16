@@ -5,6 +5,8 @@ import re
 import os
 from typing import Optional, Tuple, Dict, Any, List, Sequence, Mapping, cast
 import json
+from vision.roi import roi_to_px
+from vision.hud_parsing import parse_current_and_max_with_reason
 
 
 class OCRProcessor:
@@ -26,6 +28,12 @@ class OCRProcessor:
         # Cargar correcciones OCR
         self.corrections = self._load_corrections()
 
+        # Últimos métodos usados para HP/MP (observabilidad)
+        self.last_hp_ocr_source = ""
+        self.last_hp_ocr_reason = ""
+        self.last_mp_ocr_source = ""
+        self.last_mp_ocr_reason = ""
+
     def _load_corrections(self) -> Dict[str, str]:
         """Carga las correcciones OCR desde el archivo de configuración"""
         corrections_file = os.path.join(os.path.dirname(__file__), '..', '..', 'configs', 'ocr_corrections.json')
@@ -44,135 +52,148 @@ class OCRProcessor:
         else:
             gray = image
 
-        # Mejorar contraste para texto blanco sobre fondo oscuro
-        # Aplicar CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(gray)
-
-        # Aplicar threshold adaptativo más agresivo
+        # Binarización adaptativa (baseline estable)
         thresh = cv2.adaptiveThreshold(
-            enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
         )
 
-        # Invertir si el texto es blanco (más común en juegos)
-        # Verificar si hay más píxeles blancos que negros
-        white_pixels = cv2.countNonZero(thresh)
-        total_pixels = thresh.size
-        if white_pixels > total_pixels / 2:
-            # Texto blanco sobre fondo negro - invertir
-            thresh = cv2.bitwise_not(thresh)
-
         # Escalar a 2x para mejor reconocimiento
-        # OpenCV permite dsize=None cuando se usan fx/fy, pero los stubs tipados no.
-        scaled = cv2.resize(thresh, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        h, w = thresh.shape[:2]
+        scaled = cv2.resize(thresh, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
 
-        # Aplicar denoising
-        denoised = cv2.medianBlur(scaled, 3)
+        # Denoise
+        try:
+            denoised = cv2.fastNlMeansDenoising(scaled, h=10)
+        except Exception:
+            denoised = cv2.medianBlur(scaled, 3)
+
+        # Sharpen suave para mejorar dígitos
+        try:
+            blur = cv2.GaussianBlur(denoised, (0, 0), 1.0)
+            sharpened = cv2.addWeighted(denoised, 1.5, blur, -0.5, 0)
+        except Exception:
+            sharpened = denoised
 
         # Dilatar ligeramente para conectar caracteres
         kernel = np.ones((2, 2), np.uint8)
-        dilated = cv2.dilate(denoised, kernel, iterations=1)
+        dilated = cv2.dilate(sharpened, kernel, iterations=1)
 
         return dilated
 
     def extract_text(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> str:
         """Extrae texto de una imagen usando OCR"""
         try:
-            # Preprocesar imagen
             processed = self.preprocess_image(image)
-
-            # Intentar OCR sin restricciones primero
             results = self.reader.readtext(processed, detail=0, allowlist=allowlist)
 
-            if results:
-                text = str(results[0])  # Tomar el primer resultado
-                if self._debug:
-                    print(f"OCR encontró: '{text}'")
-                # Limpiar texto: solo números y /
-                cleaned = re.sub(r'[^0-9/]', '', text)
-                # Aplicar correcciones
-                return str(self.corrections.get(cleaned, cleaned))
-            else:
-                if self._debug:
-                    print("OCR no encontró texto")
+            if not results:
                 return ""
 
-        except Exception as e:
-            print(f"Error en OCR: {e}")
+            text = str(results[0])
+            if self._debug:
+                print(f"OCR encontró: '{text}'")
+
+            # Limpiar texto: solo números y separadores /|
+            cleaned = re.sub(r"[^0-9/|]", "", text)
+            cleaned = cleaned.replace("|", "/")
+            return str(self.corrections.get(cleaned, cleaned))
+        except Exception:
             return ""
 
     def _readtext_strings(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> List[str]:
-        """Devuelve una lista de strings OCR (sin limpiar a solo dígitos)."""
-        try:
-            processed = self.preprocess_image(image)
-            results = self.reader.readtext(processed, detail=0, allowlist=allowlist)
-            out: List[str] = []
-            for r in results or []:
-                try:
-                    s = str(r)
-                    if s:
-                        out.append(s)
-                except Exception:
-                    continue
-            if self._debug and out:
-                print(f"OCR raw strings: {out}")
-            return out
-        except Exception:
+        """Best-effort OCR returning a list of raw strings.
+
+        Central helper used by multiple extraction paths.
+        """
+
+        if image is None or getattr(image, "size", 0) == 0:
             return []
+
+        out: List[str] = []
+        # Raw OCR
+        try:
+            res = self.reader.readtext(image, detail=0, allowlist=allowlist)
+            for r in res or []:
+                s = str(r).strip()
+                if s:
+                    out.append(s)
+        except Exception:
+            pass
+
+        # Preprocessed OCR (often improves digits)
+        try:
+            proc = self.preprocess_image(image)
+            res2 = self.reader.readtext(proc, detail=0, allowlist=allowlist)
+            for r in res2 or []:
+                s = str(r).strip()
+                if s:
+                    out.append(s)
+        except Exception:
+            pass
+
+        return out
+
+    def _set_last_ocr_meta(self, *, kind: str, source: str, reason: str) -> None:
+        """Store per-tick OCR observability for HP/MP."""
+
+        k = str(kind or "").strip().lower()
+        try:
+            if k == "hp":
+                self.last_hp_ocr_source = str(source or "")
+                self.last_hp_ocr_reason = str(reason or "")
+            elif k == "mp":
+                self.last_mp_ocr_source = str(source or "")
+                self.last_mp_ocr_reason = str(reason or "")
+        except Exception:
+            pass
 
     @staticmethod
     def _parse_capacity_from_text(text: str) -> Optional[int]:
-        if not text:
-            return None
+        """Parse CAP value from OCR text."""
+
         try:
-            m = re.search(r"\bcap\b\s*[:\-]?\s*(\d{1,6})", text, flags=re.IGNORECASE)
-            if m:
-                return int(m.group(1))
+            s = str(text or "")
         except Exception:
-            pass
-        return None
+            return None
+
+        nums = [int(n) for n in re.findall(r"\d{1,6}", s)]
+        if not nums:
+            return None
+
+        # CAP tends to be a moderate integer; choose the max to avoid catching small timers.
+        try:
+            return int(max(nums))
+        except Exception:
+            return None
 
     @staticmethod
     def _parse_coords_from_text(text: str) -> tuple[int, int, int | None] | None:
-        """Parse (x,y,z) from OCR text.
+        """Parse coords from OCR text.
 
         Accepts formats like:
-        - X: 32561 Y: 32496 Z: 7
-        - 32561 32496 7
-        - 32561,32496,7
-        - 32561 32496
+        - "X: 12345 Y: 67890 Z: 7"
+        - "12345,67890,7" or "12345 67890"
         """
 
-        s = (text or "").strip()
+        try:
+            s = str(text or "").strip()
+        except Exception:
+            return None
+
         if not s:
             return None
 
-        try:
-            m = re.search(
-                r"(?i)(?:x\s*[:=\s,]+(?P<x>-?\d+))\D+"
-                r"(?:y\s*[:=\s,]+(?P<y>-?\d+))"
-                r"(?:\D+(?:z\s*[:=\s,]+(?P<z>-?\d+)))?",
-                s,
-            )
-            if m:
-                x = int(m.group("x"))
-                y = int(m.group("y"))
-                z_raw = m.group("z")
-                z = int(z_raw) if z_raw is not None else None
-                return x, y, z
-        except Exception:
-            pass
-
         nums = re.findall(r"-?\d+", s)
-        if len(nums) >= 2:
-            try:
-                x = int(nums[0])
-                y = int(nums[1])
-                z = int(nums[2]) if len(nums) >= 3 else None
-                return x, y, z
-            except Exception:
-                return None
-        return None
+        if len(nums) < 2:
+            return None
+
+        try:
+            x = int(nums[0])
+            y = int(nums[1])
+            z = int(nums[2]) if len(nums) >= 3 else None
+            return x, y, z
+        except Exception:
+            return None
 
     def extract_coords(
         self,
@@ -184,11 +205,6 @@ class OCRProcessor:
 
         Requires an ROI named `coords_ocr` in the ROI config.
         Returns None if ROI is missing or OCR/parsing fails.
-
-        Aqui se puede mejorar: si el cliente no muestra coordenadas en pantalla,
-        esta extracción por OCR no es fiable y puede producir falsos positivos.
-        En ese caso, conviene deshabilitarlo o reemplazarlo por otra estrategia
-        (p.ej. minimap-motion experimental, anchor-based inference, o telemetría externa).
         """
 
         try:
@@ -248,11 +264,8 @@ class OCRProcessor:
             except Exception:
                 pass
 
-            # Sanity-check parsed coords: prevents false positives when ROI drifts
-            # into HP/MP/CAP areas (common early in calibration).
+            # Sanity-check parsed coords: prevents false positives when ROI drifts.
             try:
-                # Default más alto para evitar falsos positivos cuando NO hay coords visibles.
-                # Si tu servidor/cliente usa coords más bajas, override vía COORDS_MIN_XY.
                 min_xy = int(float(os.getenv("COORDS_MIN_XY", "20000").strip() or "20000"))
             except Exception:
                 min_xy = 20000
@@ -283,9 +296,7 @@ class OCRProcessor:
             if parsed is not None and _valid_coords(parsed):
                 return parsed
 
-            # Fallback: OCR sometimes returns X and Y as separate tokens without labels.
-            # The generic parser may grab early small numbers (timers, counters) and fail validation.
-            # Here we try to find the first two "large" numbers in-range and treat them as (x,y).
+            # Fallback: pick first 2 large numbers in-range.
             try:
                 nums_all = [int(n) for n in re.findall(r"-?\d+", joined)]
                 nums_big = [v for v in nums_all if (min_xy <= abs(int(v)) <= max_xy)]
@@ -293,7 +304,6 @@ class OCRProcessor:
                     x2 = int(nums_big[0])
                     y2 = int(nums_big[1])
                     z2: int | None = None
-                    # Optional Z: look for the first small integer after y.
                     try:
                         for v in nums_all:
                             vv = int(v)
@@ -329,6 +339,41 @@ class OCRProcessor:
 
         def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
             return self._roi_to_px(frame, rois, resolution, roi_def)
+
+        def _reconcile(v_roi: Optional[int], v_panel: Optional[int]) -> Optional[int]:
+            if v_roi is None:
+                return v_panel
+            if v_panel is None:
+                return v_roi
+
+            try:
+                s_roi = str(int(v_roi))
+                s_pan = str(int(v_panel))
+            except Exception:
+                return v_roi
+
+            # Common failure mode: cap_ocr ROI captures only the last digits.
+            # If panel value ends with roi value and is longer, trust the panel.
+            try:
+                if len(s_pan) > len(s_roi) and s_pan.endswith(s_roi):
+                    return int(v_panel)
+            except Exception:
+                pass
+
+            # If panel is significantly larger, prefer it (likely full number).
+            try:
+                if int(v_panel) > int(v_roi):
+                    diff = int(v_panel) - int(v_roi)
+                    thr = max(50, int(abs(int(v_roi)) * 0.5))
+                    if diff >= thr:
+                        return int(v_panel)
+            except Exception:
+                pass
+
+            return int(v_roi)
+
+        cap_from_roi: Optional[int] = None
+        cap_from_panel: Optional[int] = None
 
         # (1) ROI específico de cap (recomendado)
         try:
@@ -409,7 +454,7 @@ class OCRProcessor:
                     raw_res = self.reader.readtext(crop, detail=1, allowlist="0123456789")
                     v_raw = _best_single_box_number(raw_res)
                     if v_raw is not None:
-                        return v_raw
+                        cap_from_roi = int(v_raw)
                 except Exception:
                     pass
 
@@ -474,24 +519,26 @@ class OCRProcessor:
                         nums = re.findall(r"\d{1,6}", joined)
                         return int(max(nums, key=lambda s: int(s))) if nums else None
 
-                try:
-                    processed = self.preprocess_image(crop)
-                    res = self.reader.readtext(processed, detail=1, allowlist="0123456789")
-                    v = _read_number_from_digit_boxes(res)
-                    if v is not None:
-                        return v
-                except Exception:
-                    pass
+                if cap_from_roi is None:
+                    try:
+                        processed = self.preprocess_image(crop)
+                        res = self.reader.readtext(processed, detail=1, allowlist="0123456789")
+                        v = _read_number_from_digit_boxes(res)
+                        if v is not None:
+                            cap_from_roi = int(v)
+                    except Exception:
+                        pass
 
-                try:
-                    processed = self.preprocess_image(crop)
-                    inv = cv2.bitwise_not(processed)
-                    res = self.reader.readtext(inv, detail=1, allowlist="0123456789")
-                    v = _read_number_from_digit_boxes(res)
-                    if v is not None:
-                        return v
-                except Exception:
-                    pass
+                if cap_from_roi is None:
+                    try:
+                        processed = self.preprocess_image(crop)
+                        inv = cv2.bitwise_not(processed)
+                        res = self.reader.readtext(inv, detail=1, allowlist="0123456789")
+                        v = _read_number_from_digit_boxes(res)
+                        if v is not None:
+                            cap_from_roi = int(v)
+                    except Exception:
+                        pass
 
                 # Fallback: keep old behavior but on expanded crop.
                 candidates: List[str] = []
@@ -505,8 +552,11 @@ class OCRProcessor:
                     pass
                 joined = " ".join(candidates)
                 nums = re.findall(r"\d{1,6}", joined)
-                if nums:
-                    return int(max(nums, key=lambda s: int(s)))
+                if nums and cap_from_roi is None:
+                    try:
+                        cap_from_roi = int(max(nums, key=lambda s: int(s)))
+                    except Exception:
+                        cap_from_roi = None
         except Exception:
             pass
 
@@ -519,7 +569,7 @@ class OCRProcessor:
                 joined = " ".join(texts)
                 cap = self._parse_capacity_from_text(joined)
                 if cap is not None:
-                    return cap
+                    cap_from_panel = int(cap)
 
                 # BBox-based fallback: find the cap/capacity label and read the number on the same row.
                 try:
@@ -563,20 +613,26 @@ class OCRProcessor:
                             if num_pairs:
                                 # Prefer higher confidence; if ties, larger value.
                                 num_pairs.sort(key=lambda t: (t[1], t[0]), reverse=True)
-                                return int(num_pairs[0][0])
+                                try:
+                                    cap_from_panel = int(num_pairs[0][0])
+                                except Exception:
+                                    cap_from_panel = cap_from_panel
 
                         # Last resort: digit-only OCR on full panel and pick a reasonable maximum.
                         digit_texts = self._readtext_strings(crop, allowlist="0123456789")
                         djoined = " ".join(digit_texts)
                         vals = [int(n) for n in re.findall(r"\d{1,6}", djoined)]
                         if vals:
-                            return int(max(vals))
+                            try:
+                                cap_from_panel = int(max(vals))
+                            except Exception:
+                                cap_from_panel = cap_from_panel
                 except Exception:
                     pass
         except Exception:
             pass
 
-        return None
+        return _reconcile(cap_from_roi, cap_from_panel)
 
     def extract_hp_mp(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Tuple[Optional[int], Optional[int]]:
         """Compat: devuelve solo HP/MP actuales."""
@@ -733,12 +789,47 @@ class OCRProcessor:
         mp_current: Optional[int] = None
         mp_max: Optional[int] = None
 
+        # Reset per-call OCR meta
+        self._set_last_ocr_meta(kind="hp", source="", reason="")
+        self._set_last_ocr_meta(kind="mp", source="", reason="")
+
         try:
             # Función para convertir coordenadas normalizadas a píxeles.
             # Importante: las ROIs suelen estar definidas para una "source_resolution" (p.ej. 1920x1080),
             # pero el frame capturado puede tener otra (p.ej. proyector 1920x1009). Reescalamos.
             def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
                 return self._roi_to_px(frame, rois, resolution, roi_def)
+
+            def _valid_roi(roi: Tuple[int, int, int, int]) -> tuple[bool, str]:
+                try:
+                    x, y, w, h = roi
+                    if w < 6 or h < 6:
+                        return False, "too_small"
+                    if x < 0 or y < 0:
+                        return False, "negative"
+                    if x + w > frame.shape[1] or y + h > frame.shape[0]:
+                        return False, "out_of_bounds"
+                    return True, "ok"
+                except Exception:
+                    return False, "invalid"
+
+            def _pick_best_cur_max(texts: list[str], label: str) -> tuple[Optional[int], Optional[int], str]:
+                best = None
+                best_score = -1
+                for t in texts:
+                    cur, mx, reason = self._parse_current_and_max_with_reason(str(t), label)
+                    if mx is None:
+                        continue
+                    try:
+                        score = int(mx)
+                    except Exception:
+                        score = 0
+                    if score > best_score:
+                        best_score = score
+                        best = (cur, mx, reason)
+                if best is not None:
+                    return best
+                return None, None, "no_max_candidates"
 
             # Mostrar información de debug de la imagen
             if self._debug:
@@ -750,6 +841,8 @@ class OCRProcessor:
                 print("⚠️  ADVERTENCIA: La imagen capturada está mayoritariamente negra")
                 print("   Esto puede indicar que la ventana de Tibia está minimizada o no visible")
                 print("   Asegúrate de que Tibia esté maximizado y en primer plano")
+                self._set_last_ocr_meta(kind="hp", source="frame", reason="black_frame")
+                self._set_last_ocr_meta(kind="mp", source="frame", reason="black_frame")
                 return None, None, None, None
 
             # (A) Si hay detecciones Roboflow, intentar OCR sobre boxes de texto primero
@@ -762,227 +855,270 @@ class OCRProcessor:
                 if hp_box is not None and hp_current is None:
                     hp_crop_rf = self._crop_from_rf_box(frame, hp_box)
                     if hp_crop_rf is not None:
-                        hp_text = self.extract_text(hp_crop_rf, allowlist="0123456789/")
+                        hp_text = self.extract_text(hp_crop_rf, allowlist="0123456789/|")
                         if hp_text:
-                            hp_current, hp_max = self._parse_current_and_max(hp_text, "HP")
+                            hp_current, hp_max, hp_reason = self._parse_current_and_max_with_reason(hp_text, "HP")
+                            if hp_current is not None:
+                                self._set_last_ocr_meta(kind="hp", source="rf_box", reason="ok")
+                            else:
+                                self._set_last_ocr_meta(kind="hp", source="rf_box", reason=hp_reason)
+                        else:
+                            self._set_last_ocr_meta(kind="hp", source="rf_box", reason="ocr_empty")
 
                 if mp_box is not None and mp_current is None:
                     mp_crop_rf = self._crop_from_rf_box(frame, mp_box)
                     if mp_crop_rf is not None:
-                        mp_text = self.extract_text(mp_crop_rf, allowlist="0123456789/")
+                        mp_text = self.extract_text(mp_crop_rf, allowlist="0123456789/|")
                         if mp_text:
-                            mp_current, mp_max = self._parse_current_and_max(mp_text, "MP")
+                            mp_current, mp_max, mp_reason = self._parse_current_and_max_with_reason(mp_text, "MP")
+                            if mp_current is not None:
+                                self._set_last_ocr_meta(kind="mp", source="rf_box", reason="ok")
+                            else:
+                                self._set_last_ocr_meta(kind="mp", source="rf_box", reason=mp_reason)
+                        else:
+                            self._set_last_ocr_meta(kind="mp", source="rf_box", reason="ocr_empty")
 
             # Fallback: OCR fijo por ROIs
             # (0) Fallback robusto: OCR sobre el strip superior completo.
             # Usamos detail=1 para obtener bbox y separar izquierda (HP) / derecha (MP).
             if 'hpmp_top_strip' in rois and (hp_current is None or mp_current is None):
                 strip_roi = normalize_to_px(rois['hpmp_top_strip'])
-                strip_crop = frame[strip_roi[1]:strip_roi[1]+strip_roi[3], strip_roi[0]:strip_roi[0]+strip_roi[2]]
-                if strip_crop.size > 0:
-                    try:
-                        # When the user adds/removes HUD bars, the strip can contain extra numbers
-                        # (stamina, soul, etc). To avoid mis-assigning HP/MP, estimate where the
-                        # red/blue bars are inside the strip and choose OCR candidates closest to them.
-                        def _estimate_color_x_center(crop_bgr: np.ndarray, kind: str) -> Optional[float]:
-                            try:
-                                hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
-                                hsv_mat = cast(Any, hsv)
-
-                                if kind.lower() == "hp":
-                                    low1 = cast(Any, np.array([0, 70, 50], dtype=np.uint8))
-                                    high1 = cast(Any, np.array([10, 255, 255], dtype=np.uint8))
-                                    low2 = cast(Any, np.array([170, 70, 50], dtype=np.uint8))
-                                    high2 = cast(Any, np.array([180, 255, 255], dtype=np.uint8))
-                                    mask_low = cv2.inRange(hsv_mat, low1, high1)
-                                    mask_high = cv2.inRange(hsv_mat, low2, high2)
-                                    mask = cv2.bitwise_or(mask_low, mask_high)
-                                elif kind.lower() == "mp":
-                                    low = cast(Any, np.array([90, 70, 50], dtype=np.uint8))
-                                    high = cast(Any, np.array([135, 255, 255], dtype=np.uint8))
-                                    mask = cv2.inRange(hsv_mat, low, high)
-                                else:
-                                    return None
-
-                                # Column occupancy: where the bar color appears consistently.
-                                col_frac = (mask > 0).mean(axis=0)
-                                cols = np.where(col_frac > 0.15)[0]
-                                if cols.size == 0:
-                                    return None
-                                # Use midpoint between first/last matching columns.
-                                x0 = float(int(cols.min()))
-                                x1 = float(int(cols.max()))
-                                return (x0 + x1) / 2.0
-                            except Exception:
-                                return None
-
-                        processed = self.preprocess_image(strip_crop)
-                        results = self.reader.readtext(processed, detail=1, allowlist="0123456789/")
-
-                        parsed = []
-                        for item in results or []:
-                            try:
-                                bbox, text, conf = item
-                            except Exception:
-                                continue
-                            cleaned = re.sub(r'[^0-9/]', '', str(text))
-                            if not cleaned:
-                                continue
-
-                            cur, mx = self._parse_current_and_max(cleaned, "STRIP")
-                            if cur is None:
-                                continue
-
-                            # x_center del bbox (promedio de los 4 puntos)
-                            try:
-                                pts = cast(Sequence[Sequence[Any]], bbox)
-                                xs = [float(pt[0]) for pt in pts]
-                                x_center = float(sum(xs)) / max(1, len(xs))
-                            except Exception:
-                                x_center = 0.0
-
-                            parsed.append((x_center, cur, mx, float(conf) if conf is not None else 0.0, cleaned))
-
-                        # If we have no OCR candidates, bail early.
-                        if parsed:
-                            strip_w = float(strip_crop.shape[1])
-                            hp_ref = _estimate_color_x_center(strip_crop, "hp")
-                            mp_ref = _estimate_color_x_center(strip_crop, "mp")
-
-                            # Sensible fallbacks: HP tends to be left-ish, MP right-ish.
-                            if hp_ref is None:
-                                hp_ref = strip_w * 0.25
-                            if mp_ref is None:
-                                mp_ref = strip_w * 0.75
-
-                            def _pick_best(cands, ref_x: float):
-                                # Lower is better.
-                                best = None
-                                for x, cur, mx, conf, txt in cands:
-                                    try:
-                                        dist = abs(float(x) - float(ref_x))
-                                        has_max = 1 if mx is not None else 0
-                                        nd = len(re.sub(r"[^0-9]", "", str(txt or "")))
-                                        # Prefer having max (cur/max), then higher confidence, then more digits.
-                                        score = dist - (has_max * 30.0) - (float(conf) * 5.0) - (float(nd) * 0.2)
-                                        if best is None or score < best[0]:
-                                            best = (score, (x, cur, mx, conf, txt))
-                                    except Exception:
-                                        continue
-                                return best[1] if best is not None else None
-
-                            # Prefer candidates that include max (cur/max). If none, allow single numbers.
-                            with_max = [t for t in parsed if t[2] is not None]
-                            any_num = list(parsed)
-
-                            # Pick HP
-                            if hp_current is None:
-                                choice = _pick_best(with_max or any_num, float(hp_ref))
-                                if choice is not None:
-                                    _x, cur, mx, _conf, _txt = choice
-                                    hp_current, hp_max = cur, mx
-
-                            # Pick MP (avoid reusing the same exact candidate when possible)
-                            if mp_current is None:
-                                pool = (with_max or any_num)
+                ok, reason = _valid_roi(strip_roi)
+                if not ok:
+                    if hp_current is None:
+                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason=f"invalid_roi:{reason}")
+                    if mp_current is None:
+                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason=f"invalid_roi:{reason}")
+                else:
+                    strip_crop = frame[strip_roi[1]:strip_roi[1]+strip_roi[3], strip_roi[0]:strip_roi[0]+strip_roi[2]]
+                    if strip_crop.size > 0:
+                        try:
+                            # When the user adds/removes HUD bars, the strip can contain extra numbers
+                            # (stamina, soul, etc). To avoid mis-assigning HP/MP, estimate where the
+                            # red/blue bars are inside the strip and choose OCR candidates closest to them.
+                            def _estimate_color_x_center(crop_bgr: np.ndarray, kind: str) -> Optional[float]:
                                 try:
-                                    if hp_current is not None:
-                                        pool = [t for t in pool if t[0] != (choice[0] if choice is not None else None)]
+                                    hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
+                                    hsv_mat = cast(Any, hsv)
+
+                                    if kind.lower() == "hp":
+                                        low1 = cast(Any, np.array([0, 70, 50], dtype=np.uint8))
+                                        high1 = cast(Any, np.array([10, 255, 255], dtype=np.uint8))
+                                        low2 = cast(Any, np.array([170, 70, 50], dtype=np.uint8))
+                                        high2 = cast(Any, np.array([180, 255, 255], dtype=np.uint8))
+                                        mask_low = cv2.inRange(hsv_mat, low1, high1)
+                                        mask_high = cv2.inRange(hsv_mat, low2, high2)
+                                        mask = cv2.bitwise_or(mask_low, mask_high)
+                                    elif kind.lower() == "mp":
+                                        low = cast(Any, np.array([90, 70, 50], dtype=np.uint8))
+                                        high = cast(Any, np.array([135, 255, 255], dtype=np.uint8))
+                                        mask = cv2.inRange(hsv_mat, low, high)
+                                    else:
+                                        return None
+
+                                    # Column occupancy: where the bar color appears consistently.
+                                    col_frac = (mask > 0).mean(axis=0)
+                                    cols = np.where(col_frac > 0.15)[0]
+                                    if cols.size == 0:
+                                        return None
+                                    # Use midpoint between first/last matching columns.
+                                    x0 = float(int(cols.min()))
+                                    x1 = float(int(cols.max()))
+                                    return (x0 + x1) / 2.0
                                 except Exception:
-                                    pool = (with_max or any_num)
-                                choice2 = _pick_best(pool or (with_max or any_num), float(mp_ref))
-                                if choice2 is not None:
-                                    _x, cur, mx, _conf, _txt = choice2
-                                    mp_current, mp_max = cur, mx
-                    except Exception as e:
-                        print(f"Error OCR strip superior: {e}")
+                                    return None
+
+                            processed = self.preprocess_image(strip_crop)
+                            results = self.reader.readtext(processed, detail=1, allowlist="0123456789/|")
+
+                            parsed = []
+                            for item in results or []:
+                                try:
+                                    bbox, text, conf = item
+                                except Exception:
+                                    continue
+                                cleaned = re.sub(r'[^0-9/|]', '', str(text))
+                                cleaned = cleaned.replace("|", "/")
+                                if not cleaned:
+                                    continue
+
+                                cur, mx, _reason = self._parse_current_and_max_with_reason(cleaned, "STRIP")
+                                if cur is None:
+                                    continue
+
+                                # x_center del bbox (promedio de los 4 puntos)
+                                try:
+                                    pts = cast(Sequence[Sequence[Any]], bbox)
+                                    xs = [float(pt[0]) for pt in pts]
+                                    x_center = float(sum(xs)) / max(1, len(xs))
+                                except Exception:
+                                    x_center = 0.0
+
+                                parsed.append((x_center, cur, mx, float(conf) if conf is not None else 0.0, cleaned))
+
+                            # If we have no OCR candidates, bail early.
+                            if parsed:
+                                strip_w = float(strip_crop.shape[1])
+                                hp_ref = _estimate_color_x_center(strip_crop, "hp")
+                                mp_ref = _estimate_color_x_center(strip_crop, "mp")
+
+                                # Sensible fallbacks: HP tends to be left-ish, MP right-ish.
+                                if hp_ref is None:
+                                    hp_ref = strip_w * 0.25
+                                if mp_ref is None:
+                                    mp_ref = strip_w * 0.75
+
+                                def _pick_best(cands, ref_x: float):
+                                    # Lower is better.
+                                    best = None
+                                    for x, cur, mx, conf, txt in cands:
+                                        try:
+                                            dist = abs(float(x) - float(ref_x))
+                                            has_max = 1 if mx is not None else 0
+                                            nd = len(re.sub(r"[^0-9]", "", str(txt or "")))
+                                            # Prefer having max (cur/max), then higher confidence, then more digits.
+                                            score = dist - (has_max * 30.0) - (float(conf) * 5.0) - (float(nd) * 0.2)
+                                            if best is None or score < best[0]:
+                                                best = (score, (x, cur, mx, conf, txt))
+                                        except Exception:
+                                            continue
+                                    return best[1] if best is not None else None
+
+                                # Prefer candidates that include max (cur/max). If none, skip to fallback.
+                                with_max = [t for t in parsed if t[2] is not None]
+                                any_num = list(parsed)
+                                if not with_max:
+                                    if hp_current is None:
+                                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_max_candidates")
+                                    if mp_current is None:
+                                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_max_candidates")
+                                    raise RuntimeError("top_strip: no max candidates")
+
+                                # Pick HP
+                                if hp_current is None:
+                                    choice = _pick_best(with_max, float(hp_ref))
+                                    if choice is not None:
+                                        _x, cur, mx, _conf, _txt = choice
+                                        hp_current, hp_max = cur, mx
+                                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason="ok")
+
+                                # Pick MP (avoid reusing the same exact candidate when possible)
+                                if mp_current is None:
+                                    pool = list(with_max)
+                                    try:
+                                        if hp_current is not None:
+                                            pool = [t for t in pool if t[0] != (choice[0] if choice is not None else None)]
+                                    except Exception:
+                                        pool = list(with_max)
+                                    choice2 = _pick_best(pool or list(with_max), float(mp_ref))
+                                    if choice2 is not None:
+                                        _x, cur, mx, _conf, _txt = choice2
+                                        mp_current, mp_max = cur, mx
+                                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason="ok")
+                            else:
+                                if hp_current is None:
+                                    self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_candidates")
+                                if mp_current is None:
+                                    self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_candidates")
+                        except Exception as e:
+                            print(f"Error OCR strip superior: {e}")
 
             if 'hp_top_ocr' in rois and hp_current is None:
                 hp_roi = normalize_to_px(rois['hp_top_ocr'])
-                hp_crop = frame[hp_roi[1]:hp_roi[1]+hp_roi[3], hp_roi[0]:hp_roi[0]+hp_roi[2]]
-                if self._debug:
-                    print(f"HP ROI: {hp_roi}, crop shape: {hp_crop.shape if hp_crop.size > 0 else 'empty'}")
-                if hp_crop.size > 0:
+                ok, reason = _valid_roi(hp_roi)
+                if not ok:
+                    self._set_last_ocr_meta(kind="hp", source="top_ocr", reason=f"invalid_roi:{reason}")
+                else:
+                    hp_crop = frame[hp_roi[1]:hp_roi[1]+hp_roi[3], hp_roi[0]:hp_roi[0]+hp_roi[2]]
                     if self._debug:
-                        print(f"HP crop - valor promedio: {hp_crop.mean():.2f}")
-                    hp_text = self.extract_text(hp_crop, allowlist="0123456789/")
-                    # Fallback: si no aparece nada, probar un crop más grande alrededor
-                    if not hp_text:
-                        pad_x = int(hp_roi[2] * 0.6)
-                        pad_y = int(hp_roi[3] * 0.8)
-                        x0 = max(0, hp_roi[0] - pad_x)
-                        y0 = max(0, hp_roi[1] - pad_y)
-                        x1 = min(frame.shape[1], hp_roi[0] + hp_roi[2] + pad_x)
-                        y1 = min(frame.shape[0], hp_roi[1] + hp_roi[3] + pad_y)
-                        hp_crop2 = frame[y0:y1, x0:x1]
+                        print(f"HP ROI: {hp_roi}, crop shape: {hp_crop.shape if hp_crop.size > 0 else 'empty'}")
+                    if hp_crop.size > 0:
                         if self._debug:
-                            print(f"HP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {hp_crop2.shape if hp_crop2.size > 0 else 'empty'}")
-                        if hp_crop2.size > 0:
-                            hp_text = self.extract_text(hp_crop2, allowlist="0123456789/")
-                    if self._debug:
-                        print(f"HP texto crudo: '{hp_text}'")
-                    if hp_text:
-                        hp_current, hp_max = self._parse_current_and_max(hp_text, "HP")
+                            print(f"HP crop - valor promedio: {hp_crop.mean():.2f}")
+                        hp_texts = self._readtext_strings(hp_crop, allowlist="0123456789/|")
+                        hp_text = hp_texts[0] if hp_texts else ""
+                        # Fallback: si no aparece nada, probar un crop más grande alrededor
+                        if not hp_text:
+                            pad_x = int(hp_roi[2] * 0.6)
+                            pad_y = int(hp_roi[3] * 0.8)
+                            x0 = max(0, hp_roi[0] - pad_x)
+                            y0 = max(0, hp_roi[1] - pad_y)
+                            x1 = min(frame.shape[1], hp_roi[0] + hp_roi[2] + pad_x)
+                            y1 = min(frame.shape[0], hp_roi[1] + hp_roi[3] + pad_y)
+                            hp_crop2 = frame[y0:y1, x0:x1]
+                            if self._debug:
+                                print(f"HP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {hp_crop2.shape if hp_crop2.size > 0 else 'empty'}")
+                            if hp_crop2.size > 0:
+                                hp_texts = self._readtext_strings(hp_crop2, allowlist="0123456789/|")
+                                hp_text = hp_texts[0] if hp_texts else hp_text
+                        if self._debug:
+                            print(f"HP texto crudo: '{hp_text}'")
+                        if hp_text:
+                            hp_current, hp_max, hp_reason = _pick_best_cur_max(hp_texts or [hp_text], "HP")
+                            if hp_current is not None:
+                                self._set_last_ocr_meta(kind="hp", source="top_ocr", reason="ok")
+                            else:
+                                self._set_last_ocr_meta(kind="hp", source="top_ocr", reason=hp_reason)
+                        else:
+                            self._set_last_ocr_meta(kind="hp", source="top_ocr", reason="ocr_empty")
 
             # Extraer MP del OCR superior
             if 'mp_top_ocr' in rois and mp_current is None:
                 mp_roi = normalize_to_px(rois['mp_top_ocr'])
-                mp_crop = frame[mp_roi[1]:mp_roi[1]+mp_roi[3], mp_roi[0]:mp_roi[0]+mp_roi[2]]
-                if self._debug:
-                    print(f"MP ROI: {mp_roi}, crop shape: {mp_crop.shape if mp_crop.size > 0 else 'empty'}")
-                if mp_crop.size > 0:
+                ok, reason = _valid_roi(mp_roi)
+                if not ok:
+                    self._set_last_ocr_meta(kind="mp", source="top_ocr", reason=f"invalid_roi:{reason}")
+                else:
+                    mp_crop = frame[mp_roi[1]:mp_roi[1]+mp_roi[3], mp_roi[0]:mp_roi[0]+mp_roi[2]]
                     if self._debug:
-                        print(f"MP crop - valor promedio: {mp_crop.mean():.2f}")
-                    mp_text = self.extract_text(mp_crop, allowlist="0123456789/")
-                    if not mp_text:
-                        pad_x = int(mp_roi[2] * 0.6)
-                        pad_y = int(mp_roi[3] * 0.8)
-                        x0 = max(0, mp_roi[0] - pad_x)
-                        y0 = max(0, mp_roi[1] - pad_y)
-                        x1 = min(frame.shape[1], mp_roi[0] + mp_roi[2] + pad_x)
-                        y1 = min(frame.shape[0], mp_roi[1] + mp_roi[3] + pad_y)
-                        mp_crop2 = frame[y0:y1, x0:x1]
+                        print(f"MP ROI: {mp_roi}, crop shape: {mp_crop.shape if mp_crop.size > 0 else 'empty'}")
+                    if mp_crop.size > 0:
                         if self._debug:
-                            print(f"MP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {mp_crop2.shape if mp_crop2.size > 0 else 'empty'}")
-                        if mp_crop2.size > 0:
-                            mp_text = self.extract_text(mp_crop2, allowlist="0123456789/")
-                    if self._debug:
-                        print(f"MP texto crudo: '{mp_text}'")
-                    if mp_text:
-                        mp_current, mp_max = self._parse_current_and_max(mp_text, "MP")
+                            print(f"MP crop - valor promedio: {mp_crop.mean():.2f}")
+                        mp_texts = self._readtext_strings(mp_crop, allowlist="0123456789/|")
+                        mp_text = mp_texts[0] if mp_texts else ""
+                        if not mp_text:
+                            pad_x = int(mp_roi[2] * 0.6)
+                            pad_y = int(mp_roi[3] * 0.8)
+                            x0 = max(0, mp_roi[0] - pad_x)
+                            y0 = max(0, mp_roi[1] - pad_y)
+                            x1 = min(frame.shape[1], mp_roi[0] + mp_roi[2] + pad_x)
+                            y1 = min(frame.shape[0], mp_roi[1] + mp_roi[3] + pad_y)
+                            mp_crop2 = frame[y0:y1, x0:x1]
+                            if self._debug:
+                                print(f"MP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {mp_crop2.shape if mp_crop2.size > 0 else 'empty'}")
+                            if mp_crop2.size > 0:
+                                mp_texts = self._readtext_strings(mp_crop2, allowlist="0123456789/|")
+                                mp_text = mp_texts[0] if mp_texts else mp_text
+                        if self._debug:
+                            print(f"MP texto crudo: '{mp_text}'")
+                        if mp_text:
+                            mp_current, mp_max, mp_reason = _pick_best_cur_max(mp_texts or [mp_text], "MP")
+                            if mp_current is not None:
+                                self._set_last_ocr_meta(kind="mp", source="top_ocr", reason="ok")
+                            else:
+                                self._set_last_ocr_meta(kind="mp", source="top_ocr", reason=mp_reason)
+                        else:
+                            self._set_last_ocr_meta(kind="mp", source="top_ocr", reason="ocr_empty")
 
         except Exception as e:
             print(f"Error extrayendo HP/MP: {e}")
 
         return hp_current, hp_max, mp_current, mp_max
 
+    def _parse_current_and_max_with_reason(self, text: str, label: str) -> Tuple[Optional[int], Optional[int], str]:
+        """Parsea current/max y devuelve razón del resultado.
+
+        Nota: tolera separadores OCR ambiguos ("|" vs "/") y valida cur<=max.
+        """
+        cur, mx, reason = parse_current_and_max_with_reason(str(text or ""), label=label)
+        if self._debug and reason == "single_number" and cur is not None and mx is None:
+            print(f"{label}: Usando valor único encontrado: {cur}")
+        if self._debug and reason in {"parse_fail", "invalid_range"}:
+            print(f"{label}: No se pudo parsear valor de: '{text}' (reason={reason})")
+        return cur, mx, reason
+
     def _parse_current_and_max(self, text: str, label: str) -> Tuple[Optional[int], Optional[int]]:
         """Parsea current/max si existe; si no, devuelve (current, None)."""
-        try:
-            # Estrategia 1: Buscar patrón directo "current/max"
-            match = re.search(r'(\d{1,4})/(\d{1,4})', text)
-            if match:
-                current = int(match.group(1))
-                max_val = int(match.group(2))
-                # Validar que los valores sean razonables
-                if 0 < current <= max_val <= 10000:
-                    return current, max_val
-
-            # Estrategia 2: Si no hay patrón completo, buscar solo números
-            numbers = re.findall(r'\d{1,4}', text)
-            if numbers:
-                # Tomar el primer número razonable
-                for num_str in numbers:
-                    num = int(num_str)
-                    if 0 < num <= 10000:
-                        if self._debug:
-                            print(f"{label}: Usando valor único encontrado: {num}")
-                        return num, None
-
-            if self._debug:
-                print(f"{label}: No se pudo parsear valor de: '{text}'")
-            return None, None
-
-        except Exception as e:
-            print(f"Error parseando {label}: {e}")
-            return None, None
+        cur, mx, _reason = self._parse_current_and_max_with_reason(text, label)
+        return cur, mx

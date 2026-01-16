@@ -3,7 +3,7 @@
   "overlay_preset": "Custom",
   "telemetry_preset": "Custom",
   "overlay": {
-    "enabled": false,
+    "enabled": true,
     "out_dir": "logs/debug_overlay",
     "interval_s": 1.0,
     "tile_grid": true,
@@ -66,13 +66,22 @@
       "MyClient"
     ]
   },
+  "battlelist_targeting": {
+    "autotarget_enabled": true,
+    "alive_threshold": 0.5,
+    "dead_debounce_frames": 6,
+    "select_debounce_frames": 3,
+    "scroll_cooldown_ms": 800,
+    "target_cooldown_ms": 500,
+    "ocr_names": false
+  },
   "replay": {
     "enabled": false,
     "interval_ms": 2000,
     "out_dir": "logs/replay"
   },
   "logging": {
-    "enabled": false,
+    "enabled": true,
     "interval_ms": 250,
     "out_file": "logs/telemetry.jsonl"
   },

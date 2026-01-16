@@ -179,7 +179,37 @@ def _default_min_size(name: str) -> tuple[int, int]:
         return 10, 6
     if name in {"ring_slot", "amulet_slot", "hungry_icon"}:
         return 8, 8
+    # Container ROI for multiple tiny state icons; may be slightly shorter
+    # depending on capture scaling/cropping.
+    if name in {"states_icons"}:
+        return 16, 12
     return 16, 16
+
+
+def _uniform_policy(name: str) -> str:
+    """How to treat a uniform (no-variation) ROI crop.
+
+    Some ROIs are expected to be uniform in normal gameplay:
+    - status icon crops when the status is not active
+    - battlelist when there are no entries visible
+    """
+
+    n = (name or "").strip().lower()
+
+    # Explicit allowlist for optional/empty-able ROIs.
+    if n in {
+        "battlelist_panel",
+        "battlelist_rows",
+        "states_icons",
+        "hungry_icon",
+    }:
+        return "WARN"
+
+    # Pattern-based: individual status icon crops often look uniform when inactive.
+    if n.endswith("_icon"):
+        return "OK"
+
+    return "FAIL"
 
 
 def _check_roi(
@@ -213,6 +243,11 @@ def _check_roi(
         return RoiCheck(name=name, status="FAIL", reason="all black", rect=rect)
 
     if _is_uniform(crop):
+        pol = _uniform_policy(name)
+        if pol == "OK":
+            return RoiCheck(name=name, status="OK", reason="uniform (allowed: optional ROI)", rect=rect)
+        if pol == "WARN":
+            return RoiCheck(name=name, status="WARN", reason="uniform (allowed but suspicious)", rect=rect)
         return RoiCheck(name=name, status="FAIL", reason="uniform (no content variation)", rect=rect)
 
     s = _stats(crop)

@@ -37,6 +37,74 @@ def _to_gray(img: np.ndarray) -> np.ndarray:
     return img.reshape(-1).astype(np.uint8)
 
 
+def _strip_border(gray: np.ndarray, *, frac: float = 0.125) -> np.ndarray:
+    """Remove a thin border to avoid slot-frame artifacts.
+
+    Many HUD slots have a high-contrast border even when empty.
+    """
+
+    try:
+        h, w = int(gray.shape[0]), int(gray.shape[1])
+        if h <= 0 or w <= 0:
+            return gray
+        pad = int(max(1, round(min(h, w) * float(frac))))
+        if h > (pad * 2 + 1) and w > (pad * 2 + 1):
+            return gray[pad:-pad, pad:-pad]
+    except Exception:
+        return gray
+    return gray
+
+
+def _saturation_pct(
+    crop_bgr: np.ndarray,
+    *,
+    s_thr: int = 30,
+    v_thr: int = 40,
+    strip_border: bool = True,
+) -> float:
+    """Approximate HSV saturation percentage without OpenCV.
+
+    Computes pct of pixels where:
+      - V >= v_thr
+      - S >= s_thr
+
+    where V = max(R,G,B) and S ~= (V - min(R,G,B)) / max(V,1).
+    """
+
+    if crop_bgr is None or not isinstance(crop_bgr, np.ndarray) or crop_bgr.size == 0:
+        return 0.0
+    if crop_bgr.ndim != 3 or int(crop_bgr.shape[2]) < 3:
+        return 0.0
+
+    img = crop_bgr
+    if strip_border:
+        try:
+            gray = _to_gray(img)
+            gray2 = _strip_border(gray)
+            # Apply same crop window to color image.
+            if gray2.shape != gray.shape:
+                pad_y = (int(gray.shape[0]) - int(gray2.shape[0])) // 2
+                pad_x = (int(gray.shape[1]) - int(gray2.shape[1])) // 2
+                img = img[pad_y : pad_y + gray2.shape[0], pad_x : pad_x + gray2.shape[1]]
+        except Exception:
+            img = crop_bgr
+
+    try:
+        b = img[:, :, 0].astype(np.float32)
+        g = img[:, :, 1].astype(np.float32)
+        r = img[:, :, 2].astype(np.float32)
+        vmax = np.maximum(np.maximum(r, g), b)
+        vmin = np.minimum(np.minimum(r, g), b)
+        # Avoid divide-by-zero for dark pixels.
+        s = np.where(vmax > 1.0, (vmax - vmin) / vmax, 0.0) * 255.0
+        v_ok = vmax >= float(v_thr)
+        s_ok = s >= float(s_thr)
+        ok = v_ok & s_ok
+        return float(np.count_nonzero(ok)) / float(ok.size)
+    except Exception:
+        return 0.0
+
+
 def is_nonempty_icon(
     crop: Optional[np.ndarray],
     *,
@@ -62,13 +130,7 @@ def is_nonempty_icon(
     gray = _to_gray(crop)
     # Many HUD slots have a high-contrast border. To avoid false positives on
     # empty slots, measure texture on the inner area (border-stripped).
-    try:
-        h, w = int(gray.shape[0]), int(gray.shape[1])
-        pad = max(1, min(h, w) // 8)
-        if h > (pad * 2 + 1) and w > (pad * 2 + 1):
-            gray = gray[pad:-pad, pad:-pad]
-    except Exception:
-        pass
+    gray = _strip_border(gray)
     try:
         mean = float(gray.mean())
         std = float(gray.std())
@@ -78,6 +140,52 @@ def is_nonempty_icon(
     if mean < float(min_mean):
         return False
     return std >= float(min_std)
+
+
+def is_nonempty_equipment_slot(
+    crop: Optional[np.ndarray],
+    *,
+    min_std: float = 18.0,
+    min_mean: float = 8.0,
+    min_sat_pct: float = 0.006,
+    sat_thr: int = 30,
+    v_thr: int = 40,
+    high_std: float = 45.0,
+) -> bool:
+    """Heuristic for equipment slots (ring/amulet) that reduces false positives.
+
+    Problem: empty slots can still have texture/gradients that trigger std-based
+    checks. We require either:
+      - meaningful color content (HSV saturation pct), or
+      - very high grayscale texture (high_std), to keep gray items possible.
+    """
+
+    if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
+        return False
+
+    gray = _to_gray(crop)
+    gray = _strip_border(gray)
+    try:
+        mean = float(gray.mean())
+        std = float(gray.std())
+    except Exception:
+        return False
+
+    if mean < float(min_mean):
+        return False
+    if std < float(min_std):
+        return False
+
+    # Prefer colored pixels as a strong indicator of an item icon.
+    try:
+        sat_pct = _saturation_pct(crop, s_thr=int(sat_thr), v_thr=int(v_thr), strip_border=True)
+    except Exception:
+        sat_pct = 0.0
+    if float(sat_pct) >= float(min_sat_pct):
+        return True
+
+    # Allow high-texture grayscale icons (some rings/amulets can be mostly gray).
+    return std >= float(high_std)
 
 
 def is_hungry_hsv(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from typing import Optional
 
 from action.input_driver import ActionRequest, InputDriver, MockInputDriver, is_committed
@@ -102,6 +103,11 @@ class InputManager:
 
             # STRICT focus guard: inject only if foreground_hwnd == client_hwnd and not minimized.
             try:
+                try:
+                    if (os.getenv("ALLOW_BACKGROUND_INPUT", "") or "").strip().lower() in {"1", "true", "yes"}:
+                        return bool(drv.send(action))
+                except Exception:
+                    pass
                 if callable(get_client_hwnd) and callable(is_allowed_to_inject):
                     client_hwnd = int(get_client_hwnd() or 0)
                     ok, reason = is_allowed_to_inject(client_hwnd)

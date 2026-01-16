@@ -20,6 +20,7 @@ def compute_injection_state(
     """Compute assistant injection state + reason.
 
     This is UI/telemetry-facing only (assistant-first design).
+    allow_live_autocommit: bool = False,
     It does NOT enable any OS injection; it only reports why actions won't run.
     """
 
@@ -43,7 +44,7 @@ def compute_injection_state(
         return "DISABLED", "input_mode=log"
     if mode == "mock":
         return "DISABLED", "input_mode=mock"
-    if mode not in {"keyboard", "wininput"}:
+    if mode not in {"keyboard", "wininput", "bridge"}:
         return "DISABLED", f"input_mode={mode or 'log'}"
 
     # Live input is always opt-in (armed) and window-scoped.
@@ -113,7 +114,7 @@ class AssistantConfig:
     enabled: bool = True
     confirm_actions: bool = True
     sound_alerts: bool = True
-    input_mode: str = "log"  # "log"|"mock"|"keyboard"
+    input_mode: str = "log"  # "log"|"mock"|"keyboard"|"bridge"
     # Double opt-in for OS input injection.
     live_input_armed: bool = False
     # Only inject if the foreground window title matches one of these.
@@ -135,6 +136,15 @@ class AutoTargetConfig:
     # battlelist.py exposes a stabilized confidence (vote share), not raw OCR.
     # Default low so AutoTarget works out-of-the-box.
     min_confidence: float = 0.1
+@dataclass
+class BattlelistTargetingConfig:
+    autotarget_enabled: bool = False
+    battlelist_alive_threshold: float = 0.5
+    dead_debounce_frames: int = 6
+    select_debounce_frames: int = 3
+    scroll_cooldown_ms: int = 800
+    target_cooldown_ms: int = 500
+    ocr_names: bool = False
 
 
 @dataclass
@@ -166,6 +176,10 @@ class TelemetrySnapshot:
     mp_current: int | None = None
     mp_max: int | None = None
     mp_pct: float | None = None
+    hp_method: str = ""  # ocr_top|top_strip|rf_box|bar_low|bar_low_fusion|none|cached
+    hp_reason: str = ""  # ok|parse_fail|invalid_roi|ratio_mismatch|fallback_no_ocr|...
+    mp_method: str = ""
+    mp_reason: str = ""
     cap_current: int | None = None
     pos_x: int | None = None
     pos_y: int | None = None
@@ -206,6 +220,11 @@ class TelemetrySnapshot:
     battlelist_n_valid: int | None = None
     battlelist_top_names: list[str] | None = None
     battlelist_confidence: float | None = None
+    battlelist_target_state: str = ""
+    battlelist_target_row: int | None = None
+    battlelist_alive_prob: float | None = None
+    battlelist_selected_prob: float | None = None
+    battlelist_target_reason: str = ""
     target: str = ""
     # AutoTarget (assistant-only)
     autotarget_enabled: bool | None = None
@@ -270,6 +289,12 @@ class TelemetrySnapshot:
     capture_state: str = ""  # window_crop|fullscreen|minimized|...
     capture_bounds: list[int] | None = None  # [l,t,r,b]
     input_block_reason: str = ""  # focus-guard reason or other block reason
+    # Input Bridge observability (assistant-only)
+    input_bridge_connected: bool | None = None
+    input_bridge_rate_sent: int | None = None
+    input_bridge_rate_accepted: int | None = None
+    input_bridge_rate_rejected: int | None = None
+    input_bridge_last_error: str = ""
 
 
 @dataclass
@@ -289,7 +314,7 @@ class AssistantStatus:
     injection_reason: str = ""
     foreground_title: str = ""  # Last observed foreground window title (InputManager)
     input_block_reason: str = ""  # Last InputManager block reason (preview_only|wrong_window|...)
-    input_mode: str = ""  # UI-requested mode: "log"|"keyboard"|"wininput"
+    input_mode: str = ""  # UI-requested mode: "log"|"keyboard"|"wininput"|"bridge"
     driver_name: str = ""  # actual driver in use (runtime)
     gating_enabled: bool = False
     advance_pulse_pending: bool = False
@@ -338,6 +363,7 @@ class RuntimeConfig:
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     assistant: AssistantConfig = field(default_factory=AssistantConfig)
     autotarget: AutoTargetConfig = field(default_factory=AutoTargetConfig)
+    battlelist_targeting: BattlelistTargetingConfig = field(default_factory=BattlelistTargetingConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     telemetry: TelemetrySnapshot = field(default_factory=TelemetrySnapshot)
@@ -401,6 +427,18 @@ class RuntimeConfig:
                 min_confidence=float(getattr(self.autotarget, "min_confidence", 0.1) or 0.1),
             )
 
+    def battlelist_targeting_snapshot(self) -> BattlelistTargetingConfig:
+        with self._lock:
+            return BattlelistTargetingConfig(
+                autotarget_enabled=bool(getattr(self.battlelist_targeting, "autotarget_enabled", False)),
+                battlelist_alive_threshold=float(getattr(self.battlelist_targeting, "battlelist_alive_threshold", 0.5)),
+                dead_debounce_frames=int(getattr(self.battlelist_targeting, "dead_debounce_frames", 6)),
+                select_debounce_frames=int(getattr(self.battlelist_targeting, "select_debounce_frames", 3)),
+                scroll_cooldown_ms=int(getattr(self.battlelist_targeting, "scroll_cooldown_ms", 800)),
+                target_cooldown_ms=int(getattr(self.battlelist_targeting, "target_cooldown_ms", 500)),
+                ocr_names=bool(getattr(self.battlelist_targeting, "ocr_names", False)),
+            )
+
     def telemetry_snapshot(self) -> TelemetrySnapshot:
         with self._lock:
             cps = None
@@ -462,6 +500,11 @@ class RuntimeConfig:
                 if getattr(self.telemetry, "battlelist_top_names", None) is not None
                 else None,
                 battlelist_confidence=getattr(self.telemetry, "battlelist_confidence", None),
+                battlelist_target_state=str(getattr(self.telemetry, "battlelist_target_state", "") or ""),
+                battlelist_target_row=getattr(self.telemetry, "battlelist_target_row", None),
+                battlelist_alive_prob=getattr(self.telemetry, "battlelist_alive_prob", None),
+                battlelist_selected_prob=getattr(self.telemetry, "battlelist_selected_prob", None),
+                battlelist_target_reason=str(getattr(self.telemetry, "battlelist_target_reason", "") or ""),
                 target=str(self.telemetry.target),
                 autotarget_enabled=getattr(self.telemetry, "autotarget_enabled", None),
                 autotarget_current_target=str(getattr(self.telemetry, "autotarget_current_target", "") or ""),
@@ -726,7 +769,7 @@ class RuntimeConfig:
                 mode = str(input_mode).strip().lower()
                 if mode == "wininput":
                     mode = "keyboard"
-                if mode not in {"keyboard", "mock", "log"}:
+                if mode not in {"keyboard", "mock", "log", "bridge"}:
                     mode = "log"
                 self.assistant.input_mode = mode
             if live_input_armed is not None:
@@ -784,6 +827,33 @@ class RuntimeConfig:
                     self.autotarget.min_confidence = float(min_confidence)
                 except Exception:
                     pass
+
+    def update_battlelist_targeting(
+        self,
+        *,
+        autotarget_enabled: bool | None = None,
+        battlelist_alive_threshold: float | None = None,
+        dead_debounce_frames: int | None = None,
+        select_debounce_frames: int | None = None,
+        scroll_cooldown_ms: int | None = None,
+        target_cooldown_ms: int | None = None,
+        ocr_names: bool | None = None,
+    ) -> None:
+        with self._lock:
+            if autotarget_enabled is not None:
+                self.battlelist_targeting.autotarget_enabled = bool(autotarget_enabled)
+            if battlelist_alive_threshold is not None:
+                self.battlelist_targeting.battlelist_alive_threshold = float(battlelist_alive_threshold)
+            if dead_debounce_frames is not None:
+                self.battlelist_targeting.dead_debounce_frames = int(dead_debounce_frames)
+            if select_debounce_frames is not None:
+                self.battlelist_targeting.select_debounce_frames = int(select_debounce_frames)
+            if scroll_cooldown_ms is not None:
+                self.battlelist_targeting.scroll_cooldown_ms = int(scroll_cooldown_ms)
+            if target_cooldown_ms is not None:
+                self.battlelist_targeting.target_cooldown_ms = int(target_cooldown_ms)
+            if ocr_names is not None:
+                self.battlelist_targeting.ocr_names = bool(ocr_names)
 
     def update_replay(
         self,
@@ -872,6 +942,10 @@ class RuntimeConfig:
         mp_current: int | None = None,
         mp_max: int | None = None,
         mp_pct: float | None = None,
+        hp_method: str | None = None,
+        hp_reason: str | None = None,
+        mp_method: str | None = None,
+        mp_reason: str | None = None,
         cap_current: int | None = None,
         pos_x: int | None = None,
         pos_y: int | None = None,
@@ -907,6 +981,11 @@ class RuntimeConfig:
         battlelist_n_valid: int | None = None,
         battlelist_top_names: list[str] | None = None,
         battlelist_confidence: float | None = None,
+        battlelist_target_state: str | None = None,
+        battlelist_target_row: int | None = None,
+        battlelist_alive_prob: float | None = None,
+        battlelist_selected_prob: float | None = None,
+        battlelist_target_reason: str | None = None,
         target: str | None = None,
         autotarget_enabled: bool | None = None,
         autotarget_current_target: str | None = None,
@@ -955,6 +1034,11 @@ class RuntimeConfig:
         target_found: bool | None = None,
         target_reason: str | None = None,
         input_block_reason: str | None = None,
+        input_bridge_connected: bool | None = None,
+        input_bridge_rate_sent: int | None = None,
+        input_bridge_rate_accepted: int | None = None,
+        input_bridge_rate_rejected: int | None = None,
+        input_bridge_last_error: str | None = None,
     ) -> None:
         with self._lock:
             self.telemetry.ts = time.time()
@@ -970,6 +1054,14 @@ class RuntimeConfig:
                 self.telemetry.mp_max = int(mp_max)
             if mp_pct is not None:
                 self.telemetry.mp_pct = float(mp_pct)
+            if hp_method is not None:
+                self.telemetry.hp_method = str(hp_method)
+            if hp_reason is not None:
+                self.telemetry.hp_reason = str(hp_reason)
+            if mp_method is not None:
+                self.telemetry.mp_method = str(mp_method)
+            if mp_reason is not None:
+                self.telemetry.mp_reason = str(mp_reason)
             if cap_current is not None:
                 self.telemetry.cap_current = int(cap_current)
             if pos_x is not None:
@@ -1088,6 +1180,25 @@ class RuntimeConfig:
                     self.telemetry.battlelist_confidence = float(battlelist_confidence)
                 except Exception:
                     self.telemetry.battlelist_confidence = None
+            if battlelist_target_state is not None:
+                self.telemetry.battlelist_target_state = str(battlelist_target_state)
+            if battlelist_target_row is not None:
+                try:
+                    self.telemetry.battlelist_target_row = int(battlelist_target_row)
+                except Exception:
+                    self.telemetry.battlelist_target_row = None
+            if battlelist_alive_prob is not None:
+                try:
+                    self.telemetry.battlelist_alive_prob = float(battlelist_alive_prob)
+                except Exception:
+                    self.telemetry.battlelist_alive_prob = None
+            if battlelist_selected_prob is not None:
+                try:
+                    self.telemetry.battlelist_selected_prob = float(battlelist_selected_prob)
+                except Exception:
+                    self.telemetry.battlelist_selected_prob = None
+            if battlelist_target_reason is not None:
+                self.telemetry.battlelist_target_reason = str(battlelist_target_reason)
             if target is not None:
                 self.telemetry.target = str(target)
             if autotarget_enabled is not None:
@@ -1227,6 +1338,16 @@ class RuntimeConfig:
                     self.telemetry.capture_bounds = None
             if input_block_reason is not None:
                 self.telemetry.input_block_reason = str(input_block_reason)
+            if input_bridge_connected is not None:
+                self.telemetry.input_bridge_connected = bool(input_bridge_connected)
+            if input_bridge_rate_sent is not None:
+                self.telemetry.input_bridge_rate_sent = int(input_bridge_rate_sent)
+            if input_bridge_rate_accepted is not None:
+                self.telemetry.input_bridge_rate_accepted = int(input_bridge_rate_accepted)
+            if input_bridge_rate_rejected is not None:
+                self.telemetry.input_bridge_rate_rejected = int(input_bridge_rate_rejected)
+            if input_bridge_last_error is not None:
+                self.telemetry.input_bridge_last_error = str(input_bridge_last_error)
 
     def update_health(
         self,

@@ -40,6 +40,8 @@ from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 from vision.anchor_tracker import AnchorTracker
 from vision.viewport_tracker import ViewportTracker
+from vision.battlelist_targeting import TargetingController
+from runtime_config import BattlelistTargetingConfig
 
 try:
     from console_sanitize import maybe_install_no_emoji_output
@@ -344,6 +346,65 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         "input_plan": "",
     }
 
+    # Cross-thread battlelist targeting commands (vision -> decision).
+    bl_target_lock = threading.Lock()
+    bl_target_state: dict[str, object] = {
+        "counter": 0,
+        "ts": 0.0,
+        "cmds": [],
+    }
+
+    def _bl_set(cmds: list[dict[str, object]]) -> None:
+        try:
+            with bl_target_lock:
+                cur = bl_target_state.get("counter", 0)
+                try:
+                    if isinstance(cur, (int, float)):
+                        cur_i = int(cur)
+                    else:
+                        cur_i = int(str(cur or 0))
+                except Exception:
+                    cur_i = 0
+                bl_target_state["counter"] = int(cur_i) + 1
+                bl_target_state["ts"] = float(time.time())
+                bl_target_state["cmds"] = list(cmds)
+        except Exception:
+            pass
+
+    def _bl_snapshot() -> tuple[int, float, list[dict[str, object]]]:
+        try:
+            with bl_target_lock:
+                raw_counter = bl_target_state.get("counter", 0)
+                raw_ts = bl_target_state.get("ts", 0.0)
+                raw_cmds = bl_target_state.get("cmds", [])
+
+                try:
+                    if isinstance(raw_counter, (int, float)):
+                        counter = int(raw_counter)
+                    else:
+                        counter = int(str(raw_counter or 0))
+                except Exception:
+                    counter = 0
+
+                try:
+                    if isinstance(raw_ts, (int, float)):
+                        ts = float(raw_ts)
+                    else:
+                        ts = float(str(raw_ts or 0.0))
+                except Exception:
+                    ts = 0.0
+
+                cmds: list[dict[str, object]] = []
+                try:
+                    if isinstance(raw_cmds, list):
+                        cmds = [dict(x) for x in raw_cmds if isinstance(x, dict)]
+                except Exception:
+                    cmds = []
+
+                return (counter, ts, cmds)
+        except Exception:
+            return 0, 0.0, []
+
     def _a_set(
         action_request: str,
         action_committed: bool,
@@ -451,6 +512,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     anchor_tracker = AnchorTracker()
     viewport_tracker = ViewportTracker()
+    battlelist_targeting = TargetingController()
 
     replay = ReplayRecorder()
     overlay = OverlayExporter(overlay_config_from_env())
@@ -624,6 +686,55 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     vis_ms_sum += (time.time() - t0) * 1000.0
                     n_vis += 1
 
+                # Battlelist targeting (vision-based, OBS-compatible).
+                bl_dbg = None
+                bl_rows = []
+                try:
+                    if runtime_config is not None:
+                        bl_cfg = runtime_config.battlelist_targeting_snapshot()
+                    else:
+                        bl_cfg = BattlelistTargetingConfig()
+
+                    if bool(getattr(bl_cfg, "autotarget_enabled", False)):
+                        _cmds, dbg = battlelist_targeting.tick(
+                            frame,
+                            gamestate,
+                            bl_cfg,
+                            rois=rois,
+                            resolution=resolution,
+                        )
+                        bl_dbg = dbg
+                        bl_rows = list(getattr(dbg, "rows", []) or [])
+
+                        # Publish commands for decision thread (real actions).
+                        try:
+                            cmds_payload = []
+                            for c in list(_cmds or []):
+                                try:
+                                    cmds_payload.append(
+                                        {
+                                            "type": str(getattr(c, "type", "") or ""),
+                                            "payload": dict(getattr(c, "payload", {}) or {}),
+                                        }
+                                    )
+                                except Exception:
+                                    continue
+                            _bl_set(cmds_payload)
+                        except Exception:
+                            pass
+
+                        # Attach debug fields to GameState (telemetry/overlay).
+                        try:
+                            gamestate.battlelist_target_state = str(dbg.state or "")
+                            gamestate.battlelist_target_row = dbg.current_row
+                            gamestate.battlelist_alive_prob = dbg.alive_prob
+                            gamestate.battlelist_selected_prob = dbg.selected_prob
+                            gamestate.battlelist_target_reason = str(dbg.reason or "")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
                 # Replay (ROI crops + JSON) - opt-in via UI config.
                 try:
                     # Determine replay config source.
@@ -662,6 +773,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             tel_payload = {
                                 "hp_pct": tel.hp_pct,
                                 "mp_pct": tel.mp_pct,
+                                "hp_method": getattr(tel, "hp_method", ""),
+                                "hp_reason": getattr(tel, "hp_reason", ""),
+                                "mp_method": getattr(tel, "mp_method", ""),
+                                "mp_reason": getattr(tel, "mp_reason", ""),
                                 "low_hp": tel.low_hp,
                                 "low_mp": tel.low_mp,
                                 "paralyzed": tel.paralyzed,
@@ -691,6 +806,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             tel_payload = {
                                 "hp_pct": getattr(gamestate, "hp_pct", None),
                                 "mp_pct": getattr(gamestate, "mp_pct", None),
+                                "hp_method": getattr(gamestate, "hp_method", None),
+                                "hp_reason": getattr(gamestate, "hp_reason", None),
+                                "mp_method": getattr(gamestate, "mp_method", None),
+                                "mp_reason": getattr(gamestate, "mp_reason", None),
                                 "paralyzed": getattr(gamestate, "paralyzed", None),
                                 "haste_active": getattr(gamestate, "haste_active", None),
                                 "utamo_active": getattr(gamestate, "utamo_active", None),
@@ -808,6 +927,27 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         roi_rects = []
 
+                    # Battlelist rows overlay (from vision targeting debug).
+                    try:
+                        if bl_dbg is not None:
+                            if getattr(bl_dbg, "roi_rect", None) is not None:
+                                rx0, ry0, rx1, ry1 = bl_dbg.roi_rect
+                                for r in (bl_rows or []):
+                                    try:
+                                        x0 = int(rx0 + r.row_bbox[0])
+                                        y0 = int(ry0 + r.row_bbox[1])
+                                        x1 = int(rx0 + r.row_bbox[2])
+                                        y1 = int(ry0 + r.row_bbox[3])
+                                        tag = f"bl[{r.index}]"
+                                        if bl_dbg.current_row is not None and int(bl_dbg.current_row) == int(r.index):
+                                            tag = f"{tag}*"
+                                        tag = f"{tag} a={r.alive_prob:.2f} s={r.selected_prob:.2f}"
+                                        roi_rects.append((tag, (x0, y0, max(1, x1 - x0), max(1, y1 - y0))))
+                                    except Exception:
+                                        continue
+                    except Exception:
+                        pass
+
                     try:
                         if isinstance(rois, dict):
                             off = rois.get("_roi_offset_px")
@@ -880,6 +1020,18 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     except Exception:
                         pass
 
+                    # HP/MP method observability (OCR vs bars)
+                    try:
+                        hm = str(getattr(gamestate, "hp_method", "") or "")
+                        hr = str(getattr(gamestate, "hp_reason", "") or "")
+                        mm = str(getattr(gamestate, "mp_method", "") or "")
+                        mr = str(getattr(gamestate, "mp_reason", "") or "")
+                        if hm or mm:
+                            line = f"hp={hm or '-'}:{hr or '-'} mp={mm or '-'}:{mr or '-'}"
+                            info_lines.append(line)
+                    except Exception:
+                        pass
+
                     # Navigation mode snapshot (from telemetry when available).
                     try:
                         nav_line = ""
@@ -916,6 +1068,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 if at_reason:
                                     line = f"{line} reason={at_reason}"
                                 info_lines.append(line)
+                    except Exception:
+                        pass
+
+                    # Battlelist targeting state line (vision-based).
+                    try:
+                        if bl_dbg is not None and getattr(bl_dbg, "state", None):
+                            info_lines.append(
+                                f"bl_state={bl_dbg.state} row={bl_dbg.current_row} alive={bl_dbg.alive_prob} sel={bl_dbg.selected_prob}"
+                            )
                     except Exception:
                         pass
 
@@ -964,6 +1125,28 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 if len(line) > 220:
                                     line = line[:217] + "..."
                                 info_lines.append(line)
+                    except Exception:
+                        pass
+
+                    # Input Bridge status (if available) from telemetry snapshot.
+                    try:
+                        if runtime_config is not None:
+                            tel = runtime_config.telemetry_snapshot()
+                            conn = getattr(tel, "input_bridge_connected", None)
+                            rs = getattr(tel, "input_bridge_rate_sent", None)
+                            ra = getattr(tel, "input_bridge_rate_accepted", None)
+                            rr = getattr(tel, "input_bridge_rate_rejected", None)
+                            err = str(getattr(tel, "input_bridge_last_error", "") or "")
+                            if conn is not None or err:
+                                status = "connected" if bool(conn) else "disconnected"
+                                rate = ""
+                                try:
+                                    if rs is not None or ra is not None or rr is not None:
+                                        rate = f" rate={int(rs or 0)}/{int(ra or 0)}/{int(rr or 0)}ps"
+                                except Exception:
+                                    rate = ""
+                                err_s = f" err={err}" if err else ""
+                                info_lines.append(f"INPUT BRIDGE: {status}{rate}{err_s}")
                     except Exception:
                         pass
 
@@ -1271,6 +1454,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         last_stuck_reason_seen = ""
         stuck_repeat_count = 0
         last_reseed_seen = 0
+        last_bl_counter = -1
 
         # Env-based JSONL logging (used when no RuntimeConfig/UI is attached).
         log_enabled_env_raw = os.getenv("LOG_JSONL_ENABLED", "").strip().lower()
@@ -1284,8 +1468,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         log_out_file_env = os.getenv("LOG_JSONL_OUT_FILE", "logs/telemetry.jsonl").strip() or "logs/telemetry.jsonl"
 
         # Safe action sink (records what we'd do, no real input injection).
+        input_bridge_client = None
         try:
             from action.input_driver import ActionRequest, MockInputDriver, WindowsKeyboardDriver, is_committed
+            from action.input_bridge_driver import InputBridgeDriver
+            from input_bridge_client import InputBridgeClient
             from action.input_manager import InputManager
             from fail_closed import fail_closed
             from input_focus_guard import get_client_hwnd, is_allowed_to_inject, update_client_state
@@ -1322,7 +1509,24 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Build the OS-injecting driver only when explicitly armed.
             # Otherwise keep a safe mock driver even if mode==keyboard (unarmed).
             use_keyboard = driver_name in {"keyboard", "wininput"}
-            if use_keyboard and bool(live_input_armed):
+            use_bridge = driver_name in {"bridge", "input_bridge"}
+            if use_bridge and bool(live_input_armed):
+                try:
+                    host = (os.getenv("INPUT_BRIDGE_HOST", "127.0.0.1") or "127.0.0.1").strip()
+                    try:
+                        port = int(float((os.getenv("INPUT_BRIDGE_PORT", "7777") or "7777").strip() or "7777"))
+                    except Exception:
+                        port = 7777
+                    token = os.getenv("INPUT_BRIDGE_TOKEN", "") or ""
+                    input_bridge_client = InputBridgeClient(host=host, port=port, token=token)
+                    input_driver = InputBridgeDriver(
+                        client=input_bridge_client,
+                        target_hotkey=target_hotkey or None,
+                    )
+                except Exception:
+                    input_bridge_client = None
+                    input_driver = mock_driver
+            elif use_keyboard and bool(live_input_armed):
                 input_driver = WindowsKeyboardDriver(
                     target_hotkey=target_hotkey or None,
                     minimap_hotkey=minimap_hotkey or None,
@@ -1333,7 +1537,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             input_mgr = InputManager(
                 driver=input_driver,
                 fallback=mock_driver,
-                injection_enabled=bool(isinstance(input_driver, WindowsKeyboardDriver)) and bool(live_input_armed),
+                injection_enabled=bool(isinstance(input_driver, (WindowsKeyboardDriver, InputBridgeDriver)))
+                and bool(live_input_armed),
             )
             try:
                 input_mgr.set_live_policy(live_input_armed=bool(live_input_armed), allowed_window_titles=list(allowed_titles))
@@ -1345,6 +1550,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             mock_driver = None
             input_driver = None
             input_mgr = None
+            input_bridge_client = None
             get_client_hwnd = None  # type: ignore[assignment]
             is_allowed_to_inject = None  # type: ignore[assignment]
             update_client_state = None  # type: ignore[assignment]
@@ -1364,7 +1570,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             - Switching to 'log' mode is always allowed.
             """
 
-            nonlocal applied_input_mode, applied_target_hotkey, applied_minimap_hotkey, applied_live_input_armed, applied_allowed_titles, input_driver
+            nonlocal applied_input_mode, applied_target_hotkey, applied_minimap_hotkey, applied_live_input_armed, applied_allowed_titles, input_driver, input_bridge_client
 
             if runtime_config is None:
                 return
@@ -1384,7 +1590,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 desired_mode = "log"
             if desired_mode == "wininput":
                 desired_mode = "keyboard"
-            if desired_mode not in {"log", "mock", "keyboard"}:
+            if desired_mode == "input_bridge":
+                desired_mode = "bridge"
+            if desired_mode not in {"log", "mock", "keyboard", "bridge"}:
                 desired_mode = "log"
 
             try:
@@ -1444,10 +1652,23 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 try:
                     # (Re)build OS-injecting driver with latest hotkeys.
-                    input_driver = WindowsKeyboardDriver(
-                        target_hotkey=(desired_target or None),
-                        minimap_hotkey=(desired_minimap or None),
-                    )
+                    if desired_mode == "bridge":
+                        host = (os.getenv("INPUT_BRIDGE_HOST", "127.0.0.1") or "127.0.0.1").strip()
+                        try:
+                            port = int(float((os.getenv("INPUT_BRIDGE_PORT", "7777") or "7777").strip() or "7777"))
+                        except Exception:
+                            port = 7777
+                        token = os.getenv("INPUT_BRIDGE_TOKEN", "") or ""
+                        input_bridge_client = InputBridgeClient(host=host, port=port, token=token)
+                        input_driver = InputBridgeDriver(
+                            client=input_bridge_client,
+                            target_hotkey=(desired_target or None),
+                        )
+                    else:
+                        input_driver = WindowsKeyboardDriver(
+                            target_hotkey=(desired_target or None),
+                            minimap_hotkey=(desired_minimap or None),
+                        )
                     input_mgr.set_driver(input_driver, injection_enabled=True)
                     try:
                         input_mgr.set_live_policy(live_input_armed=True, allowed_window_titles=desired_titles_list)
@@ -1554,6 +1775,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 auto_commit_env = False
             try:
+                allow_live_autocommit = os.getenv("ASSIST_AUTO_COMMIT_WHEN_ARMED", "0").strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                }
+            except Exception:
+                allow_live_autocommit = False
+            try:
                 confirm_mode = bool(assistant_cfg is not None and assistant_cfg.enabled and assistant_cfg.confirm_actions)
             except Exception:
                 confirm_mode = False
@@ -1565,6 +1794,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 asst_input_mode = "log"
             if asst_input_mode == "wininput":
                 asst_input_mode = "keyboard"
+            if asst_input_mode == "input_bridge":
+                asst_input_mode = "bridge"
             try:
                 live_input_armed = bool(getattr(assistant_cfg, "live_input_armed", False)) if assistant_cfg is not None else False
             except Exception:
@@ -1574,9 +1805,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 allowed_titles = []
 
-            live_active = bool(asst_input_mode == "keyboard" and live_input_armed)
+            live_active = bool(asst_input_mode in {"keyboard", "bridge"} and live_input_armed)
             target_window_active = False
             try:
+                if (os.getenv("ALLOW_BACKGROUND_INPUT", "") or "").strip().lower() in {"1", "true", "yes"}:
+                    target_window_active = True
                 # Refresh client snapshot (best-effort) even when the client is background.
                 if callable(update_client_state):
                     update_client_state()
@@ -1588,8 +1821,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Exception:
                 target_window_active = False
 
-            needs_confirm = bool(confirm_mode or live_active)
-            auto_commit = bool(auto_commit_env and (not needs_confirm))
+            needs_confirm = bool(confirm_mode or (live_active and not allow_live_autocommit))
+            auto_commit = bool((auto_commit_env or allow_live_autocommit) and (not needs_confirm))
 
             # UI confirm-actions pulse: when it changes, we may commit exactly one action.
             advance_pulse = False
@@ -1715,6 +1948,31 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 )
             except Exception:
                 at_actions = []
+
+            # Battlelist targeting commands (vision-based) -> ActionRequest(s).
+            bl_actions = []
+            try:
+                if ActionRequest is None:
+                    bl_actions = []
+                else:
+                    bl_counter, _bl_ts, bl_cmds = _bl_snapshot()
+                    if bl_counter != last_bl_counter:
+                        last_bl_counter = int(bl_counter)
+                        for cmd in list(bl_cmds or []):
+                            try:
+                                ctype = str(cmd.get("type", "") or "").strip().lower()
+                            except Exception:
+                                ctype = ""
+                            if ctype == "select_row":
+                                try:
+                                    row_idx = cmd.get("payload", {}).get("row_index", None)
+                                    val = "" if row_idx is None else f"row:{row_idx}"
+                                except Exception:
+                                    val = ""
+                                bl_actions.append(ActionRequest(kind="battlelist_target", value=str(val), note="preview"))
+                            # scroll/clear are no-ops for now (no mouse mapping)
+            except Exception:
+                bl_actions = []
 
             # AutoTarget telemetry (UI/overlay) - always publish current state.
             try:
@@ -2478,7 +2736,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         except Exception:
                             pass
 
-                        # --- 1.5) AutoTargeting (after healing, before cavebot) ---
+                        # --- 1.5) Battlelist targeting (vision-based) ---
+                        try:
+                            if bl_actions:
+                                out.extend(list(bl_actions))
+                        except Exception:
+                            pass
+
+                        # --- 1.6) AutoTargeting (after battlelist, before cavebot) ---
                         try:
                             if at_actions:
                                 out.extend(list(at_actions))
@@ -2580,6 +2845,27 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     )
                     action_source = str(src)
 
+                # Reorder actions so targeting happens before healing when live input is armed.
+                try:
+                    def _prio(r: ActionRequest) -> int:
+                        k = str(getattr(r, "kind", "") or "").strip().lower()
+                        order = {
+                            "battlelist_target": 0,
+                            "target": 1,
+                            "heal": 2,
+                            "mana": 3,
+                            "move": 4,
+                            "tool": 5,
+                            "loot": 6,
+                            "switch": 7,
+                        }
+                        return int(order.get(k, 50))
+
+                    if live_active:
+                        reqs = sorted(list(reqs or []), key=_prio)
+                except Exception:
+                    pass
+
                 # Commit exactly one action when allowed (confirm pulse or auto-commit).
                 # This preserves strict priority: first item in reqs wins.
                 try:
@@ -2597,6 +2883,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     "heal",
                     "mana",
                     "target",
+                    "battlelist_target",
                     "set_target",
                     "clear_target",
                     "follow_target",
@@ -2814,7 +3101,21 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     has_injectable_action = False
                     try:
                         has_injectable_action = any(
-                            str(a.get("kind", "") or "").strip().lower() in {"heal", "mana", "target", "move", "tool", "loot", "switch", "npc_trade", "depot", "bank", "supplies"}
+                            str(a.get("kind", "") or "").strip().lower()
+                            in {
+                                "heal",
+                                "mana",
+                                "target",
+                                "battlelist_target",
+                                "move",
+                                "tool",
+                                "loot",
+                                "switch",
+                                "npc_trade",
+                                "depot",
+                                "bank",
+                                "supplies",
+                            }
                             for a in (action_requests_struct or [])
                         )
                     except Exception:
@@ -2833,6 +3134,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         has_injectable_action=bool(has_injectable_action),
                         live_input_armed=bool(live_input_armed),
                         target_window_active=bool(target_window_active),
+                        allow_live_autocommit=bool(allow_live_autocommit),
                     )
 
                     injection_state_tick = str(st_state)
@@ -3028,6 +3330,27 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Publicar telemetría para UI (si existe RuntimeConfig)
             if runtime_config is not None and sig is not None:
                 try:
+                    # Input bridge observability (if active)
+                    ib_connected = None
+                    ib_rate_sent = None
+                    ib_rate_accepted = None
+                    ib_rate_rejected = None
+                    ib_last_error = None
+                    try:
+                        if input_bridge_client is not None:
+                            snap = input_bridge_client.snapshot()
+                            ib_connected = bool(snap.connected)
+                            ib_rate_sent = int(snap.rate_sent)
+                            ib_rate_accepted = int(snap.rate_accepted)
+                            ib_rate_rejected = int(snap.rate_rejected)
+                            ib_last_error = str(snap.last_error or "")
+                    except Exception:
+                        ib_connected = None
+                        ib_rate_sent = None
+                        ib_rate_accepted = None
+                        ib_rate_rejected = None
+                        ib_last_error = None
+
                     # Client + capture diagnostics (best-effort; never break bot).
                     client_hwnd = None
                     client_title = None
@@ -3091,6 +3414,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         mp_current=sig.mp_current,
                         mp_max=sig.mp_max,
                         mp_pct=sig.mp_pct,
+                        hp_method=str(getattr(gamestate, "hp_method", "") or ""),
+                        hp_reason=str(getattr(gamestate, "hp_reason", "") or ""),
+                        mp_method=str(getattr(gamestate, "mp_method", "") or ""),
+                        mp_reason=str(getattr(gamestate, "mp_reason", "") or ""),
                         cap_current=cap_current,
                         pos_x=getattr(gamestate, "pos_x", None),
                         pos_y=getattr(gamestate, "pos_y", None),
@@ -3143,6 +3470,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         battlelist_n_valid=getattr(gamestate, "battlelist_n_valid", None),
                         battlelist_top_names=list(getattr(gamestate, "battlelist_top_names", None) or []),
                         battlelist_confidence=getattr(gamestate, "battlelist_confidence", None),
+                        battlelist_target_state=str(getattr(gamestate, "battlelist_target_state", "") or ""),
+                        battlelist_target_row=getattr(gamestate, "battlelist_target_row", None),
+                        battlelist_alive_prob=getattr(gamestate, "battlelist_alive_prob", None),
+                        battlelist_selected_prob=getattr(gamestate, "battlelist_selected_prob", None),
+                        battlelist_target_reason=str(getattr(gamestate, "battlelist_target_reason", "") or ""),
                         action_request=action_req_str,
                         action_requests=action_requests_struct,
                         action_committed=action_committed,
@@ -3173,6 +3505,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         capture_state=(capture_state or None),
                         capture_bounds=capture_bounds,
                         input_block_reason=(input_block_reason or None),
+                        input_bridge_connected=ib_connected,
+                        input_bridge_rate_sent=ib_rate_sent,
+                        input_bridge_rate_accepted=ib_rate_accepted,
+                        input_bridge_rate_rejected=ib_rate_rejected,
+                        input_bridge_last_error=ib_last_error,
                         note=note_out if note_out else None,
                         stuck_reason=stuck_reason_tick,
                         stuck_idle_s=stuck_idle_s_tick,
@@ -3329,6 +3666,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "mp_current": tel.mp_current,
                         "mp_max": tel.mp_max,
                         "mp_pct": tel.mp_pct,
+                        "hp_method": getattr(tel, "hp_method", ""),
+                        "hp_reason": getattr(tel, "hp_reason", ""),
+                        "mp_method": getattr(tel, "mp_method", ""),
+                        "mp_reason": getattr(tel, "mp_reason", ""),
                         "cap_current": getattr(tel, "cap_current", None),
                         "pos_x": getattr(tel, "pos_x", None),
                         "pos_y": getattr(tel, "pos_y", None),
@@ -3367,6 +3708,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "battlelist_n_valid": getattr(tel, "battlelist_n_valid", None),
                         "battlelist_top_names": getattr(tel, "battlelist_top_names", None),
                         "battlelist_confidence": getattr(tel, "battlelist_confidence", None),
+                        "battlelist_target_state": getattr(tel, "battlelist_target_state", None),
+                        "battlelist_target_row": getattr(tel, "battlelist_target_row", None),
+                        "battlelist_alive_prob": getattr(tel, "battlelist_alive_prob", None),
+                        "battlelist_selected_prob": getattr(tel, "battlelist_selected_prob", None),
+                        "battlelist_target_reason": getattr(tel, "battlelist_target_reason", None),
                         "autotarget_enabled": getattr(tel, "autotarget_enabled", None),
                         "autotarget_current_target": getattr(tel, "autotarget_current_target", ""),
                         "autotarget_follow_active": getattr(tel, "autotarget_follow_active", None),
@@ -3377,6 +3723,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "action_source": str(getattr(tel, "action_source", "") or ""),
                         "injection_state": getattr(tel, "injection_state", None),
                         "injection_reason": getattr(tel, "injection_reason", None),
+                        "input_bridge_connected": getattr(tel, "input_bridge_connected", None),
+                        "input_bridge_rate_sent": getattr(tel, "input_bridge_rate_sent", None),
+                        "input_bridge_rate_accepted": getattr(tel, "input_bridge_rate_accepted", None),
+                        "input_bridge_rate_rejected": getattr(tel, "input_bridge_rate_rejected", None),
+                        "input_bridge_last_error": getattr(tel, "input_bridge_last_error", None),
                         "action_ts": None,
                         "note": tel.note,
                         "stuck_reason": getattr(tel, "stuck_reason", ""),
@@ -3404,6 +3755,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "mp_current": getattr(gamestate, "mp_current", None),
                         "mp_max": getattr(gamestate, "mp_max", None),
                         "mp_pct": getattr(gamestate, "mp_pct", None),
+                        "hp_method": getattr(gamestate, "hp_method", ""),
+                        "hp_reason": getattr(gamestate, "hp_reason", ""),
+                        "mp_method": getattr(gamestate, "mp_method", ""),
+                        "mp_reason": getattr(gamestate, "mp_reason", ""),
                         "cap_current": getattr(gamestate, "cap_current", None),
                         "pos_x": getattr(gamestate, "pos_x", None),
                         "pos_y": getattr(gamestate, "pos_y", None),
@@ -3443,6 +3798,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "battlelist_n_valid": getattr(gamestate, "battlelist_n_valid", None),
                         "battlelist_top_names": list(getattr(gamestate, "battlelist_top_names", None) or []),
                         "battlelist_confidence": getattr(gamestate, "battlelist_confidence", None),
+                        "battlelist_target_state": getattr(gamestate, "battlelist_target_state", None),
+                        "battlelist_target_row": getattr(gamestate, "battlelist_target_row", None),
+                        "battlelist_alive_prob": getattr(gamestate, "battlelist_alive_prob", None),
+                        "battlelist_selected_prob": getattr(gamestate, "battlelist_selected_prob", None),
+                        "battlelist_target_reason": getattr(gamestate, "battlelist_target_reason", None),
                         "cavebot_blocked": bool(cavebot_blocked),
                         "cavebot_block_reason": str(cavebot_block_reason or ""),
                         "action_request": action_req_str,
@@ -3451,6 +3811,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "action_source": str(action_source or ""),
                         "injection_state": (injection_state_tick or None),
                         "injection_reason": (injection_reason_tick or None),
+                        "input_bridge_connected": ib_connected if "ib_connected" in locals() else None,
+                        "input_bridge_rate_sent": ib_rate_sent if "ib_rate_sent" in locals() else None,
+                        "input_bridge_rate_accepted": ib_rate_accepted if "ib_rate_accepted" in locals() else None,
+                        "input_bridge_rate_rejected": ib_rate_rejected if "ib_rate_rejected" in locals() else None,
+                        "input_bridge_last_error": ib_last_error if "ib_last_error" in locals() else None,
                         "action_ts": None,
                         "note": "",
                         "stuck_reason": stuck_reason_tick,

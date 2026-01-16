@@ -7,11 +7,12 @@ import numpy as np
 from dataclasses import dataclass
 from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
-from vision.bar_analysis import estimate_bar_fill_ratio
+from vision.bar_analysis import estimate_bar_fill_ratio, estimate_bar_fill_ratio_with_reason
 from vision.obstacles import compute_viewport_tile_offsets
-from vision.presence import is_hungry_hsv, is_nonempty_icon, detect_status_icons
+from vision.presence import is_hungry_hsv, is_nonempty_icon, is_nonempty_equipment_slot, detect_status_icons
 from vision.minimap_motion import MinimapMotionTracker
 from vision import battlelist
+from vision.roi import roi_to_px_result
 
 @dataclass
 class GameState:
@@ -52,12 +53,37 @@ class GameState:
     roboflow_boxes: Optional[List[Dict[str, Any]]] = None
     viewport_tile_offsets: Optional[List[Tuple[int, int]]] = None
 
+    # HP/MP extraction observability
+    hp_method: Optional[str] = None
+    hp_reason: Optional[str] = None
+    mp_method: Optional[str] = None
+    mp_reason: Optional[str] = None
+
+    # CAP extraction observability
+    cap_method: Optional[str] = None
+    cap_reason: Optional[str] = None
+
+    # EntityList/Battlelist observability
+    battlelist_source: Optional[str] = None
+    battlelist_reason: Optional[str] = None
+
+    # Per-tick debug payload (ROI px, parse_ok, reasons)
+    hud_debug: Optional[Dict[str, Any]] = None
+    frame_mean: Optional[float] = None
+
     # Battlelist (assistant-only observability)
     battlelist_entries: Optional[List[Dict[str, Any]]] = None
     battlelist_n_rows: Optional[int] = None
     battlelist_n_valid: Optional[int] = None
     battlelist_top_names: Optional[List[str]] = None
     battlelist_confidence: Optional[float] = None
+
+    # Battlelist targeting (vision-based)
+    battlelist_target_state: Optional[str] = None
+    battlelist_target_row: Optional[int] = None
+    battlelist_alive_prob: Optional[float] = None
+    battlelist_selected_prob: Optional[float] = None
+    battlelist_target_reason: Optional[str] = None
 
     def __str__(self) -> str:
         rf_n = len(self.roboflow_boxes) if self.roboflow_boxes else 0
@@ -525,6 +551,13 @@ class GameStateBuilder:
 
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
+        frame_mean: Optional[float] = None
+        try:
+            # Cheap-ish signal to quickly spot dummy/black frames in telemetry.
+            frame_mean = float(np.mean(frame))
+        except Exception:
+            frame_mean = None
+
         rf_boxes: Optional[List[Dict[str, Any]]] = None
         rf_hpmp_boxes: Optional[List[Dict[str, Any]]] = None
         viewport_offsets: Optional[List[Tuple[int, int]]] = None
@@ -559,6 +592,24 @@ class GameStateBuilder:
         pos_z: Optional[int] = None
 
         do_ocr = (now - self._ocr_last_ts) >= self._ocr_min_interval_s
+        # Observability of OCR path
+        hp_method = ""
+        hp_reason = ""
+        mp_method = ""
+        mp_reason = ""
+        cap_method = ""
+        cap_reason = ""
+
+        hud_debug: Dict[str, Any] = {
+            "ts": float(now),
+            "resolution": [int(resolution[0]), int(resolution[1])],
+            "frame_mean": frame_mean,
+            "hp": {},
+            "mp": {},
+            "cap": {},
+            "battlelist": {},
+        }
+
         if do_ocr:
             try:
                 hp_current, hp_max, mp_current, mp_max = self.ocr_processor.extract_hp_mp_full(
@@ -571,9 +622,28 @@ class GameStateBuilder:
                 hp_current, hp_max, mp_current, mp_max = None, None, None, None
 
             try:
+                hp_method = str(getattr(self.ocr_processor, "last_hp_ocr_source", "") or "")
+                hp_reason = str(getattr(self.ocr_processor, "last_hp_ocr_reason", "") or "")
+                mp_method = str(getattr(self.ocr_processor, "last_mp_ocr_source", "") or "")
+                mp_reason = str(getattr(self.ocr_processor, "last_mp_ocr_reason", "") or "")
+            except Exception:
+                hp_method = ""
+                hp_reason = ""
+                mp_method = ""
+                mp_reason = ""
+
+            try:
                 cap_current = self.ocr_processor.extract_capacity(frame, rois, resolution)
+                if cap_current is not None:
+                    cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
+                    cap_reason = "ok"
+                else:
+                    cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
+                    cap_reason = "no_digits"
             except Exception:
                 cap_current = None
+                cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
+                cap_reason = "exception"
 
             self._ocr_last_ts = now
             self._last_hp_current = hp_current
@@ -591,6 +661,12 @@ class GameStateBuilder:
             pos_x = self._last_pos_x
             pos_y = self._last_pos_y
             pos_z = self._last_pos_z
+            hp_method = "cached"
+            mp_method = "cached"
+            hp_reason = "ocr_throttled"
+            mp_reason = "ocr_throttled"
+            cap_method = "cached"
+            cap_reason = "ocr_throttled"
 
         # Coords provider: permite deshabilitar OCR coords (o usar fuente externa) cuando no hay coords visibles.
         coords_provider_kind = self._coords_provider_kind()
@@ -626,6 +702,12 @@ class GameStateBuilder:
         # Intentar usar boxes Roboflow si existen; si no, usar ROIs del config.
         hp_ratio: Optional[float] = None
         mp_ratio: Optional[float] = None
+        hp_bar_reason = ""
+        mp_bar_reason = ""
+        hp_bar_roi = None
+        mp_bar_roi = None
+        hp_bar_roi_reason = ""
+        mp_bar_roi_reason = ""
         if rf_hpmp_boxes and self._rf_hpmp is not None:
             hp_bar_classes = os.getenv("ROBOFLOW_HP_BAR_CLASSES", "hp_bar,hp_low_bar,health_bar").split(",")
             mp_bar_classes = os.getenv("ROBOFLOW_MP_BAR_CLASSES", "mp_bar,mp_low_bar,mana_bar").split(",")
@@ -634,24 +716,112 @@ class GameStateBuilder:
             if hp_box:
                 crop = self._rf_hpmp.crop_from_box(frame, hp_box)
                 if crop is not None:
-                    hp_ratio = estimate_bar_fill_ratio(crop, (0, 0, crop.shape[1], crop.shape[0]), "hp")
+                    hp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                    hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(
+                        crop, hp_bar_roi, "hp"
+                    )
             if mp_box:
                 crop = self._rf_hpmp.crop_from_box(frame, mp_box)
                 if crop is not None:
-                    mp_ratio = estimate_bar_fill_ratio(crop, (0, 0, crop.shape[1], crop.shape[0]), "mp")
+                    mp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                    mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(
+                        crop, mp_bar_roi, "mp"
+                    )
 
         if hp_ratio is None and "hp_low_bar" in rois:
-            # Usar el mismo normalizador del OCR (ya soporta px/norm + letterboxing)
-            hp_roi = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["hp_low_bar"])
-            hp_ratio = estimate_bar_fill_ratio(frame, hp_roi, "hp")
+            rr = roi_to_px_result(
+                frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                rois=rois,
+                resolution=resolution,
+                roi_def=rois["hp_low_bar"],
+            )
+            hp_bar_roi_reason = str(rr.reason or "")
+            if rr.ok and rr.roi is not None:
+                hp_bar_roi = rr.roi
+                hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(frame, rr.roi, "hp")
         if mp_ratio is None and "mp_low_bar" in rois:
-            mp_roi = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["mp_low_bar"])
-            mp_ratio = estimate_bar_fill_ratio(frame, mp_roi, "mp")
+            rr = roi_to_px_result(
+                frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                rois=rois,
+                resolution=resolution,
+                roi_def=rois["mp_low_bar"],
+            )
+            mp_bar_roi_reason = str(rr.reason or "")
+            if rr.ok and rr.roi is not None:
+                mp_bar_roi = rr.roi
+                mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(frame, rr.roi, "mp")
+
+        # Attach HUD debug snapshot (before fusion so we keep raw diagnostics).
+        try:
+            hud_debug["hp"] = {
+                "ocr_method": hp_method,
+                "ocr_reason": hp_reason,
+                "bar_ratio": hp_ratio,
+                "bar_reason": hp_bar_reason,
+                "bar_roi": list(hp_bar_roi) if isinstance(hp_bar_roi, tuple) else None,
+                "bar_roi_reason": hp_bar_roi_reason,
+                "max": hp_max,
+                "cur": hp_current,
+            }
+            hud_debug["mp"] = {
+                "ocr_method": mp_method,
+                "ocr_reason": mp_reason,
+                "bar_ratio": mp_ratio,
+                "bar_reason": mp_bar_reason,
+                "bar_roi": list(mp_bar_roi) if isinstance(mp_bar_roi, tuple) else None,
+                "bar_roi_reason": mp_bar_roi_reason,
+                "max": mp_max,
+                "cur": mp_current,
+            }
+            hud_debug["cap"] = {
+                "method": cap_method,
+                "reason": cap_reason,
+                "cur": cap_current,
+            }
+        except Exception:
+            pass
+
+        # Fusion OCR vs barras: si difieren mucho, preferir barra.
+        try:
+            diff_thr = float(os.getenv("HPMP_BAR_FUSION_DIFF", "0.10").strip() or "0.10")
+        except Exception:
+            diff_thr = 0.10
+
+        try:
+            if hp_current is not None and hp_max and hp_ratio is not None:
+                ocr_ratio = float(hp_current) / float(hp_max)
+                if abs(float(ocr_ratio) - float(hp_ratio)) >= float(diff_thr):
+                    hp_current = int(round(float(hp_ratio) * float(hp_max)))
+                    hp_method = "bar_low_fusion"
+                    hp_reason = "ratio_mismatch"
+        except Exception:
+            pass
+
+        try:
+            if mp_current is not None and mp_max and mp_ratio is not None:
+                ocr_ratio = float(mp_current) / float(mp_max)
+                if abs(float(ocr_ratio) - float(mp_ratio)) >= float(diff_thr):
+                    mp_current = int(round(float(mp_ratio) * float(mp_max)))
+                    mp_method = "bar_low_fusion"
+                    mp_reason = "ratio_mismatch"
+        except Exception:
+            pass
 
         if hp_current is None and hp_max is not None and hp_ratio is not None:
             hp_current = int(round(hp_ratio * hp_max))
+            hp_method = "bar_low"
+            hp_reason = f"fallback:{hp_reason}" if hp_reason else "fallback_no_ocr"
+        elif hp_current is None and not hp_method:
+            hp_method = "none"
+            hp_reason = "no_ocr_no_bar"
+
         if mp_current is None and mp_max is not None and mp_ratio is not None:
             mp_current = int(round(mp_ratio * mp_max))
+            mp_method = "bar_low"
+            mp_reason = f"fallback:{mp_reason}" if mp_reason else "fallback_no_ocr"
+        elif mp_current is None and not mp_method:
+            mp_method = "none"
+            mp_reason = "no_ocr_no_bar"
 
         # Crear nuevo estado
         hp_pct: Optional[float] = None
@@ -681,6 +851,14 @@ class GameStateBuilder:
             mp_pct=mp_pct,
             roboflow_boxes=rf_boxes,
             viewport_tile_offsets=None,
+            hp_method=hp_method,
+            hp_reason=hp_reason,
+            mp_method=mp_method,
+            mp_reason=mp_reason,
+            cap_method=cap_method,
+            cap_reason=cap_reason,
+            hud_debug=hud_debug,
+            frame_mean=frame_mean,
         )
 
         # Expose minimap tracker debug when minimap provider is selected (even if no step was accepted).
@@ -767,19 +945,118 @@ class GameStateBuilder:
             gamestate.haste_active = None
             gamestate.utamo_active = None
 
+            # These are *presence* flags; defaulting to False avoids UI confusion.
+            # We only set True on a positive detection.
+            gamestate.ring_equipped = False
+            gamestate.amulet_equipped = False
+            gamestate.hungry = False
+
             # Prefer dedicated ROIs if present.
             if isinstance(rois, dict):
                 if rois.get("ring_slot") is not None:
                     rx, ry, rw, rh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["ring_slot"])
-                    gamestate.ring_equipped = bool(is_nonempty_icon(frame[ry : ry + rh, rx : rx + rw]))
+                    if rw >= 8 and rh >= 8:
+                        try:
+                            r_std = float(os.getenv("RING_ICON_MIN_STD", "18"))
+                        except Exception:
+                            r_std = 18.0
+                        try:
+                            r_mean = float(os.getenv("RING_ICON_MIN_MEAN", "8"))
+                        except Exception:
+                            r_mean = 8.0
+                        try:
+                            r_min_sat = float(os.getenv("RING_ICON_MIN_SAT_PCT", "0.006"))
+                        except Exception:
+                            r_min_sat = 0.006
+                        try:
+                            r_sat_thr = int(float(os.getenv("RING_ICON_SAT_THR", "30")))
+                        except Exception:
+                            r_sat_thr = 30
+                        try:
+                            r_v_thr = int(float(os.getenv("RING_ICON_V_THR", "40")))
+                        except Exception:
+                            r_v_thr = 40
+                        try:
+                            r_high_std = float(os.getenv("RING_ICON_HIGH_STD", "45"))
+                        except Exception:
+                            r_high_std = 45.0
+
+                        gamestate.ring_equipped = bool(
+                            is_nonempty_equipment_slot(
+                                frame[ry : ry + rh, rx : rx + rw],
+                                min_std=r_std,
+                                min_mean=r_mean,
+                                min_sat_pct=r_min_sat,
+                                sat_thr=r_sat_thr,
+                                v_thr=r_v_thr,
+                                high_std=r_high_std,
+                            )
+                        )
                 if rois.get("amulet_slot") is not None:
                     ax, ay, aw, ah = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["amulet_slot"])
-                    gamestate.amulet_equipped = bool(is_nonempty_icon(frame[ay : ay + ah, ax : ax + aw]))
+                    if aw >= 8 and ah >= 8:
+                        try:
+                            a_std = float(os.getenv("AMULET_ICON_MIN_STD", "18"))
+                        except Exception:
+                            a_std = 18.0
+                        try:
+                            a_mean = float(os.getenv("AMULET_ICON_MIN_MEAN", "8"))
+                        except Exception:
+                            a_mean = 8.0
+                        try:
+                            a_min_sat = float(os.getenv("AMULET_ICON_MIN_SAT_PCT", "0.006"))
+                        except Exception:
+                            a_min_sat = 0.006
+                        try:
+                            a_sat_thr = int(float(os.getenv("AMULET_ICON_SAT_THR", "30")))
+                        except Exception:
+                            a_sat_thr = 30
+                        try:
+                            a_v_thr = int(float(os.getenv("AMULET_ICON_V_THR", "40")))
+                        except Exception:
+                            a_v_thr = 40
+                        try:
+                            a_high_std = float(os.getenv("AMULET_ICON_HIGH_STD", "45"))
+                        except Exception:
+                            a_high_std = 45.0
+
+                        gamestate.amulet_equipped = bool(
+                            is_nonempty_equipment_slot(
+                                frame[ay : ay + ah, ax : ax + aw],
+                                min_std=a_std,
+                                min_mean=a_mean,
+                                min_sat_pct=a_min_sat,
+                                sat_thr=a_sat_thr,
+                                v_thr=a_v_thr,
+                                high_std=a_high_std,
+                            )
+                        )
 
                 # Hunger icon: prefer tight ROI if available; else fall back to HSV heuristic on states_icons.
                 if rois.get("hungry_icon") is not None:
                     hx, hy, hw, hh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["hungry_icon"])
-                    gamestate.hungry = bool(is_nonempty_icon(frame[hy : hy + hh, hx : hx + hw]))
+                    if hw >= 6 and hh >= 6:
+                        # Use color-band detection to avoid false positives from slot texture.
+                        try:
+                            min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.012"))
+                        except Exception:
+                            min_pct = 0.012
+                        try:
+                            low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
+                        except Exception:
+                            low_h = 8
+                        try:
+                            high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
+                        except Exception:
+                            high_h = 35
+                        gamestate.hungry = bool(
+                            is_hungry_hsv(
+                                frame[hy : hy + hh, hx : hx + hw],
+                                min_pct=min_pct,
+                                low_h=low_h,
+                                high_h=high_h,
+                            )
+                        )
                 elif rois.get("states_icons") is not None:
                     sx, sy, sw, sh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["states_icons"])
                     crop = frame[sy : sy + sh, sx : sx + sw]
@@ -833,54 +1110,93 @@ class GameStateBuilder:
             gamestate.battlelist_n_valid = 0
             gamestate.battlelist_top_names = []
             gamestate.battlelist_confidence = 0.0
+            gamestate.battlelist_source = "none"
+            gamestate.battlelist_reason = "missing_roi"
 
             if isinstance(rois, dict) and rois.get("battlelist_rows") is not None:
-                bx, by, bw, bh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["battlelist_rows"])
-                crop = frame[by : by + bh, bx : bx + bw]
-
-                rows = battlelist.extract_rows(crop)
-                parsed = [battlelist.parse_row(rimg, i) for i, rimg in enumerate(rows)]
-                stable = battlelist.stabilize(self._battlelist_buf, parsed, window_n=10)
-
-                # Global confidence = avg_conf_valid * pct_valid
-                valid = []
-                for e in stable:
+                rr = roi_to_px_result(
+                    frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                    rois=rois,
+                    resolution=resolution,
+                    roi_def=rois["battlelist_rows"],
+                )
+                gamestate.battlelist_source = "roi:battlelist_rows"
+                gamestate.battlelist_reason = str(rr.reason or "")
+                if not (rr.ok and rr.roi is not None):
                     try:
-                        name_norm = str(e.get("name_norm", "") or "").strip()
-                        conf = float(e.get("conf", 0.0) or 0.0)
-                        if name_norm and conf > 0.0:
-                            valid.append(e)
+                        if isinstance(gamestate.hud_debug, dict):
+                            gamestate.hud_debug["battlelist"] = {
+                                "source": gamestate.battlelist_source,
+                                "reason": gamestate.battlelist_reason,
+                                "roi": None,
+                            }
                     except Exception:
-                        continue
+                        pass
+                else:
+                    bx, by, bw, bh = rr.roi
+                    crop = frame[by : by + bh, bx : bx + bw]
 
-                n_rows = int(len(stable))
-                n_valid = int(len(valid))
-                avg_conf = 0.0
-                if n_valid:
-                    try:
-                        avg_conf = float(sum(float(v.get("conf", 0.0) or 0.0) for v in valid) / float(n_valid))
-                    except Exception:
-                        avg_conf = 0.0
-                pct_valid = (float(n_valid) / float(n_rows)) if n_rows else 0.0
-                global_conf = float(avg_conf * pct_valid)
+                    rows = battlelist.extract_rows(crop)
+                    parsed = [battlelist.parse_row(rimg, i) for i, rimg in enumerate(rows)]
+                    stable = battlelist.stabilize(self._battlelist_buf, parsed, window_n=10)
 
-                # Top names: stable order, first occurrences
-                top_names: list[str] = []
-                for e in valid:
-                    try:
-                        disp = str(e.get("name_raw", "") or e.get("name_display", "") or "").strip()
-                        if not disp:
+                    # Global confidence = avg_conf_valid * pct_valid
+                    valid = []
+                    for e in stable:
+                        try:
+                            name_norm = str(e.get("name_norm", "") or "").strip()
+                            conf = float(e.get("conf", 0.0) or 0.0)
+                            if name_norm and conf > 0.0:
+                                valid.append(e)
+                        except Exception:
                             continue
-                        if disp not in top_names:
-                            top_names.append(disp)
-                    except Exception:
-                        continue
 
-                gamestate.battlelist_entries = stable
-                gamestate.battlelist_n_rows = n_rows
-                gamestate.battlelist_n_valid = n_valid
-                gamestate.battlelist_top_names = top_names[:10]
-                gamestate.battlelist_confidence = global_conf
+                    n_rows = int(len(stable))
+                    n_valid = int(len(valid))
+                    avg_conf = 0.0
+                    if n_valid:
+                        try:
+                            avg_conf = float(
+                                sum(float(v.get("conf", 0.0) or 0.0) for v in valid) / float(n_valid)
+                            )
+                        except Exception:
+                            avg_conf = 0.0
+                    pct_valid = (float(n_valid) / float(n_rows)) if n_rows else 0.0
+                    global_conf = float(avg_conf * pct_valid)
+
+                    # Top names: stable order, first occurrences
+                    top_names: list[str] = []
+                    for e in valid:
+                        try:
+                            disp = str(e.get("name_raw", "") or e.get("name_display", "") or "").strip()
+                            if not disp:
+                                continue
+                            if disp not in top_names:
+                                top_names.append(disp)
+                        except Exception:
+                            continue
+
+                    gamestate.battlelist_entries = stable
+                    gamestate.battlelist_n_rows = n_rows
+                    gamestate.battlelist_n_valid = n_valid
+                    gamestate.battlelist_top_names = top_names[:10]
+                    gamestate.battlelist_confidence = global_conf
+                    gamestate.battlelist_reason = "ok" if n_rows else "empty_crop"
+                    if n_rows and n_valid == 0:
+                        gamestate.battlelist_reason = "no_valid_rows"
+
+                    try:
+                        if isinstance(gamestate.hud_debug, dict):
+                            gamestate.hud_debug["battlelist"] = {
+                                "source": gamestate.battlelist_source,
+                                "reason": gamestate.battlelist_reason,
+                                "roi": [int(bx), int(by), int(bw), int(bh)],
+                                "n_rows": n_rows,
+                                "n_valid": n_valid,
+                                "confidence": float(global_conf),
+                            }
+                    except Exception:
+                        pass
         except Exception:
             pass
 
