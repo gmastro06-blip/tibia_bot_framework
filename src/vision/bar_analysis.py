@@ -153,6 +153,38 @@ def estimate_bar_fill_ratio_with_reason(
         presence = 0.0
 
     if presence < float(min_presence):
+        # MP bars can be dark/low-saturation depending on shaders/themes.
+        # Try a simple BGR heuristic as a fallback (blue-dominant pixels).
+        if k == "mp":
+            try:
+                b = crop[:, :, 0].astype(np.int16)
+                g = crop[:, :, 1].astype(np.int16)
+                r = crop[:, :, 2].astype(np.int16)
+                try:
+                    delta = int(float(os.getenv("MP_BAR_BGR_DELTA", "30").strip() or "30"))
+                except Exception:
+                    delta = 30
+                try:
+                    bmin = int(float(os.getenv("MP_BAR_BGR_MIN_B", "60").strip() or "60"))
+                except Exception:
+                    bmin = 60
+
+                mask2 = (b >= bmin) & (b >= (g + delta)) & (b >= (r + delta))
+                presence2 = float(np.count_nonzero(mask2)) / float(mask2.size)
+                if presence2 >= float(min_presence):
+                    col_frac2 = mask2.mean(axis=0)
+                    filled_cols2 = np.where(col_frac2 > float(thr))[0]
+                    if filled_cols2.size > 0:
+                        last2 = int(filled_cols2.max())
+                        ratio2 = (last2 + 1) / float(max(1, w))
+                        ratio2 = float(max(0.0, min(1.0, ratio2)))
+                        if ratio2 <= 0.02:
+                            return ratio2, "ok_bgr_near_zero"
+                        if ratio2 >= 0.98:
+                            return ratio2, "ok_bgr_near_one"
+                        return ratio2, "ok_bgr"
+            except Exception:
+                pass
         return None, "no_bar_color"
 
     col_frac = (mask > 0).mean(axis=0)

@@ -92,5 +92,9 @@
   },
   "rois": {
     "config_override": ""
+  },
+  "stats": {
+    "hp_max": "",
+    "mp_max": ""
   }
 }

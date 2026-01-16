@@ -456,6 +456,22 @@ class BotUI:
             _roi_mon = 2
         self.roi_pick_monitor = tk.IntVar(value=int(_roi_mon))
 
+        # HP/MP max overrides (used by bar fallbacks when OCR doesn't provide max).
+        # Blank = auto (unset env var).
+        self.hp_max_override = tk.StringVar(value=(os.getenv("TIBIA_HP_MAX", "") or "").strip())
+        self.mp_max_override = tk.StringVar(value=(os.getenv("TIBIA_MP_MAX", "") or "").strip())
+
+        # UI feature flag (default OFF): show HP/MP max override inputs.
+        # This avoids changing UX unless explicitly enabled.
+        try:
+            self._show_hpmp_max_inputs = (os.getenv("UI_SHOW_HPMP_MAX_INPUTS", "0") or "0").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+        except Exception:
+            self._show_hpmp_max_inputs = False
+
         # UI settings persistence (best-effort): load last overlay settings.
         try:
             self._load_ui_settings()
@@ -502,16 +518,18 @@ class BotUI:
 
         tab_control = tk.Frame(notebook)
         tab_healing = tk.Frame(notebook)
+        tab_targeting = tk.Frame(notebook)
         tab_cavebot = tk.Frame(notebook)
         tab_tools = tk.Frame(notebook)
         tab_config = tk.Frame(notebook)
         tab_routes = tk.Frame(notebook)
 
         notebook.add(tab_control, text="Control")
-        notebook.add(tab_healing, text="Healing")
+        notebook.add(tab_healing, text="Curación")
+        notebook.add(tab_targeting, text="Objetivos")
         notebook.add(tab_cavebot, text="Cavebot")
         notebook.add(tab_tools, text="Herramientas")
-        notebook.add(tab_config, text="Configuracion")
+        notebook.add(tab_config, text="Configuración")
         notebook.add(tab_routes, text="Rutas / Cavebot")
 
         # --- TAB: Control ---
@@ -542,13 +560,42 @@ class BotUI:
         tk.Label(ctrl_info_left, text="Cap:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         tk.Label(ctrl_info_left, textvariable=self.cap_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(ctrl_info_left, text="Senales:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_left, textvariable=self.signals_text, width=32, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
+        if bool(getattr(self, "_show_hpmp_max_inputs", False)):
+            # HP/MP max inputs (optional, helps bar fallback show cur/max).
+            tk.Label(ctrl_info_left, text="HP Max:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+            _hp_entry = tk.Entry(ctrl_info_left, textvariable=self.hp_max_override, width=8)
+            _hp_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(ctrl_info_right, text="Target:").grid(row=0, column=0, sticky="w")
+            tk.Label(ctrl_info_left, text="MP Max:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+            _mp_entry = tk.Entry(ctrl_info_left, textvariable=self.mp_max_override, width=8)
+            _mp_entry.grid(row=4, column=1, sticky="w", pady=(6, 0))
+
+            def _on_apply(_evt=None) -> None:
+                try:
+                    self._apply_hpmp_max_env()
+                except Exception:
+                    pass
+
+            _hp_entry.bind("<Return>", _on_apply)
+            _mp_entry.bind("<Return>", _on_apply)
+            _hp_entry.bind("<FocusOut>", _on_apply)
+            _mp_entry.bind("<FocusOut>", _on_apply)
+
+            tk.Button(ctrl_info_left, text="Aplicar", width=10, command=self._apply_hpmp_max_env).grid(
+                row=5, column=1, sticky="w", pady=(6, 0)
+            )
+
+            sig_row = 6
+        else:
+            sig_row = 3
+
+        tk.Label(ctrl_info_left, text="Señales:").grid(row=sig_row, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_left, textvariable=self.signals_text, width=32, anchor="w").grid(row=sig_row, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(ctrl_info_right, text="Objetivo:").grid(row=0, column=0, sticky="w")
         tk.Label(ctrl_info_right, textvariable=self.target_text, width=36, anchor="w").grid(row=0, column=1, sticky="w")
 
-        tk.Label(ctrl_info_right, text="Recomendacion:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(ctrl_info_right, text="Recomendación:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Label(ctrl_info_right, textvariable=self.reco_text, width=36, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
 
         tk.Label(ctrl_info_right, text="Waypoint:").grid(row=2, column=0, sticky="w", pady=(6, 0))
@@ -564,32 +611,32 @@ class BotUI:
         diag_right = tk.Frame(ctrl_diag)
         diag_right.grid(row=0, column=1, sticky="nw")
 
-        tk.Label(diag_left, text="Health:").grid(row=0, column=0, sticky="w")
+        tk.Label(diag_left, text="Salud:").grid(row=0, column=0, sticky="w")
         self._health_status_label = tk.Label(diag_left, textvariable=self.health_status_var, width=8, anchor="w")
         self._health_status_label.grid(row=0, column=1, sticky="w")
         self._health_detail_label = tk.Label(diag_left, textvariable=self.health_var, width=40, anchor="w")
         self._health_detail_label.grid(row=0, column=2, sticky="w")
 
-        tk.Label(diag_left, text="Anchor:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(diag_left, text="Ancla:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self._anchor_status_label = tk.Label(diag_left, textvariable=self.anchor_status_var, width=8, anchor="w")
         self._anchor_status_label.grid(row=1, column=1, sticky="w", pady=(6, 0))
         self._anchor_detail_label = tk.Label(diag_left, textvariable=self.anchor_var, width=40, anchor="w")
         self._anchor_detail_label.grid(row=1, column=2, sticky="w", pady=(6, 0))
 
-        tk.Label(diag_right, text="Idle:").grid(row=0, column=0, sticky="w")
+        tk.Label(diag_right, text="Inactivo:").grid(row=0, column=0, sticky="w")
         self._idle_status_label = tk.Label(diag_right, textvariable=self.idle_status_var, width=8, anchor="w")
         self._idle_status_label.grid(row=0, column=1, sticky="w")
         self._idle_detail_label = tk.Label(diag_right, textvariable=self.idle_var, width=40, anchor="w")
         self._idle_detail_label.grid(row=0, column=2, sticky="w")
 
-        tk.Label(diag_right, text="Stuck:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(diag_right, text="Atascado:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self._stuck_status_label = tk.Label(diag_right, textvariable=self.stuck_status_var, width=8, anchor="w")
         self._stuck_status_label.grid(row=1, column=1, sticky="w", pady=(6, 0))
         self._stuck_detail_label = tk.Label(diag_right, textvariable=self.stuck_var, width=40, anchor="w")
         self._stuck_detail_label.grid(row=1, column=2, sticky="w", pady=(6, 0))
 
         # Panel operador: ultimos eventos
-        tk.Label(tab_control, text="Eventos (ultimos):").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Eventos (últimos):").grid(row=4, column=0, sticky="w", pady=(6, 0))
 
         def _copy_inputs_to_clipboard() -> None:
             # Prefer planned inputs; fall back to action_request.
@@ -619,7 +666,7 @@ class BotUI:
             row=4, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(tab_control, text="Inputs / Actions:").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Label(tab_control, text="Inputs / Acciones:").grid(row=4, column=2, sticky="w", pady=(6, 0))
         tk.Label(
             tab_control,
             textvariable=self.input_plan_text,
@@ -808,6 +855,7 @@ class BotUI:
                 "--out-dir",
                 out_dir,
                 "--save-overlay",
+                "--save-all-crops",
             ]
             if rois_path:
                 cmd += ["--rois", rois_path]
@@ -839,7 +887,7 @@ class BotUI:
                 except Exception:
                     pass
 
-            _run_tool_async(cmd, title="ROI Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+            _run_tool_async(cmd, title="Chequeo ROI (sanity)", open_dir=out_dir, on_complete=_on_complete)
 
         def run_ocr_sanity_ui() -> None:
             rois_path = str(self.rois_config_override.get()).strip()
@@ -883,7 +931,7 @@ class BotUI:
                 except Exception:
                     pass
 
-            _run_tool_async(cmd, title="OCR Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+            _run_tool_async(cmd, title="Chequeo OCR (sanity)", open_dir=out_dir, on_complete=_on_complete)
 
         def run_coords_sanity_ui() -> None:
             rois_path = str(self.rois_config_override.get()).strip()
@@ -927,11 +975,21 @@ class BotUI:
                 except Exception:
                     pass
 
-            _run_tool_async(cmd, title="Coords Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+            _run_tool_async(cmd, title="Chequeo coords (sanity)", open_dir=out_dir, on_complete=_on_complete)
 
         def run_anchor_sanity_ui() -> None:
             rois_path = str(self.rois_config_override.get()).strip()
             out_dir = str(self._repo_root / "logs" / "anchor_sanity_ui")
+
+            # If an anchor template already exists, pass it explicitly so the
+            # sanity check works even before _anchor is written into the ROIs.
+            default_tmpl = str(self._repo_root / "data" / "anchors" / "hud_anchor.png")
+            has_default_tmpl = False
+            try:
+                has_default_tmpl = Path(default_tmpl).exists()
+            except Exception:
+                has_default_tmpl = False
+
             cmd = [
                 sys.executable,
                 str(self._repo_root / "tools" / "anchor_sanity_check.py"),
@@ -943,6 +1001,8 @@ class BotUI:
             ]
             if rois_path:
                 cmd += ["--rois", rois_path]
+            if has_default_tmpl:
+                cmd += ["--template", default_tmpl]
 
             def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
                 if tool_out_dir:
@@ -971,7 +1031,7 @@ class BotUI:
                 except Exception:
                     pass
 
-            _run_tool_async(cmd, title="Anchor Sanity Check", open_dir=out_dir, on_complete=_on_complete)
+            _run_tool_async(cmd, title="Chequeo ancla (sanity)", open_dir=out_dir, on_complete=_on_complete)
 
         def run_anchor_setup_ui() -> None:
             # Interactive: lets you select a stable on-screen anchor and writes it into the ROIs config.
@@ -995,6 +1055,9 @@ class BotUI:
                 "--write",
             ]
 
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
             # If user selected a specific ROIs file, we want to write into that exact file.
             # The tool currently chooses by resolution, so we pass via env ROIS_CONFIG.
             try:
@@ -1003,7 +1066,49 @@ class BotUI:
             except Exception:
                 pass
 
-            _run_tool_async(cmd, title="Anchor Setup", open_dir=str(self._repo_root / "data" / "anchors"))
+            _run_tool_async(cmd, title="Configurar ancla", open_dir=str(self._repo_root / "data" / "anchors"))
+
+        def run_panel_setup_ui() -> None:
+            """Interactive: select left/right panel templates and write _panel_refs into the ROIs config."""
+
+            rois_path = str(self.rois_config_override.get()).strip()
+            cmd = [
+                sys.executable,
+                "-m",
+                "src.create_panel_refs",
+                "--monitor",
+                str(_monitor_default()),
+                "--out-dir",
+                str(Path("data") / "anchors"),
+                "--write",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            _run_tool_async(cmd, title="Configurar paneles", open_dir=str(self._repo_root / "data" / "anchors"))
+
+        def run_roi_wizard_english_ui() -> None:
+            """Interactive: configure the full ROI set (English names + legacy aliases) in one go."""
+
+            rois_path = str(self.rois_config_override.get()).strip()
+            cmd = [
+                sys.executable,
+                "-m",
+                "src.roi_wizard_english",
+                "--monitor",
+                str(_monitor_default()),
+                "--write",
+            ]
+            if rois_path:
+                cmd += ["--rois", rois_path]
+
+            try:
+                if rois_path:
+                    os.environ["ROIS_CONFIG"] = rois_path
+            except Exception:
+                pass
+
+            _run_tool_async(cmd, title="Wizard ROIs (EN)")
 
         def _open_last_artifact(which: str, kind: str) -> None:
             try:
@@ -1016,11 +1121,11 @@ class BotUI:
                 else:
                     last_dir = self._last_anchor_sanity_dir
                 if not last_dir:
-                    self._messagebox.showinfo("Info", "Aun no hay un run reciente.")
+                    self._messagebox.showinfo("Información", "Aún no hay una ejecución reciente.")
                     return
                 p = Path(last_dir) / ("overlay.png" if which == "overlay" else "report.json")
                 if not p.exists():
-                    self._messagebox.showinfo("Info", f"No existe: {p}")
+                    self._messagebox.showinfo("Información", f"No existe: {p}")
                     return
                 os.startfile(os.path.abspath(str(p)))
             except Exception:
@@ -1030,44 +1135,50 @@ class BotUI:
         tools_grid = tk.Frame(tab_tools)
         tools_grid.grid(row=0, column=0, sticky="nw")
 
-        sanity_frame = tk.LabelFrame(tools_grid, text="Sanity checks", padx=10, pady=8)
+        sanity_frame = tk.LabelFrame(tools_grid, text="Chequeos", padx=10, pady=8)
         sanity_frame.grid(row=0, column=0, sticky="w")
-        tk.Button(sanity_frame, text="ROI sanity", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
-        tk.Button(sanity_frame, text="OCR test", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Coords test", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Anchor test", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Anchor setup", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Chequeo ROI", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
+        tk.Button(sanity_frame, text="Probar OCR", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Probar coords", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Probar ancla", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Configurar ancla", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
+        tk.Button(sanity_frame, text="Configurar paneles", width=18, command=run_panel_setup_ui).grid(
+            row=1, column=0, sticky="w", pady=(8, 0)
+        )
+        tk.Button(sanity_frame, text="Wizard ROIs (EN)", width=18, command=run_roi_wizard_english_ui).grid(
+            row=1, column=1, sticky="w", pady=(8, 0), padx=(8, 0)
+        )
 
         artifacts_frame = tk.LabelFrame(tools_grid, text="Abrir artefactos", padx=10, pady=8)
         artifacts_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
 
-        tk.Button(artifacts_frame, text="ROI overlay", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(
+        tk.Button(artifacts_frame, text="Overlay ROI", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(
             row=0, column=0, sticky="w"
         )
-        tk.Button(artifacts_frame, text="ROI report", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(
+        tk.Button(artifacts_frame, text="Reporte ROI", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(
             row=0, column=1, sticky="w", padx=(8, 0)
         )
-        tk.Button(artifacts_frame, text="OCR overlay", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
+        tk.Button(artifacts_frame, text="Overlay OCR", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
             row=0, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(artifacts_frame, text="OCR report", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(
+        tk.Button(artifacts_frame, text="Reporte OCR", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(
             row=0, column=3, sticky="w", padx=(8, 0)
         )
 
-        tk.Button(artifacts_frame, text="Coords overlay", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
+        tk.Button(artifacts_frame, text="Overlay coords", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
             row=1, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(artifacts_frame, text="Coords report", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
+        tk.Button(artifacts_frame, text="Reporte coords", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
             row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(artifacts_frame, text="Anchor overlay", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
+        tk.Button(artifacts_frame, text="Overlay ancla", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(artifacts_frame, text="Anchor report", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(
+        tk.Button(artifacts_frame, text="Reporte ancla", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(
             row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        last_frame = tk.LabelFrame(tools_grid, text="Ultimos resultados", padx=10, pady=8)
+        last_frame = tk.LabelFrame(tools_grid, text="Últimos resultados", padx=10, pady=8)
         last_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
         tk.Label(last_frame, text="ROI:").grid(row=0, column=0, sticky="w")
@@ -1082,16 +1193,16 @@ class BotUI:
         tk.Label(last_frame, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(8, 0))
         tk.Label(last_frame, textvariable=self.last_coords_dir_var, width=60, anchor="w").grid(row=5, column=1, columnspan=3, sticky="w")
 
-        tk.Label(last_frame, text="Anchor:").grid(row=6, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_frame, text="Ancla:").grid(row=6, column=0, sticky="w", pady=(8, 0))
         tk.Label(last_frame, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(row=6, column=1, sticky="w", pady=(8, 0))
         tk.Label(last_frame, textvariable=self.last_anchor_dir_var, width=60, anchor="w").grid(row=7, column=1, columnspan=3, sticky="w")
 
         # --- TAB: Healing ---
-        tk.Checkbutton(tab_healing, text="Habilitar healing", variable=self.healing_enabled).grid(
+        tk.Checkbutton(tab_healing, text="Habilitar curación", variable=self.healing_enabled).grid(
             row=0, column=0, columnspan=2, sticky="w"
         )
 
-        heal_frame = tk.LabelFrame(tab_healing, text="Configuracion", padx=10, pady=8)
+        heal_frame = tk.LabelFrame(tab_healing, text="Configuración", padx=10, pady=8)
         heal_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
         heal_left = tk.Frame(heal_frame)
         heal_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
@@ -1108,13 +1219,13 @@ class BotUI:
             row=1, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(heal_left, text="Accion HP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(heal_left, text="Acción HP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         f_keys = [f"F{i}" for i in range(1, 13)]
         ttk.Combobox(heal_left, textvariable=self.heal_hp_action, values=f_keys, width=8, state="normal").grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(heal_left, text="Cooldown (s)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(heal_left, text="Enfriamiento (s)").grid(row=3, column=0, sticky="w", pady=(6, 0))
         tk.Entry(heal_left, textvariable=self.heal_cooldown_s, width=8).grid(row=3, column=1, sticky="w", pady=(6, 0))
 
         tk.Label(heal_right, text="Curar si MP < (%)").grid(row=0, column=0, sticky="w")
@@ -1127,7 +1238,7 @@ class BotUI:
             row=1, column=1, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(heal_right, text="Accion MP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(heal_right, text="Acción MP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         ttk.Combobox(heal_right, textvariable=self.heal_mp_action, values=f_keys, width=8, state="normal").grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
@@ -1138,11 +1249,21 @@ class BotUI:
         )
 
         # --- TAB: Cavebot ---
-        cb_top = tk.LabelFrame(tab_cavebot, text="Navegacion", padx=10, pady=8)
+        # Layout inspirado en bots clásicos: sub-tabs para reducir clutter.
+        cb_nb = ttk.Notebook(tab_cavebot)
+        cb_nb.pack(fill="both", expand=True)
+        cb_tab_waypoints = tk.Frame(cb_nb)
+        cb_tab_options = tk.Frame(cb_nb)
+        cb_tab_hotkeys = tk.Frame(cb_nb)
+        cb_nb.add(cb_tab_waypoints, text="Ruta")
+        cb_nb.add(cb_tab_options, text="Opciones")
+        cb_nb.add(cb_tab_hotkeys, text="Atajos")
+
+        cb_top = tk.LabelFrame(cb_tab_waypoints, text="Cavebot", padx=10, pady=8)
         cb_top.grid(row=0, column=0, columnspan=4, sticky="w")
-        cb_left = tk.Frame(cb_top)
+        cb_left = tk.LabelFrame(cb_top, text="Ruta", padx=10, pady=8)
         cb_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        cb_right = tk.Frame(cb_top)
+        cb_right = tk.LabelFrame(cb_top, text="Estado", padx=10, pady=8)
         cb_right.grid(row=0, column=1, sticky="nw")
 
         tk.Checkbutton(cb_left, text="Habilitar cavebot", variable=self.cavebot_enabled).grid(
@@ -1164,14 +1285,14 @@ class BotUI:
                 path = filedialog.askopenfilename(
                     title="Selecciona ruta/script JSON",
                     initialdir=str(base),
-                    filetypes=[("Routes", "*.in *.json"), ("waypoints", "waypoints.in"), ("JSON", "*.json"), ("All files", "*")],
+                    filetypes=[("Rutas", "*.in *.json"), ("Waypoints", "waypoints.in"), ("JSON", "*.json"), ("Todos", "*")],
                 )
                 if path:
                     self.cavebot_route_path.set(path)
             except Exception:
                 pass
 
-        tk.Button(cb_left, text="Browse", width=8, command=browse_route).grid(
+        tk.Button(cb_left, text="Examinar", width=10, command=browse_route).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(10, 0)
         )
 
@@ -1187,46 +1308,9 @@ class BotUI:
             row=2, column=3, sticky="w", pady=(8, 0), padx=(8, 0)
         )
 
-        tk.Label(cb_left, text="Coords provider:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Radiobutton(cb_left, text="disabled", variable=self.coords_provider, value="disabled").grid(
-            row=3, column=1, sticky="w", pady=(6, 0)
+        tk.Label(cb_left, text="(Coordenadas/minimap: ver 'Opciones')").grid(
+            row=3, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
-        tk.Radiobutton(cb_left, text="ocr", variable=self.coords_provider, value="ocr").grid(
-            row=3, column=2, sticky="w", pady=(6, 0)
-        )
-        tk.Radiobutton(cb_left, text="minimap_motion", variable=self.coords_provider, value="minimap").grid(
-            row=3, column=3, sticky="w", pady=(6, 0)
-        )
-
-        # Live provider status (text/semáforo)
-        tk.Label(cb_left, text="Provider status:").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        _lbl = tk.Label(cb_left, textvariable=self.coords_provider_state_text, width=34, anchor="w")
-        _lbl.grid(row=4, column=1, columnspan=3, sticky="w", pady=(6, 0))
-        try:
-            self._coords_provider_state_label = _lbl
-        except Exception:
-            pass
-
-        # Minimap calibration (seed) + fallback policy (persisted in UI config)
-        tk.Label(cb_left, text="Minimap seed X/Y/Z:").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(cb_left, textvariable=self.minimap_seed_x, width=6).grid(row=5, column=1, sticky="w", pady=(6, 0))
-        tk.Entry(cb_left, textvariable=self.minimap_seed_y, width=6).grid(row=5, column=2, sticky="w", pady=(6, 0))
-        tk.Entry(cb_left, textvariable=self.minimap_seed_z, width=6).grid(row=5, column=3, sticky="w", pady=(6, 0))
-
-        tk.Label(cb_left, text="Minimap fallback:").grid(row=6, column=0, sticky="w", pady=(4, 0))
-        ttk.Combobox(
-            cb_left,
-            textvariable=self.minimap_fallback_mode,
-            values=["steps", "ocr"],
-            width=8,
-            state="readonly",
-        ).grid(row=6, column=1, sticky="w", pady=(4, 0))
-        tk.Label(cb_left, text="conf<").grid(row=6, column=2, sticky="e", pady=(4, 0))
-        tk.Entry(cb_left, textvariable=self.minimap_fallback_conf_threshold, width=6).grid(
-            row=6, column=3, sticky="w", pady=(4, 0)
-        )
-        tk.Label(cb_left, text="N ticks").grid(row=7, column=2, sticky="e", pady=(2, 0))
-        tk.Entry(cb_left, textvariable=self.minimap_fallback_n_ticks, width=6).grid(row=7, column=3, sticky="w", pady=(2, 0))
 
         def _start_cavebot_ui() -> None:
             try:
@@ -1264,10 +1348,10 @@ class BotUI:
                 pass
 
         tk.Button(cb_left, text="Iniciar cavebot", width=14, command=_start_cavebot_ui).grid(
-            row=8, column=0, sticky="w", pady=(10, 0)
+            row=4, column=0, sticky="w", pady=(10, 0)
         )
         tk.Button(cb_left, text="Detener cavebot", width=14, command=_stop_cavebot_ui).grid(
-            row=8, column=1, sticky="w", padx=(8, 0), pady=(10, 0)
+            row=4, column=1, sticky="w", padx=(8, 0), pady=(10, 0)
         )
 
         tk.Label(cb_right, text="Paso:").grid(row=0, column=0, sticky="w")
@@ -1301,91 +1385,121 @@ class BotUI:
         self._cavebot_next_btn = tk.Button(cb_right, text="Siguiente accion", width=14, command=request_advance)
         self._cavebot_next_btn.grid(row=4, column=1, sticky="w", pady=(10, 0))
 
-        inj = tk.LabelFrame(cb_right, text="Injection Status", padx=8, pady=6)
-        inj.grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
-        tk.Label(inj, text="STEP").grid(row=0, column=0, sticky="w")
-        tk.Label(inj, textvariable=self.injection_step_var, width=34, anchor="w").grid(row=0, column=1, sticky="w")
-        tk.Label(inj, text="LABEL").grid(row=1, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_label_var, width=34, anchor="w").grid(row=1, column=1, sticky="w", pady=(2, 0))
-        tk.Label(inj, text="NEXT").grid(row=2, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_next_var, width=34, anchor="w").grid(row=2, column=1, sticky="w", pady=(2, 0))
-        tk.Label(inj, text="STATE").grid(row=3, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_state_var, width=34, anchor="w").grid(row=3, column=1, sticky="w", pady=(2, 0))
-        tk.Label(inj, text="REASON").grid(row=4, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_reason_var, width=34, anchor="w").grid(row=4, column=1, sticky="w", pady=(2, 0))
-        tk.Label(inj, text="MODE/DRIVER").grid(row=5, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_mode_driver_var, width=34, anchor="w").grid(row=5, column=1, sticky="w", pady=(2, 0))
+        # --- Opciones (avanzado) ---
+        opt_row = 0
 
-        tk.Label(inj, text="FOREGROUND").grid(row=6, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_foreground_var, width=34, anchor="w").grid(row=6, column=1, sticky="w", pady=(2, 0))
-        tk.Label(inj, text="BLOCK").grid(row=7, column=0, sticky="w", pady=(2, 0))
-        tk.Label(inj, textvariable=self.injection_block_reason_var, width=34, anchor="w").grid(row=7, column=1, sticky="w", pady=(2, 0))
-
-        cb_block = tk.Frame(tab_cavebot)
-        cb_block.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
-
-        tk.Label(
-            cb_block,
-            text="(Default: solo logs. Live input solo si esta ARMED + ventana allowlisted + accion COMMITTED)",
-        ).grid(row=0, column=0, columnspan=8, sticky="w")
-
-        # Stop conditions
-        tk.Checkbutton(cb_block, text="Stop por cap baja", variable=self.cavebot_stop_on_low_cap).grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+        coords_box = tk.LabelFrame(cb_tab_options, text="Coordenadas", padx=10, pady=8)
+        coords_box.grid(row=opt_row, column=0, sticky="w", pady=(8, 0))
+        opt_row += 1
+        tk.Label(coords_box, text="Proveedor:").grid(row=0, column=0, sticky="w")
+        tk.Radiobutton(coords_box, text="desactivado", variable=self.coords_provider, value="disabled").grid(
+            row=0, column=1, sticky="w"
         )
-        tk.Label(cb_block, text="Cap <=").grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
-        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_cap_threshold, width=6).grid(
-            row=1, column=2, sticky="w", pady=(4, 0)
+        tk.Radiobutton(coords_box, text="ocr", variable=self.coords_provider, value="ocr").grid(
+            row=0, column=2, sticky="w"
+        )
+        tk.Radiobutton(coords_box, text="minimap_motion", variable=self.coords_provider, value="minimap").grid(
+            row=0, column=3, sticky="w"
         )
 
-        tk.Checkbutton(cb_block, text="Stop por pociones", variable=self.cavebot_stop_on_low_potions).grid(
-            row=1, column=3, sticky="w", padx=(14, 0), pady=(4, 0)
+        tk.Label(coords_box, text="Estado:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        _lbl = tk.Label(coords_box, textvariable=self.coords_provider_state_text, width=46, anchor="w")
+        _lbl.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 0))
+        try:
+            self._coords_provider_state_label = _lbl
+        except Exception:
+            pass
+
+        minimap_box = tk.LabelFrame(cb_tab_options, text="Minimap (experimental)", padx=10, pady=8)
+        minimap_box.grid(row=opt_row, column=0, sticky="w", pady=(10, 0))
+        opt_row += 1
+        tk.Label(minimap_box, text="Seed X/Y/Z:").grid(row=0, column=0, sticky="w")
+        tk.Entry(minimap_box, textvariable=self.minimap_seed_x, width=6).grid(row=0, column=1, sticky="w")
+        tk.Entry(minimap_box, textvariable=self.minimap_seed_y, width=6).grid(row=0, column=2, sticky="w")
+        tk.Entry(minimap_box, textvariable=self.minimap_seed_z, width=6).grid(row=0, column=3, sticky="w")
+
+        tk.Label(minimap_box, text="Fallback:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(
+            minimap_box,
+            textvariable=self.minimap_fallback_mode,
+            values=["steps", "ocr"],
+            width=8,
+            state="readonly",
+        ).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(minimap_box, text="conf<").grid(row=1, column=2, sticky="e", pady=(6, 0))
+        tk.Entry(minimap_box, textvariable=self.minimap_fallback_conf_threshold, width=6).grid(
+            row=1, column=3, sticky="w", pady=(6, 0)
         )
-        tk.Label(cb_block, text="Rem=").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(4, 0))
-        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_potions_remaining, width=6).grid(
-            row=1, column=5, sticky="w", pady=(4, 0)
+        tk.Label(minimap_box, text="N ticks").grid(row=2, column=2, sticky="e", pady=(2, 0))
+        tk.Entry(minimap_box, textvariable=self.minimap_fallback_n_ticks, width=6).grid(row=2, column=3, sticky="w", pady=(2, 0))
+
+        stop_box = tk.LabelFrame(cb_tab_options, text="Condiciones de parada", padx=10, pady=8)
+        stop_box.grid(row=opt_row, column=0, sticky="w", pady=(10, 0))
+        opt_row += 1
+        tk.Checkbutton(stop_box, text="Detener por cap baja", variable=self.cavebot_stop_on_low_cap).grid(
+            row=0, column=0, sticky="w"
         )
-        tk.Label(cb_block, text="Min=").grid(row=1, column=6, sticky="w", padx=(8, 0), pady=(4, 0))
-        tk.Spinbox(cb_block, from_=0, to=9999, textvariable=self.cavebot_potions_min, width=6).grid(
-            row=1, column=7, sticky="w", pady=(4, 0)
+        tk.Label(stop_box, text="Cap <=").grid(row=0, column=1, sticky="w", padx=(8, 0))
+        tk.Spinbox(stop_box, from_=0, to=9999, textvariable=self.cavebot_cap_threshold, width=6).grid(
+            row=0, column=2, sticky="w"
+        )
+        tk.Checkbutton(stop_box, text="Detener por pociones", variable=self.cavebot_stop_on_low_potions).grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Label(stop_box, text="Rem=").grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
+        tk.Spinbox(stop_box, from_=0, to=9999, textvariable=self.cavebot_potions_remaining, width=6).grid(
+            row=1, column=2, sticky="w", pady=(6, 0)
+        )
+        tk.Label(stop_box, text="Min=").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        tk.Spinbox(stop_box, from_=0, to=9999, textvariable=self.cavebot_potions_min, width=6).grid(
+            row=1, column=4, sticky="w", pady=(6, 0)
         )
 
-        # Recovery (assistant-only)
-        tk.Checkbutton(cb_block, text="Recovery (anti-stuck)", variable=self.cavebot_recovery_enabled).grid(
-            row=2, column=0, sticky="w", pady=(6, 0)
+        recovery_box = tk.LabelFrame(cb_tab_options, text="Recuperacion (anti-stuck)", padx=10, pady=8)
+        recovery_box.grid(row=opt_row, column=0, sticky="w", pady=(10, 0))
+        opt_row += 1
+        tk.Checkbutton(recovery_box, text="Habilitar recovery", variable=self.cavebot_recovery_enabled).grid(
+            row=0, column=0, sticky="w"
         )
-        tk.Label(cb_block, text="Idle s:").grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
-        tk.Spinbox(cb_block, from_=0.0, to=999.0, increment=0.5, textvariable=self.cavebot_recovery_idle_s, width=6).grid(
-            row=2, column=2, sticky="w", pady=(6, 0)
+        tk.Label(recovery_box, text="Idle s:").grid(row=0, column=1, sticky="w", padx=(8, 0))
+        tk.Spinbox(
+            recovery_box,
+            from_=0.0,
+            to=999.0,
+            increment=0.5,
+            textvariable=self.cavebot_recovery_idle_s,
+            width=6,
+        ).grid(row=0, column=2, sticky="w")
+        tk.Label(recovery_box, text="Max:").grid(row=0, column=3, sticky="w", padx=(8, 0))
+        tk.Spinbox(recovery_box, from_=1, to=99, textvariable=self.cavebot_recovery_max_attempts, width=6).grid(
+            row=0, column=4, sticky="w"
         )
-        tk.Label(cb_block, text="Max:").grid(row=2, column=3, sticky="w", padx=(14, 0), pady=(6, 0))
-        tk.Spinbox(cb_block, from_=1, to=99, textvariable=self.cavebot_recovery_max_attempts, width=6).grid(
-            row=2, column=4, sticky="w", pady=(6, 0)
-        )
-        tk.Checkbutton(cb_block, text="Stop si falla", variable=self.cavebot_recovery_stop_on_fail).grid(
-            row=2, column=5, columnspan=3, sticky="w", padx=(14, 0), pady=(6, 0)
+        tk.Checkbutton(recovery_box, text="Detener si falla", variable=self.cavebot_recovery_stop_on_fail).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(cb_block, text="Fin:").grid(row=3, column=0, sticky="w", pady=(4, 0))
-        tk.Label(cb_block, textvariable=self.cavebot_finish_text, width=60, anchor="w").grid(
-            row=3, column=1, columnspan=7, sticky="w", pady=(4, 0)
+        cb_status_box = tk.LabelFrame(cb_tab_options, text="Estado cavebot", padx=10, pady=8)
+        cb_status_box.grid(row=opt_row, column=0, sticky="w", pady=(10, 0))
+        opt_row += 1
+        tk.Label(cb_status_box, text="Fin:").grid(row=0, column=0, sticky="w")
+        tk.Label(cb_status_box, textvariable=self.cavebot_finish_text, width=70, anchor="w").grid(
+            row=0, column=1, sticky="w"
         )
-
-        tk.Label(cb_block, text="Bloqueado:").grid(row=4, column=0, sticky="w", pady=(2, 0))
-        tk.Label(cb_block, textvariable=self.cavebot_block_text, width=60, anchor="w").grid(
-            row=4, column=1, columnspan=7, sticky="w", pady=(2, 0)
+        tk.Label(cb_status_box, text="Bloqueado:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cb_status_box, textvariable=self.cavebot_block_text, width=70, anchor="w").grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
         )
 
         # Checklist de ruta
-        tk.Label(tab_cavebot, text="").grid(row=2, column=0)
-        tk.Label(tab_cavebot, text="Checklist de ruta:").grid(row=3, column=0, sticky="w", pady=(10, 0))
+        tk.Label(cb_tab_waypoints, text="").grid(row=2, column=0)
+        tk.Label(cb_tab_waypoints, text="Checklist de ruta:").grid(row=3, column=0, sticky="w", pady=(10, 0))
 
         self._route_status_var = tk.StringVar(value="(ruta no cargada)")
-        tk.Label(tab_cavebot, textvariable=self._route_status_var, width=60, anchor="w").grid(
+        tk.Label(cb_tab_waypoints, textvariable=self._route_status_var, width=60, anchor="w").grid(
             row=3, column=1, columnspan=3, sticky="w", pady=(10, 0)
         )
 
-        self._route_listbox = tk.Listbox(tab_cavebot, height=10, width=60)
+        self._route_listbox = tk.Listbox(cb_tab_waypoints, height=10, width=60)
         self._route_listbox.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         def request_step_jump_selected() -> None:
@@ -1411,8 +1525,8 @@ class BotUI:
             pass
 
         self._route_next_var = tk.StringVar(value="-")
-        tk.Label(tab_cavebot, text="Proximos:").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        tk.Label(tab_cavebot, textvariable=self._route_next_var, width=60, anchor="w").grid(
+        tk.Label(cb_tab_waypoints, text="Proximos:").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        tk.Label(cb_tab_waypoints, textvariable=self._route_next_var, width=60, anchor="w").grid(
             row=5, column=1, columnspan=2, sticky="w", pady=(6, 0)
         )
 
@@ -1467,15 +1581,15 @@ class BotUI:
             self._route_loaded_from = ""
             _load_route_for_ui()
 
-        tk.Button(tab_cavebot, text="Recargar ruta", width=14, command=reload_route_ui).grid(
+        tk.Button(cb_tab_waypoints, text="Recargar ruta", width=14, command=reload_route_ui).grid(
             row=4, column=3, sticky="w", padx=(8, 0)
         )
 
-        tk.Button(tab_cavebot, text="Saltar a paso", width=14, command=request_step_jump_selected).grid(
+        tk.Button(cb_tab_waypoints, text="Saltar a paso", width=14, command=request_step_jump_selected).grid(
             row=5, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Button(tab_cavebot, text="Reset (inicio)", width=14, command=request_step_reset).grid(
+        tk.Button(cb_tab_waypoints, text="Reiniciar (inicio)", width=14, command=request_step_reset).grid(
             row=5, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
@@ -1486,6 +1600,356 @@ class BotUI:
             pass
         _load_route_for_ui()
 
+        # --- SUBTAB: Cavebot / Hotkeys ---
+        # (antes estaba en Configuracion; movido para parecerse al layout clásico)
+        asst_frame = tk.LabelFrame(cb_tab_hotkeys, text="Asistente", padx=10, pady=8)
+        asst_frame.grid(row=0, column=0, sticky="w")
+        tk.Checkbutton(asst_frame, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Checkbutton(asst_frame, text="Confirmacion humana (cavebot)", variable=self.asst_confirm).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        tk.Checkbutton(asst_frame, text="Alertas sonoras", variable=self.asst_sound).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+
+        input_frame = tk.LabelFrame(cb_tab_hotkeys, text="Atajos / Teclas", padx=10, pady=8)
+        input_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        tk.Label(input_frame, text="Modo de inputs").grid(row=0, column=0, sticky="w")
+        tk.OptionMenu(input_frame, self.asst_input_mode, "log", "mock", "keyboard", "wininput", "bridge").grid(
+            row=0, column=1, sticky="w"
+        )
+        tk.Label(input_frame, text="Hotkey de TARGET").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(input_frame, textvariable=self.asst_target_hotkey, width=10).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(input_frame, text="Hotkey click minimapa").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(input_frame, textvariable=self.asst_minimap_hotkey, width=10).grid(row=2, column=1, sticky="w", pady=(6, 0))
+
+        live_frame = tk.LabelFrame(cb_tab_hotkeys, text="Seguridad de live input", padx=10, pady=8)
+        live_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
+
+        def _confirm_arm_live() -> None:
+            try:
+                if not bool(self.asst_live_input_armed.get()):
+                    return
+
+                msg = (
+                    "Vas a ARMAR live input (inyeccion real de teclas en Windows).\n\n"
+                    "Reglas de seguridad:\n"
+                    "- Solo ejecuta acciones COMMITTED (no preview).\n"
+                    "- Requiere un pulso humano (boton 'Siguiente accion').\n"
+                    "- Solo envia teclas si la ventana activa coincide con los titulos permitidos.\n\n"
+                    "Continuar?"
+                )
+                ok = bool(self._messagebox.askyesno("Armar live input", msg))
+                if not ok:
+                    self.asst_live_input_armed.set(False)
+                    return
+
+                # Ensure we are in keyboard/bridge mode when arming.
+                try:
+                    m = str(self.asst_input_mode.get() or "log").strip().lower()
+                except Exception:
+                    m = "log"
+                if m not in {"keyboard", "wininput", "bridge"}:
+                    self.asst_input_mode.set("keyboard")
+            except Exception:
+                try:
+                    self.asst_live_input_armed.set(False)
+                except Exception:
+                    pass
+
+        tk.Checkbutton(
+            live_frame,
+            text="ARMAR live input (entiendo el riesgo)",
+            variable=self.asst_live_input_armed,
+            command=_confirm_arm_live,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+
+        tk.Checkbutton(
+            live_frame,
+            text="Auto-ARM al iniciar cavebot",
+            variable=self.asst_auto_arm_on_cavebot_start,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        tk.Checkbutton(
+            live_frame,
+            text="Auto-ARM sin confirmación",
+            variable=self.asst_auto_arm_no_confirm,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        # Expose confirmation hook for use by cavebot auto-arm.
+        try:
+            self._confirm_arm_live = _confirm_arm_live
+        except Exception:
+            pass
+
+        tk.Label(live_frame, text="Titulos de ventana permitidos (coma)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(live_frame, textvariable=self.asst_allowed_window_titles, width=34).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Label(live_frame, text="Tip: usa 'TibiaClone Harness' para pruebas controladas").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
+        def open_live_input_harness() -> None:
+            try:
+                # Convenience: ensure the harness title is allowlisted.
+                try:
+                    harness_title = "TibiaClone Harness"
+                    raw = str(self.asst_allowed_window_titles.get() or "")
+                    titles = [s.strip() for s in raw.split(",") if s.strip()]
+                    if harness_title not in titles:
+                        titles.append(harness_title)
+                        self.asst_allowed_window_titles.set(", ".join(titles))
+                except Exception:
+                    pass
+
+                script = self._repo_root / "tools" / "live_input_harness.py"
+                if not script.is_file():
+                    self._messagebox.showerror("Harness", f"No existe: {script}")
+                    return
+                subprocess.Popen(
+                    [sys.executable, str(script), "--title", "TibiaClone Harness"],
+                    cwd=str(self._repo_root),
+                )
+            except Exception as e:
+                try:
+                    self._messagebox.showerror("Harness", f"No pude abrir el harness: {e}")
+                except Exception:
+                    pass
+
+        def add_foreground_title_to_allowlist() -> None:
+            try:
+                from input_guard import get_foreground_window_title
+
+                title = str(get_foreground_window_title() or "").strip()
+            except Exception:
+                title = ""
+
+            if not title:
+                try:
+                    self._messagebox.showwarning(
+                        "Lista permitida",
+                        "No pude leer el titulo de la ventana activa.\n\n"
+                        "Tip: ejecuta como Windows, o agrega el titulo manualmente.",
+                    )
+                except Exception:
+                    pass
+                return
+
+            try:
+                raw = str(self.asst_allowed_window_titles.get() or "")
+                titles = [s.strip() for s in raw.split(",") if s.strip()]
+                if title not in titles:
+                    titles.append(title)
+                    self.asst_allowed_window_titles.set(", ".join(titles))
+            except Exception:
+                pass
+
+        def reset_allowlist_defaults() -> None:
+            try:
+                defaults = ["TibiaClone", "MyClient", "TibiaClone Harness"]
+                self.asst_allowed_window_titles.set(",".join(defaults))
+            except Exception:
+                pass
+
+        def clear_allowlist() -> None:
+            try:
+                self.asst_allowed_window_titles.set("")
+            except Exception:
+                pass
+
+        tk.Button(live_frame, text="Abrir harness", width=14, command=open_live_input_harness).grid(
+            row=5, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(live_frame, text="Agregar ventana activa", width=20, command=add_foreground_title_to_allowlist).grid(
+            row=5, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Button(live_frame, text="Restaurar lista", width=14, command=reset_allowlist_defaults).grid(
+            row=6, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(live_frame, text="Limpiar lista", width=14, command=clear_allowlist).grid(
+            row=6, column=1, sticky="w", pady=(6, 0)
+        )
+
+        inj = tk.LabelFrame(cb_tab_hotkeys, text="Estado de inyeccion", padx=10, pady=8)
+        inj.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        tk.Label(inj, text="Paso").grid(row=0, column=0, sticky="w")
+        tk.Label(inj, textvariable=self.injection_step_var, width=34, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(inj, text="Etiqueta").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_label_var, width=34, anchor="w").grid(row=1, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="Siguiente").grid(row=2, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_next_var, width=34, anchor="w").grid(row=2, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="Estado").grid(row=3, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_state_var, width=34, anchor="w").grid(row=3, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="Motivo").grid(row=4, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_reason_var, width=34, anchor="w").grid(row=4, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="Modo/Driver").grid(row=5, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_mode_driver_var, width=34, anchor="w").grid(row=5, column=1, sticky="w", pady=(2, 0))
+
+        tk.Label(inj, text="Ventana activa").grid(row=6, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_foreground_var, width=34, anchor="w").grid(row=6, column=1, sticky="w", pady=(2, 0))
+        tk.Label(inj, text="Bloqueo").grid(row=7, column=0, sticky="w", pady=(2, 0))
+        tk.Label(inj, textvariable=self.injection_block_reason_var, width=34, anchor="w").grid(row=7, column=1, sticky="w", pady=(2, 0))
+
+        # --- TAB: Targeting ---
+        # Layout inspirado en "Monster Targeting" / "AutoTarget" de bots clásicos.
+        tgt_grid = tk.Frame(tab_targeting)
+        tgt_grid.grid(row=0, column=0, sticky="nw")
+        tgt_left = tk.Frame(tgt_grid)
+        tgt_left.grid(row=0, column=0, sticky="nw", padx=(0, 16))
+        tgt_right = tk.Frame(tgt_grid)
+        tgt_right.grid(row=0, column=1, sticky="nw")
+
+        # Monster list / behaviors: por ahora se edita en archivo (mejor que duplicar un editor YAML en UI)
+        monsters_frame = tk.LabelFrame(tgt_left, text="Monstruos (bestiary_match.yaml)", padx=10, pady=8)
+        monsters_frame.grid(row=0, column=0, sticky="w")
+
+        def open_bestiary_rules() -> None:
+            try:
+                p = self._repo_root / "configs" / "bestiary_match.yaml"
+                if p.exists():
+                    os.startfile(os.path.abspath(str(p)))
+            except Exception:
+                pass
+
+        def open_creatures_registry() -> None:
+            try:
+                p = self._repo_root / "data" / "creatures_registry.json"
+                if p.exists():
+                    os.startfile(os.path.abspath(str(p)))
+            except Exception:
+                pass
+
+        tk.Label(monsters_frame, text="Editar reglas/prioridades desde archivo:").grid(row=0, column=0, columnspan=2, sticky="w")
+        tk.Button(monsters_frame, text="Abrir bestiary_match.yaml", width=22, command=open_bestiary_rules).grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        tk.Button(monsters_frame, text="Abrir creatures_registry.json", width=22, command=open_creatures_registry).grid(
+            row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
+        )
+
+        # AutoTarget controls (assistant-only).
+        at_frame = tk.LabelFrame(tgt_right, text="AutoTarget", padx=10, pady=8)
+        at_frame.grid(row=0, column=0, sticky="w")
+
+        tk.Checkbutton(at_frame, text="AutoTarget activado", variable=self.autotarget_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Checkbutton(at_frame, text="Follow al activar", variable=self.autotarget_follow_on_enable).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        tk.Label(at_frame, text="Distancia de seguimiento (tiles)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(
+            at_frame,
+            from_=0,
+            to=10,
+            increment=1,
+            textvariable=self.autotarget_follow_distance_tiles,
+            width=6,
+        ).grid(row=2, column=1, sticky="w", pady=(6, 0))
+
+        tk.Label(at_frame, text="Re-target si se pierde (ms)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            at_frame,
+            from_=50,
+            to=10000,
+            increment=50,
+            textvariable=self.autotarget_retarget_lost_ms,
+            width=6,
+        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(at_frame, text="Lista blanca (1 por línea)").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        wl_box = tk.Text(at_frame, width=28, height=4)
+        wl_box.grid(row=5, column=0, columnspan=2, sticky="w")
+        try:
+            init_wl = str(self.autotarget_whitelist_text.get() or "").strip()
+            if init_wl:
+                wl_box.insert("1.0", init_wl)
+        except Exception:
+            pass
+        self._autotarget_whitelist_box = wl_box
+
+        tk.Label(at_frame, text="Lista negra (1 por línea)").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        bl_box = tk.Text(at_frame, width=28, height=4)
+        bl_box.grid(row=7, column=0, columnspan=2, sticky="w")
+        try:
+            init_bl = str(self.autotarget_blacklist_text.get() or "").strip()
+            if init_bl:
+                bl_box.insert("1.0", init_bl)
+        except Exception:
+            pass
+        self._autotarget_blacklist_box = bl_box
+
+        # Bind to live sync (function is defined later in __init__).
+        try:
+            wl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
+            wl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
+            bl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
+            bl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
+        except Exception:
+            pass
+
+        # Battlelist targeting (vision-based).
+        blt_frame = tk.LabelFrame(tgt_right, text="Selección en battlelist", padx=10, pady=8)
+        blt_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+
+        tk.Checkbutton(blt_frame, text="AutoTarget (visión) activado", variable=self.bl_target_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        tk.Label(blt_frame, text="Umbral de vivo").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0.1,
+            to=1.0,
+            increment=0.05,
+            textvariable=self.bl_target_alive_threshold,
+            width=6,
+        ).grid(row=1, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Debounce muerto (frames)").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=1,
+            to=30,
+            increment=1,
+            textvariable=self.bl_target_dead_debounce,
+            width=6,
+        ).grid(row=2, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Debounce selección (frames)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=1,
+            to=20,
+            increment=1,
+            textvariable=self.bl_target_select_debounce,
+            width=6,
+        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Enfriamiento scroll (ms)").grid(row=4, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0,
+            to=5000,
+            increment=50,
+            textvariable=self.bl_target_scroll_cooldown_ms,
+            width=6,
+        ).grid(row=4, column=1, sticky="w", pady=(4, 0))
+
+        tk.Label(blt_frame, text="Enfriamiento target (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(
+            blt_frame,
+            from_=0,
+            to=5000,
+            increment=50,
+            textvariable=self.bl_target_target_cooldown_ms,
+            width=6,
+        ).grid(row=5, column=1, sticky="w", pady=(4, 0))
+
+        tk.Checkbutton(blt_frame, text="Nombres por OCR", variable=self.bl_target_ocr_names).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+
         # --- TAB: Configuracion --- (dos columnas)
         cfg_grid = tk.Frame(tab_config)
         cfg_grid.grid(row=0, column=0, columnspan=4, sticky="nw")
@@ -1495,7 +1959,7 @@ class BotUI:
         cfg_right.grid(row=0, column=1, sticky="nw")
 
         # ROIs (izquierda) - lo esencial primero
-        tk.Label(cfg_left, text="ROIs config (override)").grid(row=0, column=0, sticky="w", pady=(4, 0))
+        tk.Label(cfg_left, text="Config ROIs (override)").grid(row=0, column=0, sticky="w", pady=(4, 0))
         tk.Entry(cfg_left, textvariable=self.rois_config_override, width=30).grid(
             row=0, column=1, sticky="w", pady=(4, 0)
         )
@@ -1505,16 +1969,16 @@ class BotUI:
                 from tkinter import filedialog
 
                 path = filedialog.askopenfilename(
-                    title="Selecciona ROIs profile JSON",
+                    title="Selecciona perfil ROIs (JSON)",
                     initialdir=str((Path(__file__).resolve().parent / "configs")),
-                    filetypes=[("JSON", "*.json"), ("All files", "*")],
+                    filetypes=[("JSON", "*.json"), ("Todos", "*")],
                 )
                 if path:
                     self.rois_config_override.set(path)
             except Exception:
                 pass
 
-        tk.Button(cfg_left, text="Browse", width=8, command=browse_rois).grid(
+        tk.Button(cfg_left, text="Examinar", width=10, command=browse_rois).grid(
             row=0, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
@@ -1561,7 +2025,7 @@ class BotUI:
                 "--monitor",
                 str(int(mon)),
             ]
-            _run_tool_async(cmd, title=f"ROI Picker ({roi_name})")
+            _run_tool_async(cmd, title=f"Selector de ROI ({roi_name})")
 
         def pick_ring_amulet() -> None:
             rois_path = _ensure_rois_path_for_tools()
@@ -1579,7 +2043,7 @@ class BotUI:
                 "--monitor",
                 str(int(mon)),
             ]
-            _run_tool_async(cmd, title="ROI Picker (ring/amulet)")
+            _run_tool_async(cmd, title="Selector de ROI (ring/amulet)")
 
         tk.Button(cfg_left, text="Ajustar interface", width=14, command=pick_one_roi).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(8, 0)
@@ -1599,355 +2063,33 @@ class BotUI:
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         # Debug (opcional): simulación de señales
-        sim_frame = tk.LabelFrame(cfg_left, text="Simulacion (debug)", padx=8, pady=6)
+        sim_frame = tk.LabelFrame(cfg_left, text="Simulación (debug)", padx=8, pady=6)
         sim_frame.grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
         tk.Checkbutton(sim_frame, text="Habilitar", variable=self.sim_enabled).grid(row=0, column=0, sticky="w")
-        tk.Checkbutton(sim_frame, text="Paralyzed", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Checkbutton(sim_frame, text="Paralizado", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Checkbutton(sim_frame, text="Haste", variable=self.sim_haste_active).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(6, 0))
         tk.Checkbutton(sim_frame, text="Utamo", variable=self.sim_utamo_active).grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Checkbutton(sim_frame, text="Hungry", variable=self.sim_hungry).grid(row=2, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
+        tk.Checkbutton(sim_frame, text="Hambriento", variable=self.sim_hungry).grid(row=2, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
 
-        # Asistente + Replay/Log (derecha)
-        tk.Checkbutton(cfg_right, text="Modo asistente (sin inputs)", variable=self.asst_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Checkbutton(cfg_right, text="Confirmacion humana (cavebot)", variable=self.asst_confirm).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Checkbutton(cfg_right, text="Alertas sonoras", variable=self.asst_sound).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
+        # Telemetría / Replay / Logs / Overlay (derecha) - agrupado estilo "HUD"
+        telemetry_frame = tk.LabelFrame(cfg_right, text="Telemetría", padx=10, pady=8)
+        telemetry_frame.grid(row=0, column=0, sticky="w")
 
-        tk.Label(cfg_right, text="Modo de inputs").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.OptionMenu(cfg_right, self.asst_input_mode, "log", "mock", "keyboard", "wininput", "bridge").grid(
-            row=3, column=1, sticky="w", pady=(6, 0)
+        tk.Checkbutton(telemetry_frame, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
+            row=0, column=0, columnspan=3, sticky="w"
         )
-
-        tk.Label(cfg_right, text="TARGET hotkey").grid(row=4, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.asst_target_hotkey, width=10).grid(
-            row=4, column=1, sticky="w", pady=(4, 0)
-        )
-
-        tk.Label(cfg_right, text="Minimap click hotkey").grid(row=5, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.asst_minimap_hotkey, width=10).grid(
-            row=5, column=1, sticky="w", pady=(4, 0)
-        )
-
-        # AutoTarget controls (assistant-only).
-        at_frame = tk.LabelFrame(cfg_right, text="AutoTarget", padx=8, pady=6)
-        at_frame.grid(row=6, column=0, columnspan=3, sticky="w", pady=(10, 0))
-
-        tk.Checkbutton(at_frame, text="AutoTarget ON", variable=self.autotarget_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Checkbutton(at_frame, text="Follow al activar", variable=self.autotarget_follow_on_enable).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Label(at_frame, text="Follow distance (tiles)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(telemetry_frame, text="Intervalo replay (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            at_frame,
-            from_=0,
-            to=10,
-            increment=1,
-            textvariable=self.autotarget_follow_distance_tiles,
-            width=6,
-        ).grid(row=2, column=1, sticky="w", pady=(6, 0))
+            telemetry_frame,
+            from_=100,
+            to=60000,
+            increment=100,
+            textvariable=self.replay_interval_ms,
+            width=8,
+        ).grid(row=1, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(at_frame, text="Retarget if lost (ms)").grid(row=3, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            at_frame,
-            from_=50,
-            to=10000,
-            increment=50,
-            textvariable=self.autotarget_retarget_lost_ms,
-            width=6,
-        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
-
-        tk.Label(at_frame, text="Whitelist (1 por linea)").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        wl_box = tk.Text(at_frame, width=28, height=4)
-        wl_box.grid(row=5, column=0, columnspan=2, sticky="w")
-        try:
-            init_wl = str(self.autotarget_whitelist_text.get() or "").strip()
-            if init_wl:
-                wl_box.insert("1.0", init_wl)
-        except Exception:
-            pass
-        self._autotarget_whitelist_box = wl_box
-
-        tk.Label(at_frame, text="Blacklist (1 por linea)").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        bl_box = tk.Text(at_frame, width=28, height=4)
-        bl_box.grid(row=7, column=0, columnspan=2, sticky="w")
-        try:
-            init_bl = str(self.autotarget_blacklist_text.get() or "").strip()
-            if init_bl:
-                bl_box.insert("1.0", init_bl)
-        except Exception:
-            pass
-        self._autotarget_blacklist_box = bl_box
-
-        # Bind to live sync (function is defined later in __init__).
-        try:
-            wl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
-            wl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
-            bl_box.bind("<KeyRelease>", lambda _e: sync_autotarget())
-            bl_box.bind("<FocusOut>", lambda _e: sync_autotarget())
-        except Exception:
-            pass
-
-        # Battlelist targeting (vision-based).
-        blt_frame = tk.LabelFrame(cfg_right, text="Battlelist Targeting", padx=8, pady=6)
-        blt_frame.grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 0))
-
-        tk.Checkbutton(blt_frame, text="AutoTarget (vision) ON", variable=self.bl_target_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Label(blt_frame, text="Alive threshold").grid(row=1, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            blt_frame,
-            from_=0.1,
-            to=1.0,
-            increment=0.05,
-            textvariable=self.bl_target_alive_threshold,
-            width=6,
-        ).grid(row=1, column=1, sticky="w", pady=(4, 0))
-
-        tk.Label(blt_frame, text="Dead debounce (frames)").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            blt_frame,
-            from_=1,
-            to=30,
-            increment=1,
-            textvariable=self.bl_target_dead_debounce,
-            width=6,
-        ).grid(row=2, column=1, sticky="w", pady=(4, 0))
-
-        tk.Label(blt_frame, text="Select debounce (frames)").grid(row=3, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            blt_frame,
-            from_=1,
-            to=20,
-            increment=1,
-            textvariable=self.bl_target_select_debounce,
-            width=6,
-        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
-
-        tk.Label(blt_frame, text="Scroll cooldown (ms)").grid(row=4, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            blt_frame,
-            from_=0,
-            to=5000,
-            increment=50,
-            textvariable=self.bl_target_scroll_cooldown_ms,
-            width=6,
-        ).grid(row=4, column=1, sticky="w", pady=(4, 0))
-
-        tk.Label(blt_frame, text="Target cooldown (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(
-            blt_frame,
-            from_=0,
-            to=5000,
-            increment=50,
-            textvariable=self.bl_target_target_cooldown_ms,
-            width=6,
-        ).grid(row=5, column=1, sticky="w", pady=(4, 0))
-
-        tk.Checkbutton(blt_frame, text="OCR names", variable=self.bl_target_ocr_names).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
-
-        # Live input guardrails (must not shift the rest of the layout).
-        live_frame = tk.LabelFrame(cfg_right, text="Live input safety", padx=8, pady=6)
-        live_frame.grid(row=8, column=0, columnspan=3, sticky="w", pady=(10, 0))
-
-        def _confirm_arm_live() -> None:
-            try:
-                if not bool(self.asst_live_input_armed.get()):
-                    return
-
-                msg = (
-                    "Vas a ARMAR live input (inyeccion real de teclas en Windows).\n\n"
-                    "Reglas de seguridad:\n"
-                    "- Solo ejecuta acciones COMMITTED (no preview).\n"
-                    "- Requiere un pulso humano (boton 'Siguiente accion').\n"
-                    "- Solo envia teclas si la ventana activa coincide con los titulos permitidos.\n\n"
-                    "Continuar?"
-                )
-                ok = bool(self._messagebox.askyesno("Arm live input", msg))
-                if not ok:
-                    self.asst_live_input_armed.set(False)
-                    return
-
-                # Ensure we are in keyboard mode when arming.
-                try:
-                    m = str(self.asst_input_mode.get() or "log").strip().lower()
-                except Exception:
-                    m = "log"
-                if m not in {"keyboard", "wininput", "bridge"}:
-                    self.asst_input_mode.set("keyboard")
-            except Exception:
-                try:
-                    self.asst_live_input_armed.set(False)
-                except Exception:
-                    pass
-
-        tk.Checkbutton(
-            live_frame,
-            text="ARM live input (I understand)",
-            variable=self.asst_live_input_armed,
-            command=_confirm_arm_live,
-        ).grid(row=0, column=0, columnspan=2, sticky="w")
-
-        # Optional: arm live input automatically when cavebot starts.
-        tk.Checkbutton(
-            live_frame,
-            text="Auto-ARM al iniciar cavebot",
-            variable=self.asst_auto_arm_on_cavebot_start,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
-        tk.Checkbutton(
-            live_frame,
-            text="Auto-ARM sin confirmación",
-            variable=self.asst_auto_arm_no_confirm,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
-        # Expose confirmation hook for use by cavebot auto-arm.
-        try:
-            self._confirm_arm_live = _confirm_arm_live
-        except Exception:
-            pass
-
-        tk.Label(live_frame, text="Allowed window titles (comma)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(live_frame, textvariable=self.asst_allowed_window_titles, width=34).grid(
-            row=3, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(
-            live_frame,
-            text="Tip: usa 'TibiaClone Harness' para pruebas controladas",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-        def open_live_input_harness() -> None:
-            try:
-                # Convenience: ensure the harness title is allowlisted.
-                # This does NOT arm live input; it only updates the allowlist.
-                try:
-                    harness_title = "TibiaClone Harness"
-                    raw = str(self.asst_allowed_window_titles.get() or "")
-                    titles = [s.strip() for s in raw.split(",") if s.strip()]
-                    if harness_title not in titles:
-                        titles.append(harness_title)
-                        self.asst_allowed_window_titles.set(", ".join(titles))
-                except Exception:
-                    pass
-
-                script = self._repo_root / "tools" / "live_input_harness.py"
-                if not script.is_file():
-                    self._messagebox.showerror("Harness", f"No existe: {script}")
-                    return
-                # Use the current interpreter (Poetry/venv) so Tk deps match.
-                subprocess.Popen(
-                    [sys.executable, str(script), "--title", "TibiaClone Harness"],
-                    cwd=str(self._repo_root),
-                )
-            except Exception as e:
-                try:
-                    self._messagebox.showerror("Harness", f"No pude abrir el harness: {e}")
-                except Exception:
-                    pass
-
-        def add_foreground_title_to_allowlist() -> None:
-            """Append the current foreground window title to the allowlist.
-
-            This does NOT arm live input; it only helps populate the allowlist.
-            """
-
-            try:
-                from input_guard import get_foreground_window_title
-
-                title = str(get_foreground_window_title() or "").strip()
-            except Exception:
-                title = ""
-
-            if not title:
-                try:
-                    self._messagebox.showwarning(
-                        "Allowlist",
-                        "No pude leer el titulo de la ventana activa.\n\n"
-                        "Tip: ejecuta como Windows, o agrega el titulo manualmente.",
-                    )
-                except Exception:
-                    pass
-                return
-
-            try:
-                raw = str(self.asst_allowed_window_titles.get() or "")
-                titles = [s.strip() for s in raw.split(",") if s.strip()]
-                if title not in titles:
-                    titles.append(title)
-                    self.asst_allowed_window_titles.set(", ".join(titles))
-            except Exception:
-                pass
-
-        def reset_allowlist_defaults() -> None:
-            """Reset allowlist to safe defaults.
-
-            This does NOT arm live input.
-            """
-
-            try:
-                defaults = ["TibiaClone", "MyClient", "TibiaClone Harness"]
-                self.asst_allowed_window_titles.set(",".join(defaults))
-            except Exception:
-                pass
-
-        def clear_allowlist() -> None:
-            """Clear the allowlist.
-
-            This does NOT arm live input.
-            """
-
-            try:
-                self.asst_allowed_window_titles.set("")
-            except Exception:
-                pass
-
-        tk.Button(live_frame, text="Abrir harness", width=14, command=open_live_input_harness).grid(
-            row=3, column=0, sticky="w", pady=(6, 0)
-        )
-
-        tk.Button(
-            live_frame,
-            text="Add foreground",
-            width=14,
-            command=add_foreground_title_to_allowlist,
-        ).grid(row=3, column=1, sticky="w", pady=(6, 0))
-
-        tk.Button(
-            live_frame,
-            text="Reset allowlist",
-            width=14,
-            command=reset_allowlist_defaults,
-        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
-
-        tk.Button(
-            live_frame,
-            text="Clear allowlist",
-            width=14,
-            command=clear_allowlist,
-        ).grid(row=4, column=1, sticky="w", pady=(6, 0))
-
-        tk.Checkbutton(cfg_right, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
-            row=8, column=0, columnspan=2, sticky="w"
-        )
-        tk.Label(cfg_right, text="Replay interval (ms)").grid(row=9, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=100, to=60000, increment=100, textvariable=self.replay_interval_ms, width=8).grid(
-            row=9, column=1, sticky="w", pady=(4, 0)
-        )
-
-        tk.Label(cfg_right, text="Replay out_dir").grid(row=9, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.replay_out_dir, width=28).grid(
-            row=9, column=1, sticky="w", pady=(4, 0)
-        )
+        tk.Label(telemetry_frame, text="Carpeta replay").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(telemetry_frame, textvariable=self.replay_out_dir, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
 
         def open_replay_dir() -> None:
             try:
@@ -1963,41 +2105,47 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
-            row=8, column=2, sticky="w", padx=(8, 0)
+        tk.Button(telemetry_frame, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
+            row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
-            row=9, column=2, sticky="w", padx=(8, 0)
+        tk.Button(telemetry_frame, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
+            row=2, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        tk.Label(cfg_right, text="Preset (replay/log)").grid(row=10, column=0, sticky="w", pady=(6, 0))
+        preset_frame = tk.LabelFrame(cfg_right, text="Presets", padx=10, pady=8)
+        preset_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        tk.Label(preset_frame, text="Preset (replay/log)").grid(row=0, column=0, sticky="w")
         tel_presets = ["Custom", "Off", "Debug", "Soak", "Soak Full"]
         ttk.Combobox(
-            cfg_right,
+            preset_frame,
             textvariable=self.telemetry_preset,
             values=tel_presets,
             width=16,
             state="readonly",
-        ).grid(row=10, column=1, sticky="w", pady=(6, 0))
+        ).grid(row=0, column=1, sticky="w")
         tk.Button(
-            cfg_right,
+            preset_frame,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_telemetry_preset(str(self.telemetry_preset.get())),
-        ).grid(row=10, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        ).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
-        tk.Checkbutton(cfg_right, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
-            row=11, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        log_frame = tk.LabelFrame(cfg_right, text="JSONL", padx=10, pady=8)
+        log_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
+        tk.Checkbutton(log_frame, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
+            row=0, column=0, columnspan=3, sticky="w"
         )
-        tk.Label(cfg_right, text="Log interval (ms)").grid(row=12, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=100, to=60000, increment=50, textvariable=self.log_interval_ms, width=8).grid(
-            row=12, column=1, sticky="w", pady=(4, 0)
-        )
-
-        tk.Label(cfg_right, text="Log out_file").grid(row=13, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.log_out_file, width=28).grid(
-            row=13, column=1, sticky="w", pady=(4, 0)
-        )
+        tk.Label(log_frame, text="Intervalo log (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(
+            log_frame,
+            from_=100,
+            to=60000,
+            increment=50,
+            textvariable=self.log_interval_ms,
+            width=8,
+        ).grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(log_frame, text="Archivo log").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(log_frame, textvariable=self.log_out_file, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
 
         def open_log_parent() -> None:
             try:
@@ -2020,69 +2168,58 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_log_parent).grid(
-            row=13, column=2, sticky="w", padx=(8, 0)
+        tk.Button(log_frame, text="Abrir carpeta", width=12, command=open_log_parent).grid(
+            row=2, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(cfg_right, text="Abrir archivo", width=12, command=open_log_file).grid(
-            row=14, column=2, sticky="w", padx=(8, 0)
+        tk.Button(log_frame, text="Abrir archivo", width=12, command=open_log_file).grid(
+            row=3, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         # --- TAB: Rutas / Cavebot ---
         self._build_routes_tab(tab_routes)
 
-        # Idle alert + Overlay (derecha, debajo)
-        tk.Label(cfg_right, text="Idle (alerta / anti-stuck, sin inputs)").grid(
-            row=11, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        idle_frame = tk.LabelFrame(cfg_right, text="Idle (alerta / anti-stuck)", padx=10, pady=8)
+        idle_frame.grid(row=3, column=0, sticky="w", pady=(10, 0))
+        tk.Label(idle_frame, text="WARN si idle >= (s)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(idle_frame, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
+            row=0, column=1, sticky="w"
         )
-        tk.Label(cfg_right, text="WARN si idle >= (s)").grid(row=12, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
-            row=12, column=1, sticky="w", pady=(4, 0)
+        tk.Label(idle_frame, text="FAIL si idle >= (s)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(idle_frame, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
+            row=1, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Label(cfg_right, text="FAIL si idle >= (s)").grid(row=13, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
-            row=13, column=1, sticky="w", pady=(4, 0)
+        tk.Label(idle_frame, text="Repetir alerta cada (s)").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(idle_frame, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+            row=2, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(cfg_right, text="Repetir alerta cada (s)").grid(row=14, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
-            row=14, column=1, sticky="w", pady=(4, 0)
-        )
-        tk.Label(
-            cfg_right,
-            text="(0 desactiva. Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=15, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        tk.Label(idle_frame, text="(0 desactiva. Requiere reinicio)").grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        tk.Label(cfg_right, text="Overlay (frames anotados)").grid(
-            row=16, column=0, columnspan=3, sticky="w", pady=(10, 0)
-        )
-        tk.Label(cfg_right, text="Preset").grid(row=17, column=0, sticky="w", pady=(4, 0))
+        overlay_frame = tk.LabelFrame(cfg_right, text="Overlay (frames anotados)", padx=10, pady=8)
+        overlay_frame.grid(row=4, column=0, sticky="w", pady=(10, 0))
+
+        tk.Label(overlay_frame, text="Preset").grid(row=0, column=0, sticky="w")
         overlay_presets = ["Custom", "Minimal", "Debug HUD", "Full HUD"]
         ttk.Combobox(
-            cfg_right,
+            overlay_frame,
             textvariable=self.overlay_preset,
             values=overlay_presets,
             width=16,
             state="readonly",
-        ).grid(row=17, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=0, column=1, sticky="w")
         tk.Button(
-            cfg_right,
+            overlay_frame,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_overlay_preset(str(self.overlay_preset.get())),
-        ).grid(row=17, column=2, sticky="w", padx=(8, 0), pady=(4, 0))
+        ).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
-        tk.Checkbutton(cfg_right, text="Habilitar overlay", variable=self.overlay_enabled).grid(
-            row=18, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Button(cfg_right, text="Cargar UI", width=12, command=self._load_ui_settings).grid(
-            row=18, column=2, sticky="w", pady=(4, 0)
-        )
-        tk.Button(cfg_right, text="Guardar UI", width=12, command=self._save_ui_settings).grid(
-            row=19, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
+        tk.Checkbutton(overlay_frame, text="Habilitar overlay", variable=self.overlay_enabled).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(cfg_right, text="Overlay out_dir").grid(row=19, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.overlay_out_dir, width=28).grid(
-            row=19, column=1, sticky="w", pady=(4, 0)
+        tk.Label(overlay_frame, text="Carpeta overlay").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(overlay_frame, textvariable=self.overlay_out_dir, width=28).grid(
+            row=2, column=1, sticky="w", pady=(6, 0)
         )
 
         def open_overlay_dir() -> None:
@@ -2093,34 +2230,34 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
-            row=20, column=2, sticky="w", padx=(8, 0)
+        tk.Button(overlay_frame, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
+            row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Label(cfg_right, text="Interval (s)").grid(row=20, column=0, sticky="w", pady=(4, 0))
+        tk.Label(overlay_frame, text="Intervalo (s)").grid(row=3, column=0, sticky="w", pady=(4, 0))
         tk.Spinbox(
-            cfg_right,
+            overlay_frame,
             from_=0.1,
             to=60.0,
             increment=0.1,
             textvariable=self.overlay_interval_s,
             width=8,
-        ).grid(row=20, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
 
-        tk.Checkbutton(cfg_right, text="Tile grid", variable=self.overlay_tile_grid).grid(
-            row=21, column=0, columnspan=2, sticky="w", pady=(4, 0)
+        tk.Checkbutton(overlay_frame, text="Grilla de tiles", variable=self.overlay_tile_grid).grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
-        tk.Label(cfg_right, text="Tile px").grid(row=21, column=2, sticky="w", pady=(4, 0))
-        tk.Spinbox(cfg_right, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
-            row=21, column=3, sticky="w", pady=(4, 0)
+        tk.Label(overlay_frame, text="Tile px").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Spinbox(overlay_frame, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
+            row=4, column=3, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(cfg_right, text="OVERLAY_ROIS (CSV)").grid(row=22, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(cfg_right, textvariable=self.overlay_rois, width=28).grid(
-            row=22, column=1, sticky="w", pady=(4, 0)
+        tk.Label(overlay_frame, text="OVERLAY_ROIS (CSV)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(overlay_frame, textvariable=self.overlay_rois, width=28).grid(
+            row=5, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(cfg_right, text="(Se aplica al iniciar el bot; requiere reinicio)").grid(
-            row=23, column=0, columnspan=3, sticky="w", pady=(4, 0)
+        tk.Label(overlay_frame, text="(Se aplica al iniciar el bot; requiere reinicio)").grid(
+            row=6, column=0, columnspan=3, sticky="w", pady=(6, 0)
         )
 
         # Ajustes UI y soak (abajo)
@@ -2140,7 +2277,7 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Reset defaults", width=18, command=self._reset_ui_defaults).grid(
+        tk.Button(cfg_right, text="Restaurar valores", width=18, command=self._reset_ui_defaults).grid(
             row=24, column=0, sticky="w", pady=(6, 0)
         )
         tk.Button(cfg_right, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
@@ -2478,6 +2615,7 @@ class BotUI:
                 pass
 
             # Cavebot stop conditions (assistant-only).
+            # CAP_LEAVE_* already exists in core; POTIONS_* is a manual operator input.
             try:
                 os.environ["CAP_LEAVE_ENABLED"] = "1" if bool(self.cavebot_stop_on_low_cap.get()) else "0"
                 os.environ["CAP_LEAVE_THRESHOLD"] = str(max(0, int(self.cavebot_cap_threshold.get())))
@@ -2768,15 +2906,9 @@ class BotUI:
                 mp_str = "?"
                 cap_str = "?"
                 if tel.hp_current is not None and tel.hp_max is not None:
-                    if tel.hp_pct is not None:
-                        hp_str = f"{tel.hp_current}/{tel.hp_max} ({tel.hp_pct:.1f}%)"
-                    else:
-                        hp_str = f"{tel.hp_current}/{tel.hp_max}"
+                    hp_str = f"{tel.hp_current}/{tel.hp_max}"
                 if tel.mp_current is not None and tel.mp_max is not None:
-                    if tel.mp_pct is not None:
-                        mp_str = f"{tel.mp_current}/{tel.mp_max} ({tel.mp_pct:.1f}%)"
-                    else:
-                        mp_str = f"{tel.mp_current}/{tel.mp_max}"
+                    mp_str = f"{tel.mp_current}/{tel.mp_max}"
 
                 if tel.cap_current is not None:
                     cap_str = f"{tel.cap_current}"
@@ -4025,6 +4157,17 @@ class BotUI:
         except Exception:
             pass
 
+        # Stats (env-backed overrides)
+        try:
+            st = data.get("stats")
+            if isinstance(st, dict):
+                if "hp_max" in st:
+                    self.hp_max_override.set(str(st.get("hp_max") or "").strip())
+                if "mp_max" in st:
+                    self.mp_max_override.set(str(st.get("mp_max") or "").strip())
+        except Exception:
+            pass
+
         try:
             preset = data.get("overlay_preset")
             if isinstance(preset, str) and preset:
@@ -4066,7 +4209,7 @@ class BotUI:
         steps_frame.grid_rowconfigure(1, weight=1)
         steps_frame.grid_columnconfigure(0, weight=1)
 
-        columns = ("#", "Tipo", "X", "Y", "Z", "Nombre/Accion", "Params", "Comment", "Enabled")
+        columns = ("#", "Tipo", "X", "Y", "Z", "Nombre/Acción", "Parámetros", "Comentario", "Habilitado")
         self.route_tree = ttk.Treeview(steps_frame, columns=columns, show="headings", height=14)
         for col, w in zip(columns, [40, 90, 70, 70, 50, 140, 120, 120, 70]):
             self.route_tree.heading(col, text=col)
@@ -4098,13 +4241,13 @@ class BotUI:
         tk.Label(form, text="Z").grid(row=0, column=6, sticky="w")
         tk.Entry(form, textvariable=self.route_z_var, width=5).grid(row=0, column=7, sticky="w")
 
-        tk.Label(form, text="Nombre/Accion").grid(row=1, column=0, sticky="w")
+        tk.Label(form, text="Nombre/Acción").grid(row=1, column=0, sticky="w")
         tk.Entry(form, textvariable=self.route_name_var, width=28).grid(row=1, column=1, columnspan=3, sticky="w")
-        tk.Label(form, text="Params").grid(row=1, column=4, sticky="w")
+        tk.Label(form, text="Parámetros").grid(row=1, column=4, sticky="w")
         tk.Entry(form, textvariable=self.route_params_var, width=18).grid(row=1, column=5, columnspan=2, sticky="w")
-        tk.Label(form, text="Comment").grid(row=2, column=0, sticky="w")
+        tk.Label(form, text="Comentario").grid(row=2, column=0, sticky="w")
         tk.Entry(form, textvariable=self.route_comment_var, width=46).grid(row=2, column=1, columnspan=5, sticky="w")
-        tk.Checkbutton(form, text="Enabled", variable=self.route_enabled_var).grid(row=2, column=6, sticky="w")
+        tk.Checkbutton(form, text="Habilitado", variable=self.route_enabled_var).grid(row=2, column=6, sticky="w")
 
         btn_row = tk.Frame(steps_frame)
         btn_row.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
@@ -4118,7 +4261,7 @@ class BotUI:
 
         tpl_row = tk.Frame(steps_frame)
         tpl_row.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        tk.Button(tpl_row, text="Desde posicion", width=14, command=self._route_add_from_position).grid(row=0, column=0, padx=(0, 4))
+        tk.Button(tpl_row, text="Desde posición", width=14, command=self._route_add_from_position).grid(row=0, column=0, padx=(0, 4))
         tk.Button(tpl_row, text="Agregar MOVE", width=12, command=self._route_add_move).grid(row=0, column=1, padx=(0, 4))
         tk.Button(tpl_row, text="action=rope", width=12, command=lambda: self._route_template_action("rope")).grid(row=0, column=2, padx=(0, 4))
         tk.Button(tpl_row, text="action=abre_puerta", width=16, command=lambda: self._route_template_action("abre_puerta")).grid(row=0, column=3, padx=(0, 4))
@@ -4240,7 +4383,7 @@ class BotUI:
             params = ""
             if s.params:
                 params = ",".join(f"{k}={v}" for k, v in s.params.items())
-            tree.insert("", "end", iid=str(idx - 1), values=(idx, s.kind, s.x or "", s.y or "", s.z or "", s.name, params, s.comment, "yes" if s.enabled else "no"))
+            tree.insert("", "end", iid=str(idx - 1), values=(idx, s.kind, s.x or "", s.y or "", s.z or "", s.name, params, s.comment, "sí" if s.enabled else "no"))
 
     def _route_get_selected_index(self) -> int | None:
         tree = getattr(self, "route_tree", None)
@@ -4579,12 +4722,62 @@ class BotUI:
                 "rois": {
                     "config_override": str(self.rois_config_override.get()).strip(),
                 },
+                "stats": {
+                    "hp_max": str(self.hp_max_override.get()).strip(),
+                    "mp_max": str(self.mp_max_override.get()).strip(),
+                },
             }
         except Exception:
             return
 
         try:
             p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _apply_hpmp_max_env(self) -> None:
+        """Apply HP/MP max overrides to env (blank = unset) and persist UI settings."""
+
+        # Default OFF: avoid changing runtime behavior via UI unless explicitly enabled.
+        try:
+            enabled = (os.getenv("UI_ENABLE_HPMP_MAX_OVERRIDES", "0") or "0").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            enabled = False
+        if not enabled:
+            return
+
+        def _set_or_unset(key: str, raw: str) -> None:
+            s = str(raw or "").strip()
+            if not s:
+                os.environ.pop(key, None)
+                return
+            try:
+                v = int(float(s))
+            except Exception:
+                os.environ.pop(key, None)
+                return
+            if v > 0:
+                os.environ[key] = str(v)
+            else:
+                os.environ.pop(key, None)
+
+        try:
+            _set_or_unset("TIBIA_HP_MAX", self.hp_max_override.get())
+        except Exception:
+            try:
+                os.environ.pop("TIBIA_HP_MAX", None)
+            except Exception:
+                pass
+        try:
+            _set_or_unset("TIBIA_MP_MAX", self.mp_max_override.get())
+        except Exception:
+            try:
+                os.environ.pop("TIBIA_MP_MAX", None)
+            except Exception:
+                pass
+
+        try:
+            self._save_ui_settings()
         except Exception:
             pass
 
@@ -5087,6 +5280,12 @@ class BotUI:
                 os.environ["ROIS_CONFIG"] = rois_path
             else:
                 os.environ.pop("ROIS_CONFIG", None)
+        except Exception:
+            pass
+
+        # Apply HP/MP max overrides for this run (used by GameStateBuilder bar fallback).
+        try:
+            self._apply_hpmp_max_env()
         except Exception:
             pass
 

@@ -40,6 +40,7 @@ from telemetry.jsonl_logger import JsonlLogger
 from telemetry.jsonl_writer import JsonlWriter
 from vision.anchor_tracker import AnchorTracker
 from vision.viewport_tracker import ViewportTracker
+from layout_tracker import LayoutTracker
 from vision.battlelist_targeting import TargetingController
 from runtime_config import BattlelistTargetingConfig
 
@@ -512,6 +513,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     anchor_tracker = AnchorTracker()
     viewport_tracker = ViewportTracker()
+    layout_tracker = LayoutTracker(anchor_tracker=anchor_tracker, viewport_tracker=viewport_tracker)
     battlelist_targeting = TargetingController()
 
     replay = ReplayRecorder()
@@ -657,18 +659,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
                 # Auto-align ROIs if an anchor is configured (handles HUD moves).
                 try:
-                    anchor_tracker.maybe_update(
-                        frame=frame,
-                        rois=rois,
-                        resolution=resolution,
-                        roi_to_px=gamestate_builder.ocr_processor._roi_to_px,
-                    )
-                except Exception:
-                    pass
-
-                # Auto-adjust game_viewport if side panels/bars change.
-                try:
-                    viewport_tracker.maybe_update(
+                    layout_tracker.update(
                         frame=frame,
                         rois=rois,
                         resolution=resolution,

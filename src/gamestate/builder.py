@@ -13,6 +13,7 @@ from vision.presence import is_hungry_hsv, is_nonempty_icon, is_nonempty_equipme
 from vision.minimap_motion import MinimapMotionTracker
 from vision import battlelist
 from vision.roi import roi_to_px_result
+from layout_tracker import LayoutTracker
 
 @dataclass
 class GameState:
@@ -610,6 +611,37 @@ class GameStateBuilder:
             "battlelist": {},
         }
 
+        # Layout snapshot + px conversion for critical ROIs (debug/telemetry).
+        try:
+            layout_state = None
+            if hasattr(rois, "get"):
+                ls = rois.get("_layout_state")
+                if isinstance(ls, dict):
+                    layout_state = dict(ls)
+            hud_debug["layout"] = layout_state
+        except Exception:
+            hud_debug["layout"] = None
+
+        try:
+            hud_debug["rois_px"] = LayoutTracker.apply_layout(
+                frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                rois=rois,
+                resolution=resolution,
+                names=[
+                    "hp_top_ocr",
+                    "mp_top_ocr",
+                    "hp_low_bar",
+                    "mp_low_bar",
+                    "cap_ocr",
+                    "skills_panel",
+                    "battlelist_rows",
+                    "coords_ocr",
+                    "game_viewport",
+                ],
+            )
+        except Exception:
+            hud_debug["rois_px"] = {}
+
         if do_ocr:
             try:
                 hp_current, hp_max, mp_current, mp_max = self.ocr_processor.extract_hp_mp_full(
@@ -661,11 +693,18 @@ class GameStateBuilder:
                 cap_reason = "exception"
 
             self._ocr_last_ts = now
-            self._last_hp_current = hp_current
-            self._last_hp_max = hp_max
-            self._last_mp_current = mp_current
-            self._last_mp_max = mp_max
-            self._last_cap_current = cap_current
+            # Cache only when we have a value, so intermittent OCR failures
+            # don't erase a previously known max/current.
+            if hp_current is not None:
+                self._last_hp_current = hp_current
+            if hp_max is not None:
+                self._last_hp_max = hp_max
+            if mp_current is not None:
+                self._last_mp_current = mp_current
+            if mp_max is not None:
+                self._last_mp_max = mp_max
+            if cap_current is not None:
+                self._last_cap_current = cap_current
         else:
             # Reusar lo último conocido
             hp_current = self._last_hp_current
@@ -837,6 +876,10 @@ class GameStateBuilder:
             mp_current = int(round(mp_ratio * mp_max))
             mp_method = "bar_low"
             mp_reason = f"fallback:{mp_reason}" if mp_reason else "fallback_no_ocr"
+        elif mp_current is None and mp_ratio is not None:
+            # We can still estimate MP% from the bar even if max isn't known.
+            mp_method = "bar_low_pct"
+            mp_reason = "pct_only"
         elif mp_current is None and not mp_method:
             mp_method = "none"
             mp_reason = "no_ocr_no_bar"
@@ -852,6 +895,18 @@ class GameStateBuilder:
         except Exception:
             hp_pct = None
             mp_pct = None
+
+        # If we don't have cur/max but we do have a bar ratio, still expose %.
+        try:
+            if hp_pct is None and hp_ratio is not None:
+                hp_pct = float(hp_ratio) * 100.0
+        except Exception:
+            pass
+        try:
+            if mp_pct is None and mp_ratio is not None:
+                mp_pct = float(mp_ratio) * 100.0
+        except Exception:
+            pass
 
         gamestate = GameState(
             hp_current=hp_current,

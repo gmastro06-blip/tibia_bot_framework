@@ -156,7 +156,7 @@ def main() -> int:
         except Exception:
             anchor_name_display = ""
     else:
-        # Fallback to an auto anchor roi_norm, but require a real template path (user-supplied).
+        # Fallback to an auto anchor roi_norm, but require a real template path.
         anchor_name, anchor_roi = _pick_anchor_roi(rois)
         if anchor_name is None or anchor_roi is None:
             print(
@@ -166,7 +166,17 @@ def main() -> int:
 
         tmpl = _resolve_rois_path(args.template) or str(args.template or "").strip()
         if not tmpl:
+            # Default: if you previously ran create_anchor_template, use it.
+            try:
+                repo_root = Path(__file__).resolve().parent.parent
+                cand = repo_root / "data" / "anchors" / "hud_anchor.png"
+                if cand.exists() and cand.is_file():
+                    tmpl = str(cand)
+            except Exception:
+                tmpl = ""
+        if not tmpl:
             print("FAIL: no _anchor config found and no --template provided")
+            print("Hint: ejecuta 'Configurar ancla' para crear data/anchors/hud_anchor.png")
             return 4
 
         rois["_anchor"] = {
@@ -226,7 +236,21 @@ def main() -> int:
                     continue
 
             try:
-                ax, ay, aw, ah = ocr._roi_to_px(frame, rois, resolution, anchor_roi)  # type: ignore[arg-type]
+                anchor_roi_norm = None
+                try:
+                    raw = rois.get("_anchor")
+                    if isinstance(raw, Mapping):
+                        anchor_roi_norm = raw.get("roi_norm")
+                except Exception:
+                    anchor_roi_norm = None
+
+                if anchor_roi_norm is None and "anchor_roi" in locals():
+                    anchor_roi_norm = anchor_roi
+
+                if not isinstance(anchor_roi_norm, Mapping):
+                    raise RuntimeError("no anchor_roi_norm")
+
+                ax, ay, aw, ah = ocr._roi_to_px(frame, rois, resolution, anchor_roi_norm)  # type: ignore[arg-type]
                 cv2.rectangle(overlay, (int(ax), int(ay)), (int(ax + aw), int(ay + ah)), (255, 255, 0), 2)
                 cv2.putText(
                     overlay,

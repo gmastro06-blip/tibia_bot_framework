@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from typing import Any, Mapping, Tuple
+
+import cv2
+import numpy as np
+
+import os
 import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Tuple
@@ -55,6 +62,145 @@ class ViewportTracker:
         # Learned discrete viewport states in *source px* space.
         # Each entry: (x, y, w, h, hits, last_ts)
         self._states: list[tuple[float, float, float, float, int, float]] = []
+
+        # Optional panel reference templates (manual setup) to detect when
+        # side panels are open and snap viewport boundaries accordingly.
+        # Cache: path -> (edges, (th, tw))
+        self._panel_tmpl_cache: dict[str, tuple[np.ndarray, tuple[int, int]]] = {}
+
+    @staticmethod
+    def _to_gray(img: np.ndarray) -> np.ndarray:
+        if img is None or getattr(img, "size", 0) == 0:
+            return np.zeros((1, 1), dtype=np.uint8)
+        if img.ndim == 2:
+            return img
+        try:
+            return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        except Exception:
+            return img.reshape(-1).astype(np.uint8)
+
+    def _load_panel_refs(self, rois: Mapping[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(rois, dict):
+            return None
+        raw = rois.get("_panel_refs")
+        if isinstance(raw, dict) and raw:
+            return raw
+        return None
+
+    def _load_panel_template(self, *, path: str, canny_low: int, canny_high: int) -> tuple[np.ndarray, tuple[int, int]] | None:
+        p = (path or "").strip()
+        if not p:
+            return None
+        cached = self._panel_tmpl_cache.get(p)
+        if cached is not None:
+            return cached
+        try:
+            img = cv2.imread(p)
+        except Exception:
+            img = None
+        if img is None or getattr(img, "size", 0) == 0:
+            return None
+        g = self._to_gray(img)
+        try:
+            edges = cv2.Canny(g, int(canny_low), int(canny_high))
+        except Exception:
+            edges = g
+        edges = np.asarray(edges, dtype=np.uint8)
+        th, tw = int(edges.shape[0]), int(edges.shape[1])
+        if th <= 0 or tw <= 0:
+            return None
+        self._panel_tmpl_cache[p] = (edges, (th, tw))
+        return (edges, (th, tw))
+
+    def _panel_match(
+        self,
+        *,
+        frame: np.ndarray,
+        rois: Mapping[str, Any],
+        resolution: Tuple[int, int],
+        roi_to_px,
+        ref: Mapping[str, Any],
+    ) -> tuple[float, int, int, int, int] | None:
+        """Return (score, found_x, found_y, tw, th) in frame pixels."""
+
+        if frame is None or getattr(frame, "size", 0) == 0:
+            return None
+        if not isinstance(ref, Mapping):
+            return None
+
+        roi_norm = ref.get("roi_norm")
+        if not isinstance(roi_norm, Mapping):
+            return None
+
+        template_path = str(ref.get("template_path") or "").strip()
+        if not template_path:
+            return None
+
+        # Resolve relative paths from repo root.
+        try:
+            if not os.path.isabs(template_path):
+                # src/vision/viewport_tracker.py -> repo root
+                repo_root = Path(__file__).resolve().parents[2]
+                template_path = str((repo_root / template_path).resolve())
+        except Exception:
+            pass
+
+        try:
+            canny_low = int(ref.get("canny_low", 60))
+        except Exception:
+            canny_low = 60
+        try:
+            canny_high = int(ref.get("canny_high", 140))
+        except Exception:
+            canny_high = 140
+
+        tmpl_loaded = self._load_panel_template(path=template_path, canny_low=canny_low, canny_high=canny_high)
+        if tmpl_loaded is None:
+            return None
+        tmpl_edges, (th, tw) = tmpl_loaded
+
+        try:
+            x_exp, y_exp, w_exp, h_exp = roi_to_px(frame, rois, resolution, roi_norm)
+        except Exception:
+            return None
+
+        frame_h, frame_w = int(frame.shape[0]), int(frame.shape[1])
+        try:
+            r = int(ref.get("search_radius_px", 560))
+        except Exception:
+            r = 560
+        r = max(40, min(1200, int(r)))
+        sx0 = max(0, int(x_exp - r))
+        sy0 = max(0, int(y_exp - r))
+        sx1 = min(frame_w, int(x_exp + w_exp + r))
+        sy1 = min(frame_h, int(y_exp + h_exp + r))
+        if (sx1 - sx0) < max(20, tw + 2) or (sy1 - sy0) < max(20, th + 2):
+            return None
+
+        win = frame[sy0:sy1, sx0:sx1]
+        g = self._to_gray(win)
+        try:
+            win_edges = cv2.Canny(g, int(canny_low), int(canny_high))
+        except Exception:
+            win_edges = g
+
+        try:
+            res = cv2.matchTemplate(np.asarray(win_edges, dtype=np.uint8), tmpl_edges, cv2.TM_CCOEFF_NORMED)
+            _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(res)
+        except Exception:
+            return None
+
+        score = float(max_val)
+        try:
+            min_score = float(ref.get("min_score", 0.55))
+        except Exception:
+            min_score = 0.55
+        if score < float(min_score):
+            return None
+
+        found_x = int(sx0 + int(max_loc[0]))
+        found_y = int(sy0 + int(max_loc[1]))
+        return score, found_x, found_y, int(tw), int(th)
 
     def _estimate_panel_clips(
         self, *, x: float, w: float
@@ -270,9 +416,50 @@ class ViewportTracker:
             self._last_update_ts = now
             return
 
-        # Establish horizontal bounds using right-side panels as hard stop.
+        # Establish horizontal bounds using panel reference templates (optional)
+        # and right-side panels as hard stop.
         x0 = 0
         x1 = frame_w
+
+        # (A) Optional: explicit panel refs (manual templates) to detect when panels are open.
+        panel_refs = self._load_panel_refs(rois)
+        panel_dbg = {}
+        if panel_refs is not None:
+            try:
+                left_ref = panel_refs.get("left") if isinstance(panel_refs, dict) else None
+            except Exception:
+                left_ref = None
+            try:
+                right_ref = panel_refs.get("right") if isinstance(panel_refs, dict) else None
+            except Exception:
+                right_ref = None
+
+            # Left panel: we want viewport start at the RIGHT edge of the matched template.
+            try:
+                if isinstance(left_ref, Mapping):
+                    m = self._panel_match(frame=frame, rois=rois, resolution=resolution, roi_to_px=roi_to_px, ref=left_ref)
+                    if m is not None:
+                        s, fx, fy, tw, th = m
+                        x0 = max(x0, int(fx + tw + 1))
+                        panel_dbg["left_score"] = float(s)
+                        panel_dbg["left_x0"] = int(fx)
+                        panel_dbg["left_w"] = int(tw)
+            except Exception:
+                pass
+
+            # Right panel: we want viewport end at the LEFT edge of the matched template.
+            try:
+                if isinstance(right_ref, Mapping):
+                    m = self._panel_match(frame=frame, rois=rois, resolution=resolution, roi_to_px=roi_to_px, ref=right_ref)
+                    if m is not None:
+                        s, fx, fy, tw, th = m
+                        # fx is the left edge of the panel template.
+                        x1 = min(x1, int(fx - 1))
+                        panel_dbg["right_score"] = float(s)
+                        panel_dbg["right_x0"] = int(fx)
+                        panel_dbg["right_w"] = int(tw)
+            except Exception:
+                pass
 
         # Optional: if the config defines left panel ROIs, use their right edge as a hard start.
         left_candidates: list[int] = []
@@ -331,6 +518,12 @@ class ViewportTracker:
         method = "sobel_peaks"
         confidence: float | None = None
         meta: dict[str, Any] = {}
+
+        try:
+            if isinstance(panel_dbg, dict) and panel_dbg:
+                meta["panel_refs"] = dict(panel_dbg)
+        except Exception:
+            pass
         try:
             gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
             col_grad = np.mean(np.abs(gx), axis=0)

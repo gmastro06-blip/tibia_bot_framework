@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -97,7 +98,7 @@ def _frame_px_to_source_norm(
     }
 
 
-def _write_ppm(path: str, rgb: "np.ndarray") -> None:
+def _write_ppm(path: str, rgb: np.ndarray) -> None:
     h, w = int(rgb.shape[0]), int(rgb.shape[1])
     header = f"P6\n{w} {h}\n255\n".encode("ascii")
     with open(path, "wb") as f:
@@ -105,8 +106,9 @@ def _write_ppm(path: str, rgb: "np.ndarray") -> None:
         f.write(rgb.tobytes())
 
 
-def _select_roi_tk(title: str, img_bgr: "np.ndarray") -> tuple[int, int, int, int]:
+def _select_roi_tk(title: str, img_bgr: np.ndarray, *, hint: str) -> tuple[int, int, int, int]:
     """Tkinter ROI selector (drag rectangle, Enter=accept, Esc=cancel)."""
+
     import tkinter as tk
 
     import cv2
@@ -150,7 +152,9 @@ def _select_roi_tk(title: str, img_bgr: "np.ndarray") -> tuple[int, int, int, in
                 canvas.delete(state["rect"])
             except Exception:
                 pass
-        state["rect"] = canvas.create_rectangle(state["x0"], state["y0"], state["x1"], state["y1"], outline="red", width=2)
+        state["rect"] = canvas.create_rectangle(
+            state["x0"], state["y0"], state["x1"], state["y1"], outline="red", width=2
+        )
 
     def on_drag(event):
         if state["x0"] is None:
@@ -171,8 +175,7 @@ def _select_roi_tk(title: str, img_bgr: "np.ndarray") -> tuple[int, int, int, in
     root.bind("<Return>", on_accept)
     root.bind("<Escape>", on_cancel)
 
-    hint = tk.Label(root, text="Arrastra para seleccionar el ANCHOR. Enter=OK, Esc=Cancelar")
-    hint.pack()
+    tk.Label(root, text=hint).pack()
 
     try:
         root.mainloop()
@@ -216,28 +219,28 @@ def _select_roi_tk(title: str, img_bgr: "np.ndarray") -> tuple[int, int, int, in
     return int(ox0), int(oy0), int(max(1, ox1 - ox0)), int(max(1, oy1 - oy0))
 
 
+@dataclass
+class PanelRef:
+    side: str  # left|right
+    edge: str  # viewport edge derived from match: left uses "right" edge, right uses "left" edge
+    roi_norm: dict
+    template_path: str
+    search_radius_px: int = 560
+    min_score: float = 0.55
+    canny_low: int = 60
+    canny_high: int = 140
+
+
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Create an anchor template for auto-shifting ROIs when HUD moves.")
+    p = argparse.ArgumentParser(
+        description="Configura referencias (templates) de panel izquierdo/derecho para auto-ajustar el viewport cuando aparecen/desaparecen."
+    )
     p.add_argument("--monitor", type=int, default=int(os.getenv("FORCE_MONITOR", "2") or 2))
-    p.add_argument(
-        "--rois",
-        type=str,
-        default="",
-        help="Path a ROIs JSON (si omitido, usa ROIS_CONFIG env var, si no auto por resolución)",
-    )
-    p.add_argument(
-        "--base",
-        choices=["frame", "right_hud_panel", "skills_panel", "equipment_slots", "states_icons"],
-        default="right_hud_panel",
-        help="Select the anchor inside this base ROI.",
-    )
-    p.add_argument("--out", type=str, default="data/anchors/hud_anchor.png", help="Where to save the anchor template PNG")
-    p.add_argument("--search-radius", type=int, default=220, help="Search radius in frame pixels around expected position")
-    p.add_argument("--min-score", type=float, default=0.55, help="Minimum template match score to accept")
-    p.add_argument("--interval", type=float, default=0.5, help="Update interval (seconds)")
-    p.add_argument("--smoothing", type=float, default=0.35, help="EMA smoothing for offset")
-    p.add_argument("--write", action="store_true", help="Write anchor config into the rois_guess config JSON")
-    p.add_argument("--force-tk", action="store_true", help="Force Tkinter selector (no OpenCV GUI)")
+    p.add_argument("--rois", type=str, default="", help="Path a ROIs JSON (si omitido, usa ROIS_CONFIG o auto por resolución)")
+    p.add_argument("--write", action="store_true", help="Escribe _panel_refs dentro del ROIs JSON")
+    p.add_argument("--out-dir", type=str, default="data/anchors", help="Carpeta para guardar templates PNG")
+    p.add_argument("--min-score", type=float, default=0.55)
+    p.add_argument("--search-radius", type=int, default=560)
     return p.parse_args()
 
 
@@ -247,12 +250,10 @@ def main() -> int:
     import cv2
 
     from capture.dxgi_capture import DXGICapture
-    from vision.ocr import OCRProcessor
 
     args = _parse_args()
 
     cap = DXGICapture(force_monitor=args.monitor)
-    ocr = OCRProcessor()
 
     frame = None
     for _ in range(60):
@@ -263,92 +264,115 @@ def main() -> int:
         raise SystemExit("No se pudo capturar ningún frame")
 
     resolution = (int(frame.shape[1]), int(frame.shape[0]))
-    cfg_path = _resolve_rois_path(args.rois) or _resolve_rois_path(os.getenv("ROIS_CONFIG", "")) or _pick_config_file(resolution)
-    rois, source_resolution = _load_config(cfg_path)
-    rois = dict(rois)
-    rois["_source_resolution"] = source_resolution
 
-    if args.base == "frame":
-        base_img = frame
-        base_offset = (0, 0)
-    else:
-        if args.base not in rois:
-            raise SystemExit(f"El config no tiene ROI base '{args.base}'.")
-        x, y, w, h = ocr._roi_to_px(frame, rois, resolution, rois[args.base])  # type: ignore[arg-type]
-        base_img = frame[y : y + h, x : x + w].copy()
-        base_offset = (int(x), int(y))
+    cfg_path = (
+        _resolve_rois_path(args.rois)
+        or _resolve_rois_path(os.getenv("ROIS_CONFIG", ""))
+        or _pick_config_file(resolution)
+    )
+    rois_guess_norm, source_resolution = _load_config(cfg_path)
 
-    def _select_roi(title: str, img_bgr: np.ndarray) -> tuple[int, int, int, int]:
-        if bool(args.force_tk):
-            return _select_roi_tk(title, img_bgr)
-        try:
-            r = cv2.selectROI(title, img_bgr, showCrosshair=True, fromCenter=False)  # type: ignore[arg-type]
-            cv2.destroyAllWindows()
-            rx, ry, rw, rh = [int(v) for v in r]
-            if rw <= 1 or rh <= 1:
-                return _select_roi_tk(title, img_bgr)
-            return rx, ry, rw, rh
-        except Exception:
-            return _select_roi_tk(title, img_bgr)
+    try:
+        source_w, source_h = int(source_resolution[0] or 0), int(source_resolution[1] or 0)
+        if source_w <= 0 or source_h <= 0:
+            source_w, source_h = int(resolution[0]), int(resolution[1])
+    except Exception:
+        source_w, source_h = int(resolution[0]), int(resolution[1])
 
-    rx, ry, rw, rh = _select_roi("Selecciona ANCHOR (algo bien estable)", base_img)
-    if rw <= 1 or rh <= 1:
-        raise SystemExit("ROI vacío/cancelado")
+    out_base = Path(args.out_dir)
+    if not out_base.is_absolute():
+        repo_root = Path(__file__).resolve().parent.parent
+        out_base = (repo_root / out_base).resolve()
+    try:
+        out_base.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
-    sel_x = int(base_offset[0] + rx)
-    sel_y = int(base_offset[1] + ry)
-    sel_w = int(rw)
-    sel_h = int(rh)
+    # Selección manual
+    hint_left = (
+        "Selecciona un rectángulo que exista SOLO cuando el PANEL IZQUIERDO está abierto.\n"
+        "Ideal: incluye el borde del panel y llega hasta el borde del viewport.\n"
+        "Enter=OK, Esc=Cancelar"
+    )
+    lx, ly, lw, lh = _select_roi_tk("Panel izquierdo (referencia)", frame, hint=hint_left)
 
-    source_w, source_h = int(source_resolution[0]), int(source_resolution[1])
-    frame_w, frame_h = int(frame.shape[1]), int(frame.shape[0])
+    hint_right = (
+        "Selecciona un rectángulo que exista SOLO cuando el PANEL DERECHO está abierto.\n"
+        "Ideal: incluye el borde del panel y arranca en el borde del viewport.\n"
+        "Enter=OK, Esc=Cancelar"
+    )
+    rx, ry, rw, rh = _select_roi_tk("Panel derecho (referencia)", frame, hint=hint_right)
 
-    roi_norm = _frame_px_to_source_norm(
-        x=sel_x,
-        y=sel_y,
-        w=sel_w,
-        h=sel_h,
-        frame_w=frame_w,
-        frame_h=frame_h,
-        source_w=source_w,
-        source_h=source_h,
+    if lw <= 1 or lh <= 1 or rw <= 1 or rh <= 1:
+        raise SystemExit("Selección cancelada o inválida")
+
+    left_crop = frame[ly : ly + lh, lx : lx + lw].copy()
+    right_crop = frame[ry : ry + rh, rx : rx + rw].copy()
+
+    left_path = out_base / "panel_left.png"
+    right_path = out_base / "panel_right.png"
+
+    try:
+        cv2.imwrite(str(left_path), left_crop)
+        cv2.imwrite(str(right_path), right_crop)
+    except Exception:
+        raise SystemExit("No se pudieron guardar los templates PNG")
+
+    left_norm = _frame_px_to_source_norm(
+        x=lx,
+        y=ly,
+        w=lw,
+        h=lh,
+        frame_w=int(frame.shape[1]),
+        frame_h=int(frame.shape[0]),
+        source_w=int(source_w),
+        source_h=int(source_h),
+    )
+    right_norm = _frame_px_to_source_norm(
+        x=rx,
+        y=ry,
+        w=rw,
+        h=rh,
+        frame_w=int(frame.shape[1]),
+        frame_h=int(frame.shape[0]),
+        source_w=int(source_w),
+        source_h=int(source_h),
     )
 
-    out_path = Path(args.out)
-    if not out_path.is_absolute():
-        out_path = Path(__file__).resolve().parent.parent / out_path
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    crop = frame[sel_y : sel_y + sel_h, sel_x : sel_x + sel_w].copy()
-    cv2.imwrite(str(out_path), crop)
-
-    anchor_cfg = {
-        "roi_norm": roi_norm,
-        "template_path": str(Path(args.out).as_posix()),
-        "search_radius_px": int(args.search_radius),
-        "min_score": float(args.min_score),
-        "update_interval_s": float(args.interval),
-        "smoothing": float(args.smoothing),
-        "canny_low": 60,
-        "canny_high": 140,
-        "max_shift_src_px": 800.0,
+    panel_refs = {
+        "left": {
+            "side": "left",
+            "edge": "right",
+            "roi_norm": left_norm,
+            "template_path": str(Path("data") / "anchors" / "panel_left.png"),
+            "search_radius_px": int(max(80, int(args.search_radius))),
+            "min_score": float(args.min_score),
+            "canny_low": 60,
+            "canny_high": 140,
+        },
+        "right": {
+            "side": "right",
+            "edge": "left",
+            "roi_norm": right_norm,
+            "template_path": str(Path("data") / "anchors" / "panel_right.png"),
+            "search_radius_px": int(max(80, int(args.search_radius))),
+            "min_score": float(args.min_score),
+            "canny_low": 60,
+            "canny_high": 140,
+        },
     }
 
-    print("\n✅ Anchor creado")
-    print(f"- config: {cfg_path}")
-    print(f"- base: {args.base}")
-    print(f"- template: {Path(args.out).as_posix()}")
-    print(f"- roi_norm: {json.dumps(roi_norm, ensure_ascii=False)}")
+    print(f"Templates guardados en: {left_path} y {right_path}")
+    print(f"ROIs config: {cfg_path}")
 
     if args.write:
-        cfg_file = Path(cfg_path)
-        with cfg_file.open("r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        cfg.setdefault("rois_guess_norm", {})
-        cfg["rois_guess_norm"]["_anchor"] = anchor_cfg
-        with cfg_file.open("w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-        print(f"✍️  Escrito _anchor en {cfg_path}")
+        rois_guess_norm = dict(rois_guess_norm)
+        rois_guess_norm["_panel_refs"] = panel_refs
+        _save_config(cfg_path, rois_guess_norm=rois_guess_norm, source_resolution=source_resolution)
+        print("OK: _panel_refs escrito en el config")
+    else:
+        # Print JSON for copy/paste/debug
+        print(json.dumps({"_panel_refs": panel_refs}, ensure_ascii=False, indent=2))
 
     return 0
 
