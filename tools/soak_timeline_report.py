@@ -272,6 +272,8 @@ def main() -> int:
             continue
 
         ts = ev.get("ts", None)
+        if ts is None:
+            continue
         try:
             ts_f = float(ts)
         except Exception:

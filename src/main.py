@@ -1810,14 +1810,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 # only when commit_flag is set and OS injection is enabled.
                 try:
                     mgr0, inj_enabled0, dis0 = _im_snapshot()
+                    inj_enabled0_dbg = bool(inj_enabled0)
+                    dis0_dbg = str(dis0 or "").strip()
+                    target_ok_dbg = (bool(target_window_active) if bool(live_active) else True)
                     can_commit = (
                         bool(commit_flag)
-                        and bool(inj_enabled0)
-                        and not bool(str(dis0 or "").strip())
-                        and (bool(target_window_active) if bool(live_active) else True)
+                        and bool(inj_enabled0_dbg)
+                        and not bool(dis0_dbg)
+                        and bool(target_ok_dbg)
                     )
                 except Exception:
                     can_commit = False
+                    inj_enabled0_dbg = False
+                    dis0_dbg = ""
+                    target_ok_dbg = True
 
                 try:
                     if cavebot_dir and ActionRequest is not None:
@@ -1837,6 +1843,12 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             if not bool(can_commit):
                                 if bool(needs_confirm) and not bool(advance_pulse):
                                     no_gs_blocked_reason = "no_committed_pulse"
+                                elif bool(live_active) and not bool(target_ok_dbg):
+                                    no_gs_blocked_reason = "not_foreground"
+                                elif not bool(inj_enabled0_dbg):
+                                    no_gs_blocked_reason = "disabled"
+                                elif bool(dis0_dbg):
+                                    no_gs_blocked_reason = "fail_closed"
                                 else:
                                     no_gs_blocked_reason = "blocked"
                             else:

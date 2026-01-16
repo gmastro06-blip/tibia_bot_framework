@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 
@@ -239,29 +240,44 @@ def _select_roi_tk(title: str, img_bgr: "np.ndarray") -> tuple[int, int, int, in
     canvas.pack()
     canvas.create_image(0, 0, anchor=tk.NW, image=img)
 
-    state = {"x0": None, "y0": None, "x1": None, "y1": None, "rect": None, "cancel": False}
+    class _DragState(TypedDict):
+        x0: int | None
+        y0: int | None
+        x1: int | None
+        y1: int | None
+        rect: int | None
+        cancel: bool
+
+    state: _DragState = {"x0": None, "y0": None, "x1": None, "y1": None, "rect": None, "cancel": False}
 
     def _clamp(v: int, lo: int, hi: int) -> int:
         return max(lo, min(hi, v))
 
     def on_down(event):
-        state["x0"] = _clamp(int(event.x), 0, img.width() - 1)
-        state["y0"] = _clamp(int(event.y), 0, img.height() - 1)
-        state["x1"] = state["x0"]
-        state["y1"] = state["y0"]
+        x0 = _clamp(int(event.x), 0, img.width() - 1)
+        y0 = _clamp(int(event.y), 0, img.height() - 1)
+        state["x0"] = x0
+        state["y0"] = y0
+        state["x1"] = x0
+        state["y1"] = y0
         if state["rect"] is not None:
             try:
                 canvas.delete(state["rect"])
             except Exception:
                 pass
-        state["rect"] = canvas.create_rectangle(state["x0"], state["y0"], state["x1"], state["y1"], outline="red", width=2)
+        state["rect"] = canvas.create_rectangle(x0, y0, x0, y0, outline="red", width=2)
 
     def on_drag(event):
-        if state["x0"] is None:
+        if state["x0"] is None or state["y0"] is None or state["rect"] is None:
             return
-        state["x1"] = _clamp(int(event.x), 0, img.width() - 1)
-        state["y1"] = _clamp(int(event.y), 0, img.height() - 1)
-        canvas.coords(state["rect"], state["x0"], state["y0"], state["x1"], state["y1"])
+        x0 = state["x0"]
+        y0 = state["y0"]
+        rect = state["rect"]
+        x1 = _clamp(int(event.x), 0, img.width() - 1)
+        y1 = _clamp(int(event.y), 0, img.height() - 1)
+        state["x1"] = x1
+        state["y1"] = y1
+        canvas.coords(rect, x0, y0, x1, y1)
 
     def on_accept(_event=None):
         root.quit()
