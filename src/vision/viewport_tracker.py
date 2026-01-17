@@ -837,7 +837,10 @@ class ViewportTracker:
             # This helps when side panels open/close (main area width changes), keeping
             # top bars + chat horizontally aligned.
             try:
-                enabled = os.getenv("VIEWPORT_AUTO_UPDATE_UI_ROIS", "1").strip().lower() not in {"0", "false", "no"}
+                # Fail-safe default: do NOT mutate UI ROIs unless explicitly enabled.
+                # Auto-detected viewport can be imperfect, and rewriting HP/MP OCR
+                # ROIs can cause '?' readings.
+                enabled = os.getenv("VIEWPORT_AUTO_UPDATE_UI_ROIS", "0").strip().lower() not in {"0", "false", "no"}
             except Exception:
                 enabled = True
 

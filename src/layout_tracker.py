@@ -235,11 +235,23 @@ class LayoutTracker:
                 roi_def = None
             if not isinstance(roi_def, Mapping):
                 continue
+            min_w = 6
+            min_h = 6
+            try:
+                if str(k).strip().lower() in {"hp_low_bar", "mp_low_bar"}:
+                    min_w = 2
+                    min_h = 2
+            except Exception:
+                min_w = 6
+                min_h = 6
+
             rr = roi_to_px_result(
                 frame_shape=(int(frame_shape[0]), int(frame_shape[1])),
                 rois=rois,
                 resolution=resolution,
                 roi_def=roi_def,
+                min_w=int(min_w),
+                min_h=int(min_h),
             )
             out[k] = {
                 "ok": bool(rr.ok),

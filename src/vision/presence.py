@@ -55,6 +55,25 @@ def _strip_border(gray: np.ndarray, *, frac: float = 0.125) -> np.ndarray:
     return gray
 
 
+def _strip_border_bgr(img: np.ndarray, *, frac: float = 0.125) -> np.ndarray:
+    """Strip a thin border from a BGR crop (same semantics as `_strip_border`)."""
+
+    if img is None or not isinstance(img, np.ndarray) or img.size == 0:
+        return img
+    if img.ndim != 3 or int(img.shape[2]) < 3:
+        return img
+    try:
+        h, w = int(img.shape[0]), int(img.shape[1])
+        if h <= 0 or w <= 0:
+            return img
+        pad = int(max(1, round(min(h, w) * float(frac))))
+        if h > (pad * 2 + 1) and w > (pad * 2 + 1):
+            return img[pad:-pad, pad:-pad]
+    except Exception:
+        return img
+    return img
+
+
 def _saturation_pct(
     crop_bgr: np.ndarray,
     *,
@@ -232,6 +251,7 @@ def detect_equipment_slot(
     high_std: float = 45.0,
     gray_dark_thr: int = 55,
     gray_min_dark_pct: float = 0.01,
+    border_frac: float = 0.22,
 ) -> tuple[bool | None, float]:
     """Tri-state equipment slot detector.
 
@@ -247,8 +267,17 @@ def detect_equipment_slot(
     if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
         return None, 0.0
 
-    gray = _to_gray(crop)
-    gray = _strip_border(gray)
+    # Strip a larger border for equipment slots to reduce false positives from
+    # the slot frame/texture (empty slots can otherwise look "present").
+    try:
+        bf = float(border_frac)
+    except Exception:
+        bf = 0.22
+    bf = float(max(0.05, min(0.45, bf)))
+
+    crop_core = _strip_border_bgr(crop, frac=bf)
+    gray = _to_gray(crop_core)
+    gray = _strip_border(gray, frac=bf)
     try:
         mean = float(gray.mean())
         std = float(gray.std())
@@ -264,15 +293,15 @@ def detect_equipment_slot(
 
     # Saturation-based evidence (colored icons)
     try:
-        sat_pct = _saturation_pct(crop, s_thr=int(sat_thr), v_thr=int(v_thr), strip_border=True)
+        sat_pct = _saturation_pct(crop_core, s_thr=int(sat_thr), v_thr=int(v_thr), strip_border=False)
     except Exception:
         sat_pct = 0.0
     try:
         sat_pct_hi = _saturation_pct(
-            crop,
+            crop_core,
             s_thr=int(max(int(sat_thr), 50)),
             v_thr=int(max(int(v_thr), 60)),
-            strip_border=True,
+            strip_border=False,
         )
     except Exception:
         sat_pct_hi = 0.0

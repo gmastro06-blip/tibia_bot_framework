@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import glob
 import os
 import sys
@@ -96,16 +97,42 @@ def _analyze_hungry(path: Path) -> None:
 
 
 def main() -> None:
-    rois_dir = Path("logs/replay/rois")
-    if not rois_dir.is_dir():
-        rois_dir = Path("logs/replay_env/rois")
-    if not rois_dir.is_dir():
-        rois_dir = Path("logs/replay_smoke/rois")
+    ap = argparse.ArgumentParser(description="Debug ring/amulet/hungry detection from replay ROI crops")
+    ap.add_argument(
+        "--rois-dir",
+        default="",
+        help="Path to replay rois/ folder (e.g., logs/replay_presence_test/rois). If omitted, tries common defaults.",
+    )
+    ap.add_argument(
+        "--scan-n",
+        type=int,
+        default=200,
+        help="How many most-recent ring_slot crops to scan for distribution stats.",
+    )
+    args = ap.parse_args()
+
+    rois_dir: Path | None = None
+    if str(args.rois_dir or "").strip():
+        rois_dir = Path(str(args.rois_dir).strip())
+    else:
+        # Common locations
+        candidates = [
+            Path("logs/replay/rois"),
+            Path("logs/replay_env/rois"),
+            Path("logs/replay_smoke/rois"),
+            Path("logs/replay_presence_test/rois"),
+        ]
+        for c in candidates:
+            if c.is_dir():
+                rois_dir = c
+                break
+
+    if rois_dir is None or not rois_dir.is_dir():
+        print(f"rois_dir={rois_dir}")
+        print("No replay rois dir found. Use --rois-dir.")
+        return
 
     print(f"rois_dir={rois_dir}")
-    if not rois_dir.is_dir():
-        print("No replay rois dir found.")
-        return
 
     ring = _pick_latest(rois_dir, "*_ring_slot.png")
     amulet = _pick_latest(rois_dir, "*_amulet_slot.png")
@@ -124,7 +151,7 @@ def main() -> None:
 
     # Quick distribution scan (helps tune thresholds).
     try:
-        N = 200
+        N = max(0, int(args.scan_n))
         ring_items = _pick_latest_n(rois_dir, "*_ring_slot.png", n=N)
         if ring_items:
             n_true = 0

@@ -82,7 +82,7 @@ def estimate_bar_fill_ratio_with_reason(
     frame_bgr: np.ndarray,
     roi: Tuple[int, int, int, int],
     kind: str,
-) -> tuple[Optional[float], str]:
+) -> tuple[Optional[float], str, float]:
     """Like `estimate_bar_fill_ratio`, but returns a stable reason string.
 
     Reasons are intended for telemetry/debug, not for user-facing UX.
@@ -90,10 +90,10 @@ def estimate_bar_fill_ratio_with_reason(
 
     x, y, w, h = _clamp_roi(frame_bgr, roi)
     if w < 2 or h < 2:
-        return None, "invalid_roi"
+        return None, "invalid_roi", 0.0
     crop = frame_bgr[y : y + h, x : x + w]
     if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
-        return None, "empty_crop"
+        return None, "empty_crop", 0.0
 
     # Same as `estimate_bar_fill_ratio`: ignore top/bottom border band.
     try:
@@ -112,7 +112,7 @@ def estimate_bar_fill_ratio_with_reason(
     try:
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     except Exception:
-        return None, "no_cv2"
+        return None, "no_cv2", 0.0
 
     hsv_mat = cast(Any, hsv)
 
@@ -174,7 +174,7 @@ def estimate_bar_fill_ratio_with_reason(
         ], dtype=np.uint8))
         mask = cv2.inRange(hsv_mat, low, high)
     else:
-        return None, "unknown_kind"
+        return None, "unknown_kind", 0.0
 
     try:
         presence = float(np.count_nonzero(mask)) / float(mask.size)
@@ -208,18 +208,18 @@ def estimate_bar_fill_ratio_with_reason(
                         ratio2 = (last2 + 1) / float(max(1, w))
                         ratio2 = float(max(0.0, min(1.0, ratio2)))
                         if ratio2 <= 0.02:
-                            return ratio2, "ok_bgr_near_zero"
+                            return ratio2, "ok_bgr_near_zero", float(presence2)
                         if ratio2 >= 0.98:
-                            return ratio2, "ok_bgr_near_one"
-                        return ratio2, "ok_bgr"
+                            return ratio2, "ok_bgr_near_one", float(presence2)
+                        return ratio2, "ok_bgr", float(presence2)
             except Exception:
                 pass
-        return None, "no_bar_color"
+        return None, "no_bar_color", float(presence)
 
     col_frac = (mask > 0).mean(axis=0)
     filled_cols = np.where(col_frac > float(thr))[0]
     if filled_cols.size == 0:
-        return None, "no_filled_cols"
+        return None, "no_filled_cols", float(presence)
 
     last = int(filled_cols.max())
     ratio = (last + 1) / float(max(1, w))
@@ -228,7 +228,7 @@ def estimate_bar_fill_ratio_with_reason(
     # If the bar is basically always full, it might be ROI drifting into a blue/red panel.
     # Keep the raw ratio but mark a diagnostic reason.
     if ratio <= 0.02:
-        return ratio, "ok_near_zero"
+        return ratio, "ok_near_zero", float(presence)
     if ratio >= 0.98:
-        return ratio, "ok_near_one"
-    return ratio, "ok"
+        return ratio, "ok_near_one", float(presence)
+    return ratio, "ok", float(presence)

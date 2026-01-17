@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import numpy as np
 from dataclasses import dataclass
-from vision.ocr import OCRProcessor
+from vision.ocr import OCRProcessor, get_shared_ocr_processor
 from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio_with_reason
 from vision.obstacles import compute_viewport_tile_offsets
@@ -14,6 +14,45 @@ from vision.minimap_motion import MinimapMotionTracker
 from vision import battlelist
 from vision.roi import roi_to_px_result
 from layout_tracker import LayoutTracker
+
+
+def _is_ocr_confident(reason: str) -> bool:
+    """Best-effort classification for OCR reliability.
+
+    We only use this to decide whether to let bar ratios override OCR.
+    """
+
+    r = str(reason or "").strip().lower()
+    if not r:
+        return False
+    # Explicit failure modes
+    bad_tokens = ["parse_fail", "single_number", "invalid", "exception", "no_digits"]
+    if any(t in r for t in bad_tokens):
+        return False
+    # Accept common OK markers.
+    if r == "ok" or r.startswith("ok|") or r.startswith("ok_") or r.startswith("ok:"):
+        return True
+    # Some paths prefix info like "reuse_last_max:ok".
+    if "ok" in r and "parse_fail" not in r:
+        return True
+    return False
+
+
+def _should_override_ocr_with_bar(*, ocr_reason: str, bar_presence: float, diff: float) -> bool:
+    """Decide if we should override OCR with bar ratio in fusion step."""
+
+    try:
+        min_pres = float(os.getenv("HPMP_BAR_FUSION_MIN_PRESENCE", "0.06").strip() or "0.06")
+    except Exception:
+        min_pres = 0.06
+    min_pres = float(max(0.0, min(0.5, min_pres)))
+
+    # If OCR looks good, don't override (bars can drift with ROI misalignment).
+    if _is_ocr_confident(ocr_reason):
+        return False
+
+    # Only trust bars when we have a decent amount of bar-colored pixels.
+    return float(bar_presence or 0.0) >= float(min_pres) and float(diff or 0.0) > 0.0
 
 
 def _sanitize_current_max(
@@ -55,6 +94,7 @@ def _sanitize_current_max(
 
     return None, mx_i, "cur_gt_max_drop_cur"
 
+
 @dataclass
 class GameState:
     """Estado actual del juego"""
@@ -63,6 +103,7 @@ class GameState:
     mp_current: Optional[int] = None
     mp_max: Optional[int] = None
     cap_current: Optional[int] = None
+    soul_current: Optional[int] = None
     pos_x: Optional[int] = None
     pos_y: Optional[int] = None
     pos_z: Optional[int] = None
@@ -104,6 +145,10 @@ class GameState:
     cap_method: Optional[str] = None
     cap_reason: Optional[str] = None
 
+    # SOUL extraction observability
+    soul_method: Optional[str] = None
+    soul_reason: Optional[str] = None
+
     # EntityList/Battlelist observability
     battlelist_source: Optional[str] = None
     battlelist_reason: Optional[str] = None
@@ -139,13 +184,14 @@ class GameState:
             pos = ""
         return (
             f"HP: {self.hp_current}/{self.hp_max}, MP: {self.mp_current}/{self.mp_max}, "
-            f"Cap: {self.cap_current}{pos}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, "
+            f"Cap: {self.cap_current}, Soul: {self.soul_current}{pos}, ring: {self.ring_equipped}, amulet: {self.amulet_equipped}, "
             f"paralyzed: {self.paralyzed}, haste: {self.haste_active}, utamo: {self.utamo_active}, hungry: {self.hungry}, RF: {rf_n}"
         )
 
 class GameStateBuilder:
     def __init__(self):
-        self.ocr_processor = OCRProcessor()
+        # Reuse a single OCR instance across subsystems (avoids repeated GPU init).
+        self.ocr_processor = get_shared_ocr_processor()
         self.frame_history = []  # Para suavizado de valores
         self._rf = RoboflowInference.from_env()
         self._rf_hpmp = RoboflowInference.from_env_hpmp()  # Separate for HP/MP
@@ -164,6 +210,7 @@ class GameStateBuilder:
         self._last_mp_current: Optional[int] = None
         self._last_mp_max: Optional[int] = None
         self._last_cap_current: Optional[int] = None
+        self._last_soul_current: Optional[int] = None
         self._last_pos_x: Optional[int] = None
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
@@ -741,6 +788,7 @@ class GameStateBuilder:
         mp_current: Optional[int] = None
         mp_max: Optional[int] = None
         cap_current: Optional[int] = None
+        soul_current: Optional[int] = None
         pos_x: Optional[int] = None
         pos_y: Optional[int] = None
         pos_z: Optional[int] = None
@@ -765,6 +813,9 @@ class GameStateBuilder:
         hp_reason = ""
         mp_method = ""
         mp_reason = ""
+
+        soul_method = ""
+        soul_reason = ""
 
         # Strip signature caching: when the strip ROI exists and hasn't changed,
         # reuse last-known values and skip OCR (keeps the pipeline real-time).
@@ -811,7 +862,9 @@ class GameStateBuilder:
             "hp": {},
             "mp": {},
             "cap": {},
+            "soul": {},
             "battlelist": {},
+            "presence": {},
         }
 
         # Layout snapshot + px conversion for critical ROIs (debug/telemetry).
@@ -895,6 +948,43 @@ class GameStateBuilder:
                 cap_method = "cap_ocr" if (hasattr(rois, "get") and rois.get("cap_ocr") is not None) else "skills_panel"
                 cap_reason = "exception"
 
+            try:
+                soul_current = self.ocr_processor.extract_soul(frame, rois, resolution)
+                dbg = None
+                try:
+                    dbg = getattr(self.ocr_processor, "last_soul_debug", None)
+                except Exception:
+                    dbg = None
+
+                if isinstance(dbg, dict) and dbg:
+                    try:
+                        soul_method = str(dbg.get("chosen_source", "") or "")
+                        soul_reason = str(dbg.get("decision", "") or "")
+                    except Exception:
+                        soul_method = ""
+                        soul_reason = ""
+                else:
+                    if soul_current is not None:
+                        soul_method = "soul_ocr" if (hasattr(rois, "get") and rois.get("soul_ocr") is not None) else "skills_panel"
+                        soul_reason = "ok"
+                    else:
+                        soul_method = "soul_ocr" if (hasattr(rois, "get") and rois.get("soul_ocr") is not None) else "skills_panel"
+                        soul_reason = "no_digits"
+            except Exception:
+                soul_current = None
+                soul_method = "soul_ocr" if (hasattr(rois, "get") and rois.get("soul_ocr") is not None) else "skills_panel"
+                soul_reason = "exception"
+
+            # If OCR returned no SOUL this tick, prefer last-known to avoid UI jitter.
+            try:
+                if soul_current is None and getattr(self, "_last_soul_current", None) is not None:
+                    soul_current = int(getattr(self, "_last_soul_current"))
+                    if not soul_method:
+                        soul_method = "cached"
+                    soul_reason = f"reuse_last:{soul_reason}" if soul_reason else "reuse_last"
+            except Exception:
+                pass
+
             self._ocr_last_ts = now
             # Cache only when we have a value, so intermittent OCR failures
             # don't erase a previously known max/current.
@@ -908,6 +998,8 @@ class GameStateBuilder:
                 self._last_mp_max = mp_max
             if cap_current is not None:
                 self._last_cap_current = cap_current
+            if soul_current is not None:
+                self._last_soul_current = soul_current
         else:
             # Reusar lo último conocido
             hp_current = self._last_hp_current
@@ -915,6 +1007,7 @@ class GameStateBuilder:
             mp_current = self._last_mp_current
             mp_max = self._last_mp_max
             cap_current = self._last_cap_current
+            soul_current = self._last_soul_current
             pos_x = self._last_pos_x
             pos_y = self._last_pos_y
             pos_z = self._last_pos_z
@@ -924,6 +1017,8 @@ class GameStateBuilder:
             mp_reason = "ocr_throttled"
             cap_method = "cached"
             cap_reason = "ocr_throttled"
+            soul_method = "cached"
+            soul_reason = "ocr_throttled"
 
         # Coords provider: permite deshabilitar OCR coords (o usar fuente externa) cuando no hay coords visibles.
         coords_provider_kind = self._coords_provider_kind()
@@ -1006,10 +1101,58 @@ class GameStateBuilder:
         mp_ratio: Optional[float] = None
         hp_bar_reason = ""
         mp_bar_reason = ""
+        hp_bar_presence: float = 0.0
+        mp_bar_presence: float = 0.0
+        # Always compute both sources when possible for observability.
+        hp_low_ratio: Optional[float] = None
+        hp_low_reason: str = ""
+        hp_low_presence: float = 0.0
+        mp_low_ratio: Optional[float] = None
+        mp_low_reason: str = ""
+        mp_low_presence: float = 0.0
+
+        hp_top_ratio: Optional[float] = None
+        hp_top_reason: str = ""
+        hp_top_presence: float = 0.0
+        mp_top_ratio: Optional[float] = None
+        mp_top_reason: str = ""
+        mp_top_presence: float = 0.0
+
+        chosen_bar_source: str = ""
         hp_bar_roi = None
         mp_bar_roi = None
         hp_bar_roi_reason = ""
         mp_bar_roi_reason = ""
+
+        def _bar_est(img, roi, kind: str) -> tuple[Optional[float], str, float]:
+            """Normalize bar estimation return shape.
+
+            New API returns (ratio, reason, presence). Older mocks/tests may
+            return (ratio, reason).
+            """
+
+            try:
+                out = estimate_bar_fill_ratio_with_reason(img, roi, kind)
+            except Exception:
+                return None, "exception", 0.0
+
+            try:
+                if isinstance(out, tuple) and len(out) == 3:
+                    r0, rs0, p0 = out
+                    return (r0, str(rs0 or ""), float(p0 or 0.0))
+                if isinstance(out, tuple) and len(out) == 2:
+                    r0, rs0 = out
+                    return (r0, str(rs0 or ""), 0.0)
+            except Exception:
+                return None, "invalid_return", 0.0
+            return None, "invalid_return", 0.0
+        rf_hp_ratio: Optional[float] = None
+        rf_hp_reason: str = ""
+        rf_hp_presence: float = 0.0
+        rf_mp_ratio: Optional[float] = None
+        rf_mp_reason: str = ""
+        rf_mp_presence: float = 0.0
+
         if rf_hpmp_boxes and self._rf_hpmp is not None:
             hp_bar_classes = os.getenv("ROBOFLOW_HP_BAR_CLASSES", "hp_bar,hp_low_bar,health_bar").split(",")
             mp_bar_classes = os.getenv("ROBOFLOW_MP_BAR_CLASSES", "mp_bar,mp_low_bar,mana_bar").split(",")
@@ -1018,46 +1161,48 @@ class GameStateBuilder:
             if hp_box:
                 crop = self._rf_hpmp.crop_from_box(frame, hp_box)
                 if crop is not None:
-                    hp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
-                    hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(
-                        crop, hp_bar_roi, "hp"
-                    )
+                    rr_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                    rf_hp_ratio, rf_hp_reason, rf_hp_presence = _bar_est(crop, rr_roi, "hp")
             if mp_box:
                 crop = self._rf_hpmp.crop_from_box(frame, mp_box)
                 if crop is not None:
-                    mp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
-                    mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(
-                        crop, mp_bar_roi, "mp"
-                    )
+                    rr_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                    rf_mp_ratio, rf_mp_reason, rf_mp_presence = _bar_est(crop, rr_roi, "mp")
 
-        if hp_ratio is None and "hp_low_bar" in rois:
+        # Legacy low bars (ROI-driven)
+        if "hp_low_bar" in rois:
             rr = roi_to_px_result(
                 frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
                 rois=rois,
                 resolution=resolution,
                 roi_def=rois["hp_low_bar"],
+                min_w=2,
+                min_h=2,
             )
-            hp_bar_roi_reason = str(rr.reason or "")
+            low_reason = str(rr.reason or "")
             if rr.ok and rr.roi is not None:
-                hp_bar_roi = rr.roi
-                hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(frame, rr.roi, "hp")
-        if mp_ratio is None and "mp_low_bar" in rois:
+                hp_low_ratio, hp_low_reason, hp_low_presence = _bar_est(frame, rr.roi, "hp")
+                if not hp_low_reason and low_reason:
+                    hp_low_reason = low_reason
+
+        if "mp_low_bar" in rois:
             rr = roi_to_px_result(
                 frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
                 rois=rois,
                 resolution=resolution,
                 roi_def=rois["mp_low_bar"],
+                min_w=2,
+                min_h=2,
             )
-            mp_bar_roi_reason = str(rr.reason or "")
+            low_reason = str(rr.reason or "")
             if rr.ok and rr.roi is not None:
-                mp_bar_roi = rr.roi
-                mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(frame, rr.roi, "mp")
+                mp_low_ratio, mp_low_reason, mp_low_presence = _bar_est(frame, rr.roi, "mp")
+                if not mp_low_reason and low_reason:
+                    mp_low_reason = low_reason
 
-        # (B-) Fallback: top strip bar estimation.
-        # Some HUD layouts have more reliable bars on the top strip than in the
-        # low panel (or low panel ROI may be missing). This still gives us %.
+        # Top strip bars (ROI-driven). Useful for logging + alternate HUD layouts.
         try:
-            if (hp_ratio is None or mp_ratio is None) and isinstance(rois, dict) and "hpmp_top_strip" in rois:
+            if isinstance(rois, dict) and "hpmp_top_strip" in rois:
                 rr = roi_to_px_result(
                     frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
                     rois=rois,
@@ -1068,22 +1213,68 @@ class GameStateBuilder:
                     x, y, w, h = rr.roi
                     crop = frame[int(y) : int(y + h), int(x) : int(x + w)]
                     if crop is not None and getattr(crop, "size", 0) > 0:
-                        if hp_ratio is None:
-                            try:
-                                hp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
-                                hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(crop, hp_bar_roi, "hp")
-                                if hp_ratio is not None and not hp_bar_roi_reason:
-                                    hp_bar_roi_reason = "from_top_strip"
-                            except Exception:
-                                pass
-                        if mp_ratio is None:
-                            try:
-                                mp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
-                                mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(crop, mp_bar_roi, "mp")
-                                if mp_ratio is not None and not mp_bar_roi_reason:
-                                    mp_bar_roi_reason = "from_top_strip"
-                            except Exception:
-                                pass
+                        try:
+                            top_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                            hp_top_ratio, hp_top_reason, hp_top_presence = _bar_est(crop, top_roi, "hp")
+                            mp_top_ratio, mp_top_reason, mp_top_presence = _bar_est(crop, top_roi, "mp")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # Choose a single bar source for the main HP/MP estimation.
+        try:
+            if rf_hp_ratio is not None:
+                hp_ratio, hp_bar_reason, hp_bar_presence = rf_hp_ratio, rf_hp_reason, rf_hp_presence
+                chosen_bar_source = "rf"
+            elif hp_low_ratio is not None:
+                hp_ratio, hp_bar_reason, hp_bar_presence = hp_low_ratio, hp_low_reason, hp_low_presence
+                chosen_bar_source = "low"
+                if "hp_low_bar" in rois:
+                    rr = roi_to_px_result(
+                        frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                        rois=rois,
+                        resolution=resolution,
+                        roi_def=rois["hp_low_bar"],
+                        min_w=2,
+                        min_h=2,
+                    )
+                    if rr.ok and rr.roi is not None:
+                        hp_bar_roi = rr.roi
+                        hp_bar_roi_reason = str(rr.reason or "")
+            elif hp_top_ratio is not None:
+                hp_ratio, hp_bar_reason, hp_bar_presence = hp_top_ratio, hp_top_reason, hp_top_presence
+                chosen_bar_source = "top"
+                hp_bar_roi_reason = "from_top_strip"
+        except Exception:
+            pass
+
+        try:
+            if rf_mp_ratio is not None:
+                mp_ratio, mp_bar_reason, mp_bar_presence = rf_mp_ratio, rf_mp_reason, rf_mp_presence
+                if not chosen_bar_source:
+                    chosen_bar_source = "rf"
+            elif mp_low_ratio is not None:
+                mp_ratio, mp_bar_reason, mp_bar_presence = mp_low_ratio, mp_low_reason, mp_low_presence
+                if not chosen_bar_source:
+                    chosen_bar_source = "low"
+                if "mp_low_bar" in rois:
+                    rr = roi_to_px_result(
+                        frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                        rois=rois,
+                        resolution=resolution,
+                        roi_def=rois["mp_low_bar"],
+                        min_w=2,
+                        min_h=2,
+                    )
+                    if rr.ok and rr.roi is not None:
+                        mp_bar_roi = rr.roi
+                        mp_bar_roi_reason = str(rr.reason or "")
+            elif mp_top_ratio is not None:
+                mp_ratio, mp_bar_reason, mp_bar_presence = mp_top_ratio, mp_top_reason, mp_top_presence
+                if not chosen_bar_source:
+                    chosen_bar_source = "top"
+                mp_bar_roi_reason = "from_top_strip"
         except Exception:
             pass
 
@@ -1223,6 +1414,14 @@ class GameStateBuilder:
                 "ocr_reason": hp_reason,
                 "bar_ratio": hp_ratio,
                 "bar_reason": hp_bar_reason,
+                "bar_presence": hp_bar_presence,
+                "bar_source": chosen_bar_source,
+                "bar_low_ratio": hp_low_ratio,
+                "bar_low_reason": hp_low_reason,
+                "bar_low_presence": hp_low_presence,
+                "bar_top_ratio": hp_top_ratio,
+                "bar_top_reason": hp_top_reason,
+                "bar_top_presence": hp_top_presence,
                 "bar_roi": list(hp_bar_roi) if isinstance(hp_bar_roi, tuple) else None,
                 "bar_roi_reason": hp_bar_roi_reason,
                 "max": hp_max,
@@ -1233,6 +1432,14 @@ class GameStateBuilder:
                 "ocr_reason": mp_reason,
                 "bar_ratio": mp_ratio,
                 "bar_reason": mp_bar_reason,
+                "bar_presence": mp_bar_presence,
+                "bar_source": chosen_bar_source,
+                "bar_low_ratio": mp_low_ratio,
+                "bar_low_reason": mp_low_reason,
+                "bar_low_presence": mp_low_presence,
+                "bar_top_ratio": mp_top_ratio,
+                "bar_top_reason": mp_top_reason,
+                "bar_top_presence": mp_top_presence,
                 "bar_roi": list(mp_bar_roi) if isinstance(mp_bar_roi, tuple) else None,
                 "bar_roi_reason": mp_bar_roi_reason,
                 "max": mp_max,
@@ -1246,10 +1453,24 @@ class GameStateBuilder:
                 "panel": (dbg.get("panel") if isinstance(dbg, dict) else None),
                 "panel_source": (dbg.get("panel_source") if isinstance(dbg, dict) else None),
             }
+
+            dbg_soul = None
+            try:
+                dbg_soul = getattr(self.ocr_processor, "last_soul_debug", None)
+            except Exception:
+                dbg_soul = None
+            hud_debug["soul"] = {
+                "method": soul_method,
+                "reason": soul_reason,
+                "cur": soul_current,
+                "roi": (dbg_soul.get("roi") if isinstance(dbg_soul, dict) else None),
+            }
         except Exception:
             pass
 
-        # Fusion OCR vs barras: si difieren mucho, preferir barra.
+        # Fusion OCR vs barras: conservador.
+        # - If OCR is confident, keep OCR (bars can drift with ROI alignment).
+        # - If OCR is not confident and bars have strong presence, allow bar override.
         try:
             diff_thr = float(os.getenv("HPMP_BAR_FUSION_DIFF", "0.10").strip() or "0.10")
         except Exception:
@@ -1258,20 +1479,36 @@ class GameStateBuilder:
         try:
             if hp_current is not None and hp_max and hp_ratio is not None:
                 ocr_ratio = float(hp_current) / float(hp_max)
-                if abs(float(ocr_ratio) - float(hp_ratio)) >= float(diff_thr):
-                    hp_current = int(round(float(hp_ratio) * float(hp_max)))
-                    hp_method = "bar_low_fusion"
-                    hp_reason = "ratio_mismatch"
+                diff = abs(float(ocr_ratio) - float(hp_ratio))
+                if diff >= float(diff_thr):
+                    if _should_override_ocr_with_bar(
+                        ocr_reason=str(hp_reason or ""),
+                        bar_presence=float(hp_bar_presence or 0.0),
+                        diff=float(diff),
+                    ):
+                        hp_current = int(round(float(hp_ratio) * float(hp_max)))
+                        hp_method = "bar_low_fusion"
+                        hp_reason = "ratio_mismatch_bar_override"
+                    else:
+                        hp_reason = f"{hp_reason}|ratio_mismatch_keep_ocr" if hp_reason else "ratio_mismatch_keep_ocr"
         except Exception:
             pass
 
         try:
             if mp_current is not None and mp_max and mp_ratio is not None:
                 ocr_ratio = float(mp_current) / float(mp_max)
-                if abs(float(ocr_ratio) - float(mp_ratio)) >= float(diff_thr):
-                    mp_current = int(round(float(mp_ratio) * float(mp_max)))
-                    mp_method = "bar_low_fusion"
-                    mp_reason = "ratio_mismatch"
+                diff = abs(float(ocr_ratio) - float(mp_ratio))
+                if diff >= float(diff_thr):
+                    if _should_override_ocr_with_bar(
+                        ocr_reason=str(mp_reason or ""),
+                        bar_presence=float(mp_bar_presence or 0.0),
+                        diff=float(diff),
+                    ):
+                        mp_current = int(round(float(mp_ratio) * float(mp_max)))
+                        mp_method = "bar_low_fusion"
+                        mp_reason = "ratio_mismatch_bar_override"
+                    else:
+                        mp_reason = f"{mp_reason}|ratio_mismatch_keep_ocr" if mp_reason else "ratio_mismatch_keep_ocr"
         except Exception:
             pass
 
@@ -1356,6 +1593,7 @@ class GameStateBuilder:
             mp_current=mp_current,
             mp_max=mp_max,
             cap_current=cap_current,
+            soul_current=soul_current,
             pos_x=pos_x,
             pos_y=pos_y,
             pos_z=pos_z,
@@ -1372,6 +1610,8 @@ class GameStateBuilder:
             mp_reason=mp_reason,
             cap_method=cap_method,
             cap_reason=cap_reason,
+            soul_method=soul_method,
+            soul_reason=soul_reason,
             hud_debug=hud_debug,
             frame_mean=frame_mean,
         )
@@ -1455,6 +1695,24 @@ class GameStateBuilder:
 
         # (C) Equipment + status icons (best-effort, depends on calibrated ROIs)
         try:
+            presence_dbg: Dict[str, Any] = {}
+            try:
+                if isinstance(gamestate.hud_debug, dict):
+                    presence_dbg["rois_px"] = LayoutTracker.apply_layout(
+                        frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                        rois=rois,
+                        resolution=resolution,
+                        names=[
+                            "equipment_slots",
+                            "ring_slot",
+                            "amulet_slot",
+                            "hungry_icon",
+                            "states_icons",
+                        ],
+                    )
+            except Exception:
+                pass
+
             # Default: unknown until we can detect.
             gamestate.paralyzed = None
             gamestate.haste_active = None
@@ -1496,6 +1754,11 @@ class GameStateBuilder:
                         except Exception:
                             r_high_std = 45.0
 
+                        try:
+                            r_border = float(os.getenv("RING_ICON_BORDER_FRAC", "0.22"))
+                        except Exception:
+                            r_border = 0.22
+
                         detected, _conf = detect_equipment_slot(
                             frame[ry : ry + rh, rx : rx + rw],
                             kind="ring",
@@ -1505,7 +1768,36 @@ class GameStateBuilder:
                             sat_thr=r_sat_thr,
                             v_thr=r_v_thr,
                             high_std=r_high_std,
+                            border_frac=r_border,
                         )
+
+                        # Require strong evidence for "present" to avoid empty-slot false positives.
+                        try:
+                            min_conf = float(os.getenv("RING_ICON_MIN_CONF", "0.80"))
+                        except Exception:
+                            min_conf = 0.80
+                        try:
+                            if detected is True and float(_conf) < float(min_conf):
+                                detected = None
+                        except Exception:
+                            pass
+
+                        try:
+                            presence_dbg["ring"] = {
+                                "roi": [int(rx), int(ry), int(rw), int(rh)],
+                                "detected_raw": (None if detected is None else bool(detected)),
+                                "conf": (None if _conf is None else float(_conf)),
+                                "min_conf": float(min_conf),
+                                "min_std": float(r_std),
+                                "min_mean": float(r_mean),
+                                "min_sat_pct": float(r_min_sat),
+                                "sat_thr": int(r_sat_thr),
+                                "v_thr": int(r_v_thr),
+                                "high_std": float(r_high_std),
+                                "border_frac": float(r_border),
+                            }
+                        except Exception:
+                            pass
 
                         # Debounce to reduce flicker / rare false positives.
                         k = int(getattr(self, "_presence_persist_k", 3) or 3)
@@ -1526,6 +1818,15 @@ class GameStateBuilder:
                                     self._presence_state[key] = False
 
                             gamestate.ring_equipped = bool(self._presence_state.get(key, False))
+
+                        try:
+                            if "ring" in presence_dbg:
+                                presence_dbg["ring"]["state"] = gamestate.ring_equipped
+                                presence_dbg["ring"]["stable_state"] = bool(self._presence_state.get(key, False))
+                                presence_dbg["ring"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
+                                presence_dbg["ring"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                        except Exception:
+                            pass
                 if rois.get("amulet_slot") is not None:
                     ax, ay, aw, ah = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["amulet_slot"])
                     if aw >= 8 and ah >= 8:
@@ -1554,6 +1855,11 @@ class GameStateBuilder:
                         except Exception:
                             a_high_std = 45.0
 
+                        try:
+                            a_border = float(os.getenv("AMULET_ICON_BORDER_FRAC", "0.22"))
+                        except Exception:
+                            a_border = 0.22
+
                         detected, _conf = detect_equipment_slot(
                             frame[ay : ay + ah, ax : ax + aw],
                             kind="amulet",
@@ -1563,7 +1869,36 @@ class GameStateBuilder:
                             sat_thr=a_sat_thr,
                             v_thr=a_v_thr,
                             high_std=a_high_std,
+                            border_frac=a_border,
                         )
+
+                        # Require strong evidence for "present" to avoid empty-slot false positives.
+                        try:
+                            min_conf = float(os.getenv("AMULET_ICON_MIN_CONF", "0.80"))
+                        except Exception:
+                            min_conf = 0.80
+                        try:
+                            if detected is True and float(_conf) < float(min_conf):
+                                detected = None
+                        except Exception:
+                            pass
+
+                        try:
+                            presence_dbg["amulet"] = {
+                                "roi": [int(ax), int(ay), int(aw), int(ah)],
+                                "detected_raw": (None if detected is None else bool(detected)),
+                                "conf": (None if _conf is None else float(_conf)),
+                                "min_conf": float(min_conf),
+                                "min_std": float(a_std),
+                                "min_mean": float(a_mean),
+                                "min_sat_pct": float(a_min_sat),
+                                "sat_thr": int(a_sat_thr),
+                                "v_thr": int(a_v_thr),
+                                "high_std": float(a_high_std),
+                                "border_frac": float(a_border),
+                            }
+                        except Exception:
+                            pass
 
                         k = int(getattr(self, "_presence_persist_k", 3) or 3)
                         key = "amulet_equipped"
@@ -1583,23 +1918,32 @@ class GameStateBuilder:
 
                             gamestate.amulet_equipped = bool(self._presence_state.get(key, False))
 
+                        try:
+                            if "amulet" in presence_dbg:
+                                presence_dbg["amulet"]["state"] = gamestate.amulet_equipped
+                                presence_dbg["amulet"]["stable_state"] = bool(self._presence_state.get(key, False))
+                                presence_dbg["amulet"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
+                                presence_dbg["amulet"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                        except Exception:
+                            pass
+
                 # Hunger icon: prefer tight ROI if available; else fall back to HSV heuristic on states_icons.
                 if rois.get("hungry_icon") is not None:
                     hx, hy, hw, hh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["hungry_icon"])
                     if hw >= 6 and hh >= 6:
                         # Use color-band detection to avoid false positives from slot texture.
                         try:
-                            min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.012"))
+                            min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.030"))
                         except Exception:
-                            min_pct = 0.012
+                            min_pct = 0.030
                         try:
-                            min_comp = float(os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.004"))
+                            min_comp = float(os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.010"))
                         except Exception:
-                            min_comp = 0.004
+                            min_comp = 0.010
                         try:
-                            border_frac = float(os.getenv("HUNGRY_BORDER_FRAC", "0.10"))
+                            border_frac = float(os.getenv("HUNGRY_BORDER_FRAC", "0.18"))
                         except Exception:
-                            border_frac = 0.10
+                            border_frac = 0.18
                         try:
                             low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
                         except Exception:
@@ -1619,6 +1963,20 @@ class GameStateBuilder:
                             )
                         )
 
+                        try:
+                            presence_dbg["hungry"] = {
+                                "roi": [int(hx), int(hy), int(hw), int(hh)],
+                                "detected_raw": bool(detected),
+                                "min_pct": float(min_pct),
+                                "min_component_pct": float(min_comp),
+                                "border_frac": float(border_frac),
+                                "low_h": int(low_h),
+                                "high_h": int(high_h),
+                                "source": "hungry_icon",
+                            }
+                        except Exception:
+                            pass
+
                         k = int(getattr(self, "_presence_persist_k", 3) or 3)
                         key = "hungry"
                         if detected:
@@ -1633,6 +1991,15 @@ class GameStateBuilder:
                                 self._presence_state[key] = False
 
                         gamestate.hungry = bool(self._presence_state.get(key, False))
+
+                        try:
+                            if "hungry" in presence_dbg:
+                                presence_dbg["hungry"]["state"] = gamestate.hungry
+                                presence_dbg["hungry"]["stable_state"] = bool(self._presence_state.get(key, False))
+                                presence_dbg["hungry"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
+                                presence_dbg["hungry"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                        except Exception:
+                            pass
                 elif rois.get("states_icons") is not None:
                     sx, sy, sw, sh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["states_icons"])
                     crop = frame[sy : sy + sh, sx : sx + sw]
@@ -1644,6 +2011,15 @@ class GameStateBuilder:
                         confs = {}
 
                     if confs:
+                        try:
+                            presence_dbg["status_icons"] = {
+                                "roi": [int(sx), int(sy), int(sw), int(sh)],
+                                "confs": dict(confs),
+                                "thr": float(getattr(self, "_status_match_thr", 0.65) or 0.65),
+                                "k": int(getattr(self, "_status_persist_k", 3) or 3),
+                            }
+                        except Exception:
+                            pass
                         # Debounce to reduce flicker: require K consecutive frames
                         # to toggle the state on/off.
                         k = int(getattr(self, "_status_persist_k", 3) or 3)
@@ -1676,9 +2052,9 @@ class GameStateBuilder:
                     except Exception:
                         min_pct = 0.020
                     try:
-                        min_comp = float(os.getenv("HUNGRY_STATES_MIN_COMPONENT_PCT", os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.006")))
+                            min_comp = float(os.getenv("HUNGRY_STATES_MIN_COMPONENT_PCT", os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.010")))
                     except Exception:
-                        min_comp = 0.006
+                            min_comp = 0.010
                     try:
                         border_frac = float(os.getenv("HUNGRY_BORDER_FRAC", "0.10"))
                     except Exception:
@@ -1696,6 +2072,25 @@ class GameStateBuilder:
                         )
                     )
 
+                    try:
+                        # If hungry_icon ROI is missing, this is the fallback source.
+                        presence_dbg.setdefault("hungry", {})
+                        if isinstance(presence_dbg.get("hungry"), dict):
+                            presence_dbg["hungry"].update(
+                                {
+                                    "roi": [int(sx), int(sy), int(sw), int(sh)],
+                                    "detected_raw": bool(gamestate.hungry),
+                                    "min_pct": float(min_pct),
+                                    "min_component_pct": float(min_comp),
+                                    "border_frac": float(border_frac),
+                                    "low_h": int(low_h),
+                                    "high_h": int(high_h),
+                                    "source": "states_icons",
+                                }
+                            )
+                    except Exception:
+                        pass
+
                     # Debounce hungry from broad ROI too (reduces random orange pixels).
                     try:
                         detected = bool(gamestate.hungry)
@@ -1712,8 +2107,23 @@ class GameStateBuilder:
                             if int(self._presence_off_streak[key]) >= int(k):
                                 self._presence_state[key] = False
                         gamestate.hungry = bool(self._presence_state.get(key, False))
+                        try:
+                            if isinstance(presence_dbg.get("hungry"), dict):
+                                presence_dbg["hungry"]["state"] = gamestate.hungry
+                                presence_dbg["hungry"]["stable_state"] = bool(self._presence_state.get(key, False))
+                                presence_dbg["hungry"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
+                                presence_dbg["hungry"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
+
+            # Attach presence diagnostics to HUD debug.
+            try:
+                if isinstance(gamestate.hud_debug, dict) and isinstance(presence_dbg, dict) and presence_dbg:
+                    gamestate.hud_debug["presence"] = presence_dbg
+            except Exception:
+                pass
         except Exception:
             pass
 

@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import easyocr
 import re
 import os
 import time
@@ -16,6 +15,18 @@ class OCRProcessor:
             "BOT_DEBUG", ""
         ).strip().lower() in {"1", "true", "yes"}
 
+        # Avoid noisy init logs in UI runs.
+        # Enable explicitly with OCR_INIT_LOG=1.
+        try:
+            self._log_init = (os.getenv("OCR_INIT_LOG", "") or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            self._log_init = False
+
+        # Global OCR kill-switch to keep the vision thread real-time.
+        # When disabled, we never import/initialize EasyOCR/Torch.
+        ocr_enabled_raw = (os.getenv("OCR_ENABLED", "1") or "1").strip().lower()
+        self._ocr_enabled = ocr_enabled_raw in {"1", "true", "yes", "y", "on"}
+
         self._last_cap_debug_ts = 0.0
 
         # Último debug de CAP (para observabilidad y tuning).
@@ -27,13 +38,54 @@ class OCRProcessor:
         # }
         self.last_cap_debug: Dict[str, Any] = {}
 
-        # Inicializar EasyOCR con GPU si está disponible
-        try:
-            self.reader = easyocr.Reader(['en'], gpu=True)
-            print("OCR inicializado con GPU")
-        except:
-            self.reader = easyocr.Reader(['en'], gpu=False)
-            print("OCR inicializado sin GPU")
+        # Último debug de SOUL (para observabilidad y tuning).
+        self.last_soul_debug: Dict[str, Any] = {}
+
+        # Inicializar EasyOCR (lazy import).
+        # Nota: En algunos entornos Windows, el backend GPU puede provocar crashes
+        # nativos (sin traceback de Python). Permitimos forzar CPU por env.
+        #   OCR_GPU=0  -> fuerza gpu=False
+        #   OCR_GPU=1  -> intenta gpu=True (default)
+        self.reader = None
+        if not bool(self._ocr_enabled):
+            try:
+                if self._log_init:
+                    print("OCR deshabilitado (OCR_ENABLED=0)")
+            except Exception:
+                pass
+        else:
+            try:
+                import easyocr  # type: ignore
+
+                ocr_gpu_raw = (os.getenv("OCR_GPU", "1") or "1").strip().lower()
+                ocr_gpu = ocr_gpu_raw in {"1", "true", "yes", "y", "on"}
+                if not ocr_gpu:
+                    try:
+                        self.reader = easyocr.Reader(["en"], gpu=False)
+                        if self._log_init:
+                            print("OCR inicializado sin GPU (OCR_GPU=0)")
+                    except Exception:
+                        # Last resort: still try GPU if CPU init fails.
+                        self.reader = easyocr.Reader(["en"], gpu=True)
+                        if self._log_init:
+                            print("OCR inicializado con GPU (fallback)")
+                else:
+                    try:
+                        self.reader = easyocr.Reader(["en"], gpu=True)
+                        if self._log_init:
+                            print("OCR inicializado con GPU")
+                    except Exception:
+                        self.reader = easyocr.Reader(["en"], gpu=False)
+                        if self._log_init:
+                            print("OCR inicializado sin GPU")
+            except Exception:
+                # Fail-safe: bot should still run without OCR.
+                self.reader = None
+                try:
+                    if self._log_init:
+                        print("OCR no disponible; continuando sin OCR")
+                except Exception:
+                    pass
 
         # Cargar correcciones OCR
         self.corrections = self._load_corrections()
@@ -225,6 +277,10 @@ class OCRProcessor:
         if image is None or getattr(image, "size", 0) == 0:
             return ""
 
+        # Global OCR disabled / reader not available.
+        if self.reader is None:
+            return ""
+
         best_text = ""
         best_score = -1e9
 
@@ -283,7 +339,13 @@ class OCRProcessor:
         except Exception:
             return ""
 
-    def _readtext_strings(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> List[str]:
+    def _readtext_strings(
+        self,
+        image: np.ndarray,
+        *,
+        allowlist: Optional[str] = None,
+        deadline_ts: float | None = None,
+    ) -> List[str]:
         """Best-effort OCR returning a list of raw strings.
 
         Central helper used by multiple extraction paths.
@@ -292,10 +354,19 @@ class OCRProcessor:
         if image is None or getattr(image, "size", 0) == 0:
             return []
 
+        # Global OCR disabled / reader not available.
+        if self.reader is None:
+            return []
+
         out: List[str] = []
         seen: set[str] = set()
 
         for _name, img in self._preprocess_variants(image):
+            try:
+                if deadline_ts is not None and float(time.time()) >= float(deadline_ts):
+                    break
+            except Exception:
+                pass
             try:
                 res = self.reader.readtext(img, detail=0, allowlist=allowlist)
             except Exception:
@@ -427,12 +498,57 @@ class OCRProcessor:
         # Avoid the old "max number anywhere" heuristic: the skills panel contains
         # many unrelated numbers (level, skills, timers), which can create large
         # false positives.
+        #
+        # OCR sometimes misreads letters as digits (e.g. "C4p"). We normalize a
+        # small set of common substitutions before regex.
+        try:
+            s2 = s.lower()
+            s2 = (
+                s2.replace("4", "a")
+                .replace("0", "o")
+                .replace("1", "i")
+                .replace("5", "s")
+                .replace("8", "b")
+            )
+        except Exception:
+            s2 = s
+
         try:
             m = re.search(
-                r"(?:\bcap\b|capac(?:ity)?)\D{0,12}(\d{1,6})",
-                s,
+                r"(?:\bcap\b|\bcapac(?:ity)?\b|\bcapacity\b|\bcap\s*:)\D{0,12}(\d{1,6})",
+                s2,
                 flags=re.IGNORECASE,
             )
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+
+        return None
+
+    @staticmethod
+    def _parse_soul_from_text(text: str) -> Optional[int]:
+        """Parse SOUL value from OCR text."""
+
+        try:
+            s = str(text or "")
+        except Exception:
+            return None
+
+        try:
+            s2 = s.lower()
+            s2 = (
+                s2.replace("0", "o")
+                .replace("1", "l")
+                .replace("|", "l")
+                .replace("5", "s")
+            )
+        except Exception:
+            s2 = s
+
+        # Tibia soul is usually small (<= 200), but keep it a bit wider.
+        try:
+            m = re.search(r"(?:\bsoul\b|\bsoul\s*:)\D{0,12}(\d{1,4})", s2, flags=re.IGNORECASE)
             if m:
                 return int(m.group(1))
         except Exception:
@@ -611,6 +727,40 @@ class OCRProcessor:
         2) Si no, intentar parsear "Cap: 123" desde `skills_panel` (OCR raw).
         """
 
+        # Allow disabling CAP OCR specifically (to keep vision realtime).
+        try:
+            cap_on = (os.getenv("CAP_OCR_ENABLED", "1") or "1").strip().lower() in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            cap_on = True
+        if not bool(cap_on):
+            try:
+                self.last_cap_debug = {
+                    "roi": None,
+                    "panel": None,
+                    "panel_source": "",
+                    "chosen": None,
+                    "chosen_source": "none",
+                    "decision": "disabled",
+                }
+            except Exception:
+                pass
+            return None
+
+        # Global OCR disabled / reader not available.
+        if self.reader is None:
+            try:
+                self.last_cap_debug = {
+                    "roi": None,
+                    "panel": None,
+                    "panel_source": "",
+                    "chosen": None,
+                    "chosen_source": "none",
+                    "decision": "no_reader",
+                }
+            except Exception:
+                pass
+            return None
+
         def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
             return self._roi_to_px(frame, rois, resolution, roi_def)
 
@@ -705,7 +855,16 @@ class OCRProcessor:
                 try:
                     if soul_bounds is not None:
                         sx, sy, sw, sh = soul_bounds
-                        x0 = max(x0, int(sx + sw + 2))
+                        overlaps = (sx < x1) and ((sx + sw) > x0) and (sy < y1) and ((sy + sh) > y0)
+                        if overlaps:
+                            cap_cx = float(x) + float(w) * 0.5
+                            soul_cx = float(sx) + float(sw) * 0.5
+                            if soul_cx <= cap_cx:
+                                # Soul is left of cap: keep crop start after soul.
+                                x0 = max(x0, int(sx + sw + 2))
+                            else:
+                                # Soul is right of cap: keep crop end before soul.
+                                x1 = min(x1, max(0, int(sx - 2)))
                 except Exception:
                     pass
                 crop = frame[y0:y1, x0:x1]
@@ -883,7 +1042,12 @@ class OCRProcessor:
                             return ""
 
                     def _extract_bbox_row_cap(results) -> tuple[int | None, float]:
-                        """Return (cap_value, label_conf)."""
+                        """Return (cap_value, score).
+
+                        Supports HUD layouts where the numeric value is either:
+                        - to the RIGHT of the 'cap' label (same row)
+                        - BELOW the 'cap' label (common Tibia skills panel layouts)
+                        """
 
                         entries: list[tuple[str, float, float, float, float, float]] = []
                         for bbox, text, conf in results or []:
@@ -912,27 +1076,58 @@ class OCRProcessor:
                         cap_label = max(cap_labels, key=lambda e: e[1])
                         _s, label_conf, lx0, ly0, lx1, ly1 = cap_label
                         ly_mid = (ly0 + ly1) / 2.0
+                        lx_mid = (lx0 + lx1) / 2.0
 
-                        num_pairs: list[tuple[int, float]] = []
+                        # Tolerances scale with label size.
+                        tol_y = max(10.0, (ly1 - ly0) * 1.8)
+                        tol_x = max(12.0, (lx1 - lx0) * 1.6)
+                        tol_down = max(18.0, (ly1 - ly0) * 5.0)
+
+                        # Candidate tuples: (num_conf, dist, value)
+                        cands: list[tuple[float, float, int]] = []
+
                         for s, conf, bx0, by0, bx1, by1 in entries:
-                            if bx0 <= lx1:
+                            found = [int(n) for n in re.findall(r"\d{1,6}", str(s or ""))]
+                            if not found:
                                 continue
+
                             y_mid = (by0 + by1) / 2.0
-                            if abs(y_mid - ly_mid) > max(10.0, (ly1 - ly0) * 1.5):
-                                continue
-                            found = [int(n) for n in re.findall(r"\d{1,6}", s)]
-                            for v in found:
-                                num_pairs.append((v, conf))
+                            x_mid = (bx0 + bx1) / 2.0
 
-                        if not num_pairs:
+                            # (A) Right-of-label, same row.
+                            if bx0 > lx1:
+                                if abs(y_mid - ly_mid) <= tol_y:
+                                    dist = abs(y_mid - ly_mid) + max(0.0, bx0 - lx1) * 0.05
+                                    for v in found:
+                                        cands.append((float(conf or 0.0), float(dist), int(v)))
+
+                            # (B) Below-label: allow overlap in X and require it to be under the label.
+                            below_ok = (by0 >= (ly1 - tol_y * 0.25)) and ((bx1 >= (lx0 - tol_x)) and (bx0 <= (lx1 + tol_x)))
+                            if below_ok:
+                                dy = float(y_mid - ly1)
+                                if 0.0 <= dy <= tol_down:
+                                    dist = dy + abs(x_mid - lx_mid) * 0.12
+                                    for v in found:
+                                        cands.append((float(conf or 0.0), float(dist), int(v)))
+
+                        if not cands:
                             return None, float(label_conf)
 
-                        # Prefer higher confidence; if ties, larger value.
-                        num_pairs.sort(key=lambda t: (t[1], t[0]), reverse=True)
+                        # Prefer higher OCR confidence; then closer geometry; then larger value.
+                        cands.sort(key=lambda t: (t[0], -t[1], t[2]), reverse=True)
+                        best_conf, best_dist, best_val = cands[0]
+
+                        # Combined score used to compare preprocess variants.
+                        score = float(label_conf) * 0.6 + float(best_conf) * 0.4
                         try:
-                            return int(num_pairs[0][0]), float(label_conf)
+                            score = float(score) - min(0.25, float(best_dist) / 400.0)
                         except Exception:
-                            return None, float(label_conf)
+                            pass
+                        if score < 0.0:
+                            score = 0.0
+                        if score > 1.0:
+                            score = 1.0
+                        return int(best_val), float(score)
 
                     # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
                     cap_candidates: list[tuple[int | None, float, str]] = []
@@ -971,17 +1166,23 @@ class OCRProcessor:
                 except Exception:
                     pass
 
-                # Last-resort panel fallback: pick the largest number in the skills panel.
-                # This is intentionally NOT treated as fully trusted, but it can rescue
-                # cases where the CAP label isn't recognized while the number is.
+                # Last-resort panel fallback (OFF by default): picking the max number
+                # in the skills panel is very error-prone (can grab unrelated values).
+                # Enable explicitly only for debugging.
                 try:
-                    if cap_from_panel is None:
-                        nums = [int(n) for n in re.findall(r"\d{1,6}", joined)]
-                        if nums:
-                            cap_from_panel = int(max(nums))
-                            panel_source = "max_any"
+                    allow_max_any = (os.getenv("CAP_ALLOW_MAX_ANY", "0") or "0").strip().lower() in {"1", "true", "yes"}
                 except Exception:
-                    pass
+                    allow_max_any = False
+
+                if allow_max_any:
+                    try:
+                        if cap_from_panel is None:
+                            nums = [int(n) for n in re.findall(r"\d{1,6}", joined)]
+                            if nums:
+                                cap_from_panel = int(max(nums))
+                                panel_source = "max_any"
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -990,6 +1191,322 @@ class OCRProcessor:
             self.last_cap_debug = {
                 "roi": cap_from_roi,
                 "panel": cap_from_panel,
+                "panel_source": panel_source,
+                "chosen": chosen,
+                "chosen_source": chosen_source,
+                "decision": decision,
+            }
+        except Exception:
+            pass
+
+        return chosen
+
+    def extract_soul(self, frame: np.ndarray, rois: Mapping[str, Any], resolution: Tuple[int, int]) -> Optional[int]:
+        """Extrae SOUL (si hay ROI `soul_ocr`).
+
+        Intencionalmente simple (sin heurística global del panel) para evitar
+        capturar números no relacionados.
+
+        Env vars:
+          - SOUL_OCR_ENABLED=0 para deshabilitar
+          - SOUL_OCR_DEBUG_SNAP=1 para guardar crops en logs/debug_soul/
+        """
+
+        try:
+            soul_on = (os.getenv("SOUL_OCR_ENABLED", "1") or "1").strip().lower() in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            soul_on = True
+        if not soul_on:
+            return None
+
+        if not bool(getattr(self, "_ocr_enabled", True)):
+            return None
+        if self.reader is None:
+            return None
+
+        def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
+            return self._roi_to_px(frame, rois, resolution, roi_def)
+
+        soul_from_roi: Optional[int] = None
+        soul_from_panel: Optional[int] = None
+        panel_source: str = ""
+
+        try:
+            if hasattr(rois, "get") and rois.get("soul_ocr") is not None:
+                x, y, w, h = normalize_to_px(cast(Dict[str, Any], rois["soul_ocr"]))
+
+                cap_bounds: Optional[Tuple[int, int, int, int]] = None
+                try:
+                    if hasattr(rois, "get") and rois.get("cap_ocr") is not None:
+                        cap_bounds = normalize_to_px(cast(Dict[str, Any], rois["cap_ocr"]))
+                except Exception:
+                    cap_bounds = None
+
+                # Expand: digits can be tiny and ROIs can drift.
+                x0 = max(0, int(x - (w * 2.0)))
+                y0 = max(0, int(y - (h * 1.0)))
+                x1 = min(int(frame.shape[1]), int(x + w + (w * 1.5)))
+                y1 = min(int(frame.shape[0]), int(y + h + (h * 1.0)))
+
+                # Avoid expanding into CAP ROI when they are very close.
+                try:
+                    if cap_bounds is not None:
+                        cx, cy, cw, ch = cap_bounds
+                        overlaps = (cx < x1) and ((cx + cw) > x0) and (cy < y1) and ((cy + ch) > y0)
+                        if overlaps:
+                            soul_cx = float(x) + float(w) * 0.5
+                            cap_cx = float(cx) + float(cw) * 0.5
+                            if cap_cx >= soul_cx:
+                                x1 = min(x1, max(0, int(cx - 2)))
+                            else:
+                                x0 = max(x0, int(cx + cw + 2))
+                except Exception:
+                    pass
+
+                crop = frame[y0:y1, x0:x1]
+
+                # Optional debug snapshot of the exact crop used for SOUL OCR.
+                try:
+                    if self._debug and os.getenv("SOUL_OCR_DEBUG_SNAP", "").strip().lower() in {"1", "true", "yes"}:
+                        import time as _time
+
+                        now = float(_time.time())
+                        if (now - float(getattr(self, "_last_soul_debug_ts", 0.0))) >= 1.0:
+                            setattr(self, "_last_soul_debug_ts", now)
+                            try:
+                                os.makedirs("logs/debug_soul", exist_ok=True)
+                                cv2.imwrite(f"logs/debug_soul/{now:.6f}_soul_crop.png", crop)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                # Extra upscale for tiny digits.
+                try:
+                    crop_up = cv2.resize(crop, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                except Exception:
+                    crop_up = crop
+
+                def _best_single_box_number(results) -> Optional[int]:
+                    best: tuple[float, int, int] | None = None  # (conf, n_digits, value)
+                    for _bbox, text, conf in results or []:
+                        try:
+                            s = re.sub(r"[^0-9]", "", str(text or ""))
+                            if not s:
+                                continue
+                            if not (1 <= len(s) <= 4):
+                                continue
+                            v = int(s)
+                            c = float(conf or 0.0)
+                            key = (c, len(s), v)
+                            if best is None or key > best:
+                                best = key
+                        except Exception:
+                            continue
+                    return int(best[2]) if best is not None else None
+
+                try:
+                    res = self.reader.readtext(crop_up, detail=1, allowlist="0123456789")
+                    soul_from_roi = _best_single_box_number(res)
+                except Exception:
+                    soul_from_roi = None
+
+                if soul_from_roi is None:
+                    try:
+                        processed = self.preprocess_image(crop_up)
+                        res = self.reader.readtext(processed, detail=1, allowlist="0123456789")
+                        soul_from_roi = _best_single_box_number(res)
+                    except Exception:
+                        soul_from_roi = None
+
+                if soul_from_roi is None:
+                    try:
+                        processed = self.preprocess_image(crop_up)
+                        inv = cv2.bitwise_not(processed)
+                        res = self.reader.readtext(inv, detail=1, allowlist="0123456789")
+                        soul_from_roi = _best_single_box_number(res)
+                    except Exception:
+                        soul_from_roi = None
+        except Exception:
+            soul_from_roi = None
+
+        # (2) Safe fallback: parse "Soul: <n>" inside skills_panel.
+        # This stays conservative: ONLY accept labeled parses (regex/bbox-row).
+        try:
+            if hasattr(rois, "get") and rois.get("skills_panel") is not None:
+                x, y, w, h = normalize_to_px(cast(Dict[str, Any], rois["skills_panel"]))
+                crop = frame[y : y + h, x : x + w]
+
+                texts = self._readtext_strings(crop, allowlist=None)
+                joined = " ".join(texts)
+                v = self._parse_soul_from_text(joined)
+                if v is not None:
+                    soul_from_panel = int(v)
+                    panel_source = "regex"
+
+                # BBox-based row parse: find "soul" label and number on same row.
+                try:
+                    def _norm_label_soul(s: str) -> str:
+                        try:
+                            t = re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+                            t = (
+                                t.replace("0", "o")
+                                .replace("1", "l")
+                                .replace("|", "l")
+                                .replace("5", "s")
+                            )
+                            return t
+                        except Exception:
+                            return ""
+
+                    def _extract_bbox_row_soul(results) -> tuple[int | None, float]:
+                        entries: list[tuple[str, float, float, float, float, float]] = []
+                        for bbox, text, conf in results or []:
+                            try:
+                                s = str(text or "")
+                                if not s:
+                                    continue
+                                xs = [p[0] for p in bbox]
+                                ys = [p[1] for p in bbox]
+                                bx0 = float(min(xs))
+                                by0 = float(min(ys))
+                                bx1 = float(max(xs))
+                                by1 = float(max(ys))
+                                entries.append((s, float(conf or 0.0), float(bx0), float(by0), float(bx1), float(by1)))
+                            except Exception:
+                                continue
+
+                        soul_labels = [e for e in entries if "soul" in _norm_label_soul(e[0])]
+                        if not soul_labels:
+                            return None, 0.0
+
+                        soul_label = max(soul_labels, key=lambda e: e[1])
+                        _s, label_conf, lx0, ly0, lx1, ly1 = soul_label
+                        ly_mid = (ly0 + ly1) / 2.0
+                        lx_mid = (lx0 + lx1) / 2.0
+
+                        tol_y = max(10.0, (ly1 - ly0) * 1.8)
+                        tol_x = max(12.0, (lx1 - lx0) * 1.6)
+                        tol_down = max(18.0, (ly1 - ly0) * 5.0)
+
+                        cands: list[tuple[float, float, int]] = []
+                        for s, conf, bx0, by0, bx1, by1 in entries:
+                            found = [int(n) for n in re.findall(r"\d{1,4}", str(s or ""))]
+                            if not found:
+                                continue
+
+                            y_mid = (by0 + by1) / 2.0
+                            x_mid = (bx0 + bx1) / 2.0
+
+                            # (A) Right-of-label (same row)
+                            if bx0 > lx1 and abs(y_mid - ly_mid) <= tol_y:
+                                dist = abs(y_mid - ly_mid) + max(0.0, bx0 - lx1) * 0.05
+                                for vv in found:
+                                    cands.append((float(conf or 0.0), float(dist), int(vv)))
+
+                            # (B) Below-label (overlapping column)
+                            below_ok = (by0 >= (ly1 - tol_y * 0.25)) and ((bx1 >= (lx0 - tol_x)) and (bx0 <= (lx1 + tol_x)))
+                            if below_ok:
+                                dy = float(y_mid - ly1)
+                                if 0.0 <= dy <= tol_down:
+                                    dist = dy + abs(x_mid - lx_mid) * 0.12
+                                    for vv in found:
+                                        cands.append((float(conf or 0.0), float(dist), int(vv)))
+
+                        if not cands:
+                            return None, float(label_conf)
+
+                        cands.sort(key=lambda t: (t[0], -t[1], t[2]), reverse=True)
+                        best_conf, best_dist, best_val = cands[0]
+
+                        score = float(label_conf) * 0.6 + float(best_conf) * 0.4
+                        try:
+                            score = float(score) - min(0.25, float(best_dist) / 400.0)
+                        except Exception:
+                            pass
+                        if score < 0.0:
+                            score = 0.0
+                        if score > 1.0:
+                            score = 1.0
+                        return int(best_val), float(score)
+
+                    soul_candidates: list[tuple[int | None, float, str]] = []
+                    try:
+                        res_raw = self.reader.readtext(crop, detail=1, allowlist=None)
+                        v0, lc0 = _extract_bbox_row_soul(res_raw)
+                        soul_candidates.append((v0, lc0, "raw"))
+                    except Exception:
+                        pass
+                    try:
+                        processed = self.preprocess_image(crop)
+                        res_proc = self.reader.readtext(processed, detail=1, allowlist=None)
+                        v0, lc0 = _extract_bbox_row_soul(res_proc)
+                        soul_candidates.append((v0, lc0, "proc"))
+                    except Exception:
+                        pass
+                    try:
+                        processed = self.preprocess_image(crop)
+                        inv = cv2.bitwise_not(processed)
+                        res_inv = self.reader.readtext(inv, detail=1, allowlist=None)
+                        v0, lc0 = _extract_bbox_row_soul(res_inv)
+                        soul_candidates.append((v0, lc0, "inv"))
+                    except Exception:
+                        pass
+
+                    best = None
+                    for v0, lc0, _src0 in soul_candidates:
+                        if v0 is None:
+                            continue
+                        key = (float(lc0), int(v0))
+                        if best is None or key > best[0]:
+                            best = (key, int(v0))
+                    if best is not None:
+                        soul_from_panel = int(best[1])
+                        panel_source = "bbox_row"
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Reconcile ROI vs panel (prefer trusted label-based panel parse).
+        chosen = None
+        chosen_source = "none"
+        decision = "no_digits"
+
+        if soul_from_roi is None and soul_from_panel is None:
+            chosen = None
+            chosen_source = "none"
+            decision = "no_digits"
+        elif soul_from_roi is None:
+            chosen = soul_from_panel
+            chosen_source = "panel"
+            decision = "panel_only"
+        elif soul_from_panel is None:
+            chosen = soul_from_roi
+            chosen_source = "roi"
+            decision = "roi_only"
+        else:
+            trusted_panel = str(panel_source or "").strip().lower() in {"regex", "bbox_row"}
+            s_roi = str(int(soul_from_roi))
+            s_pan = str(int(soul_from_panel))
+            # Handle truncation: ROI often captures only the last digit(s).
+            if trusted_panel and len(s_pan) > len(s_roi) and s_pan.endswith(s_roi):
+                chosen = int(soul_from_panel)
+                chosen_source = "panel"
+                decision = "panel_suffix"
+            elif trusted_panel and len(s_pan) > len(s_roi) and len(s_roi) <= 2:
+                chosen = int(soul_from_panel)
+                chosen_source = "panel"
+                decision = "panel_more_digits"
+            else:
+                chosen = int(soul_from_roi)
+                chosen_source = "roi"
+                decision = "roi_default"
+
+        try:
+            self.last_soul_debug = {
+                "roi": soul_from_roi,
+                "panel": soul_from_panel,
                 "panel_source": panel_source,
                 "chosen": chosen,
                 "chosen_source": chosen_source,
@@ -1026,11 +1543,87 @@ class OCRProcessor:
         else:
             source_w, source_h = int(resolution[0]), int(resolution[1])
 
-        scale = min(frame_w / source_w, frame_h / source_h) if source_w and source_h else 1.0
-        content_w = source_w * scale
-        content_h = source_h * scale
-        offset_x = (frame_w - content_w) / 2.0
-        offset_y = (frame_h - content_h) / 2.0
+        # Two mapping modes:
+        # - Letterbox mode (uniform scale + centered offsets): for frames that contain
+        #   the source content surrounded by black bars.
+        # - Crop/scale mode (independent x/y scale, no offsets): for captures where
+        #   the source is simply cropped/resized (common in window capture when the
+        #   client height differs from the profile, e.g., 1920x1032 vs 1920x1080).
+        #
+        # ROI transform mode selection.
+        # Default "auto" preserves current behavior.
+        #
+        # Env: ROI_TRANSFORM_MODE = auto|letterbox|crop_scale|crop_only
+        # - letterbox: uniform scale + centered offsets (classic)
+        # - crop_scale: independent x/y scaling, no offsets (best for resized/cropped captures)
+        # - crop_only: no scaling, no offsets (best for pure pixel-crop from top-left)
+        try:
+            import os
+
+            mode = (os.getenv("ROI_TRANSFORM_MODE", "auto") or "auto").strip().lower()
+        except Exception:
+            mode = "auto"
+
+        # Auto transform heuristics.
+        #
+        # In real Tibia window capture, it's common to see frames like 1920x1032
+        # for profiles authored at 1920x1080 (window borders/titlebar). That is
+        # a *crop*, not a scale. For crops we should NOT rescale coordinates,
+        # otherwise small HUD ROIs (cap/soul/hungry) drift and OCR becomes noisy.
+        auto_choice = "letterbox"
+        if mode == "auto":
+            try:
+                dw = int(frame_w) - int(source_w)
+                dh = int(frame_h) - int(source_h)
+            except Exception:
+                dw, dh = 0, 0
+
+            try:
+                max_crop_delta = int(float((os.getenv("ROI_TRANSFORM_CROP_ONLY_MAX_DELTA_PX", "120") or "120").strip() or "120"))
+            except Exception:
+                max_crop_delta = 120
+            max_crop_delta = max(0, int(max_crop_delta))
+
+            # Small negative deltas typically indicate window cropping.
+            try:
+                if int(frame_w) == int(source_w) and int(frame_h) < int(source_h) and abs(int(dh)) <= max_crop_delta:
+                    auto_choice = "crop_only"
+                elif int(frame_h) == int(source_h) and int(frame_w) < int(source_w) and abs(int(dw)) <= max_crop_delta:
+                    auto_choice = "crop_only"
+                elif int(frame_w) < int(source_w) and int(frame_h) < int(source_h) and (abs(int(dw)) <= max_crop_delta or abs(int(dh)) <= max_crop_delta):
+                    auto_choice = "crop_only"
+                # When both dimensions differ, it's more likely a resize/scale.
+                elif int(frame_w) != int(source_w) and int(frame_h) != int(source_h):
+                    auto_choice = "crop_scale"
+                else:
+                    auto_choice = "letterbox"
+            except Exception:
+                auto_choice = "letterbox"
+
+        if mode in {"crop_only", "crop"}:
+            scale_x = 1.0
+            scale_y = 1.0
+            offset_x = 0.0
+            offset_y = 0.0
+        elif mode in {"crop_scale", "scale"} or (mode == "auto" and auto_choice == "crop_scale"):
+            scale_x = (frame_w / source_w) if source_w else 1.0
+            scale_y = (frame_h / source_h) if source_h else 1.0
+            offset_x = 0.0
+            offset_y = 0.0
+        elif mode == "auto" and auto_choice == "crop_only":
+            scale_x = 1.0
+            scale_y = 1.0
+            offset_x = 0.0
+            offset_y = 0.0
+        else:
+            # letterbox (or auto fallback)
+            scale = min(frame_w / source_w, frame_h / source_h) if source_w and source_h else 1.0
+            scale_x = scale
+            scale_y = scale
+            content_w = source_w * scale
+            content_h = source_h * scale
+            offset_x = (frame_w - content_w) / 2.0
+            offset_y = (frame_h - content_h) / 2.0
 
         unit = str(roi_def.get("unit", "") if hasattr(roi_def, "get") else "").lower()
         x_val = roi_def.get("x") if hasattr(roi_def, "get") else None
@@ -1082,10 +1675,10 @@ class OCRProcessor:
         except Exception:
             pass
 
-        x = int(round(offset_x + x_src * scale))
-        y = int(round(offset_y + y_src * scale))
-        w = int(round(w_src * scale))
-        h = int(round(h_src * scale))
+        x = int(round(offset_x + x_src * float(scale_x)))
+        y = int(round(offset_y + y_src * float(scale_y)))
+        w = int(round(w_src * float(scale_x)))
+        h = int(round(h_src * float(scale_y)))
 
         x = max(0, min(x, frame_w - 1))
         y = max(0, min(y, frame_h - 1))
@@ -1158,6 +1751,52 @@ class OCRProcessor:
         # Reset per-call OCR meta
         self._set_last_ocr_meta(kind="hp", source="", reason="")
         self._set_last_ocr_meta(kind="mp", source="", reason="")
+
+        # Fast path: disable HP/MP OCR entirely (use bars fallback in GameStateBuilder).
+        # This is useful for CPU-only environments where EasyOCR can be too slow.
+        try:
+            raw = (os.getenv("HPMP_OCR_ENABLED", "1") or "1").strip().lower()
+            if raw in {"0", "false", "no", "off"}:
+                self._set_last_ocr_meta(kind="hp", source="disabled", reason="HPMP_OCR_ENABLED=0")
+                self._set_last_ocr_meta(kind="mp", source="disabled", reason="HPMP_OCR_ENABLED=0")
+                return None, None, None, None
+        except Exception:
+            pass
+
+        # Optional time budget for HP/MP OCR to avoid stalling the vision thread.
+        # When set (ms > 0), all OCR calls inside this function share the same deadline.
+        # Example: HPMP_OCR_MAX_MS=250
+        hpmp_deadline_ts: float | None = None
+        try:
+            raw = (os.getenv("HPMP_OCR_MAX_MS", "0") or "0").strip()
+            max_ms = float(raw) if raw else 0.0
+            if max_ms > 0.0:
+                hpmp_deadline_ts = float(time.time()) + (float(max_ms) / 1000.0)
+        except Exception:
+            hpmp_deadline_ts = None
+
+        # Some OCR outputs contain a single large number that can be unrelated
+        # to HP/MP (e.g., timestamps, stamina, UI digits). Disable the
+        # single-number fallback by default to avoid polluting telemetry.
+        try:
+            allow_single_number = (os.getenv("HPMP_ALLOW_SINGLE_NUMBER", "0") or "0").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            }
+        except Exception:
+            allow_single_number = False
+
+        # Top-strip OCR can be noisy when dedicated top OCR ROIs exist.
+        # Default: only use it when the dedicated ROIs are missing, unless
+        # explicitly enabled.
+        try:
+            force_strip = (os.getenv("HPMP_TOP_STRIP_OCR", "") or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            force_strip = False
+        use_top_strip = bool(force_strip or ("hp_top_ocr" not in rois and "mp_top_ocr" not in rois))
 
         try:
             # Función para convertir coordenadas normalizadas a píxeles.
@@ -1296,7 +1935,7 @@ class OCRProcessor:
             # Fallback: OCR fijo por ROIs
             # (0) Prioridad: top strip (HP/MP juntos). Primero intentamos split
             # 0..60% (HP) / 60..100% (MP) para evitar confusiones con stamina/soul.
-            if 'hpmp_top_strip' in rois:
+            if 'hpmp_top_strip' in rois and use_top_strip:
                 strip_roi = normalize_to_px(rois['hpmp_top_strip'])
                 ok, reason = _valid_roi(strip_roi)
                 if not ok:
@@ -1317,9 +1956,9 @@ class OCRProcessor:
                                 right_crop = strip_crop
 
                             if left_crop is not None and getattr(left_crop, "size", 0) != 0:
-                                hp_texts = self._readtext_strings(left_crop, allowlist="0123456789/|")
+                                hp_texts = self._readtext_strings(left_crop, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                                 hp_current, hp_max, hp_reason = _pick_best_cur_max(hp_texts or [], "HP")
-                                if hp_current is None and hp_max is None:
+                                if allow_single_number and hp_current is None and hp_max is None:
                                     v, why = _pick_unique_single_number(hp_texts or [], "HP")
                                     if v is not None:
                                         hp_current, hp_max = int(v), None
@@ -1330,9 +1969,9 @@ class OCRProcessor:
                                     self._set_last_ocr_meta(kind="hp", source="top_strip_split", reason=(hp_reason or "parse_fail"))
 
                             if right_crop is not None and getattr(right_crop, "size", 0) != 0:
-                                mp_texts = self._readtext_strings(right_crop, allowlist="0123456789/|")
+                                mp_texts = self._readtext_strings(right_crop, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                                 mp_current, mp_max, mp_reason = _pick_best_cur_max(mp_texts or [], "MP")
-                                if mp_current is None and mp_max is None:
+                                if allow_single_number and mp_current is None and mp_max is None:
                                     v, why = _pick_unique_single_number(mp_texts or [], "MP")
                                     if v is not None:
                                         mp_current, mp_max = int(v), None
@@ -1514,7 +2153,7 @@ class OCRProcessor:
                     if hp_crop.size > 0:
                         if self._debug:
                             print(f"HP crop - valor promedio: {hp_crop.mean():.2f}")
-                        hp_texts = self._readtext_strings(hp_crop, allowlist="0123456789/|")
+                        hp_texts = self._readtext_strings(hp_crop, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                         hp_text = hp_texts[0] if hp_texts else ""
                         # Fallback: si no aparece nada, probar un crop más grande alrededor
                         if not hp_text:
@@ -1528,17 +2167,47 @@ class OCRProcessor:
                             if self._debug:
                                 print(f"HP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {hp_crop2.shape if hp_crop2.size > 0 else 'empty'}")
                             if hp_crop2.size > 0:
-                                hp_texts = self._readtext_strings(hp_crop2, allowlist="0123456789/|")
+                                hp_texts = self._readtext_strings(hp_crop2, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                                 hp_text = hp_texts[0] if hp_texts else hp_text
                         if self._debug:
                             print(f"HP texto crudo: '{hp_text}'")
                         if hp_text:
                             hp_current, hp_max, hp_reason = _pick_best_cur_max(hp_texts or [hp_text], "HP")
                             if hp_current is None and hp_max is None:
-                                v, why = _pick_unique_single_number(hp_texts or [hp_text], "HP")
-                                if v is not None:
-                                    hp_current, hp_max = int(v), None
-                                    hp_reason = why
+                                if allow_single_number:
+                                    v, why = _pick_unique_single_number(hp_texts or [hp_text], "HP")
+                                    if v is not None:
+                                        hp_current, hp_max = int(v), None
+                                        hp_reason = why
+
+                            # If HP ROI is very wide (common in some configs),
+                            # it may include unrelated numbers. Try a few
+                            # smaller windows inside the ROI before giving up.
+                            if hp_current is None and hp_max is None:
+                                try:
+                                    if int(hp_roi[2]) >= 200 and hp_crop is not None and getattr(hp_crop, "size", 0) != 0:
+                                        w0 = int(hp_crop.shape[1])
+                                        h0 = int(hp_crop.shape[0])
+                                        # Candidate windows: overlapping slices in the central-left region.
+                                        wins = [
+                                            (int(w0 * 0.05), int(w0 * 0.35)),
+                                            (int(w0 * 0.12), int(w0 * 0.45)),
+                                            (int(w0 * 0.20), int(w0 * 0.60)),
+                                        ]
+                                        for x0, x1 in wins:
+                                            x0 = max(0, min(int(x0), w0 - 1))
+                                            x1 = max(x0 + 1, min(int(x1), w0))
+                                            sub = hp_crop[:, x0:x1]
+                                            if sub is None or getattr(sub, "size", 0) == 0:
+                                                continue
+                                            sub_texts = self._readtext_strings(sub, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
+                                            cur2, mx2, r2 = _pick_best_cur_max(sub_texts or [], "HP")
+                                            if cur2 is not None:
+                                                hp_current, hp_max, hp_reason = cur2, mx2, r2
+                                                self._set_last_ocr_meta(kind="hp", source="top_ocr_subwin", reason=("ok" if hp_max is not None else (hp_reason or "single_number")))
+                                                break
+                                except Exception:
+                                    pass
                             if hp_current is not None:
                                 # If max is missing, expose that in reason.
                                 self._set_last_ocr_meta(kind="hp", source="top_ocr", reason=("ok" if hp_max is not None else (hp_reason or "single_number")))
@@ -1560,7 +2229,7 @@ class OCRProcessor:
                     if mp_crop.size > 0:
                         if self._debug:
                             print(f"MP crop - valor promedio: {mp_crop.mean():.2f}")
-                        mp_texts = self._readtext_strings(mp_crop, allowlist="0123456789/|")
+                        mp_texts = self._readtext_strings(mp_crop, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                         mp_text = mp_texts[0] if mp_texts else ""
                         if not mp_text:
                             pad_x = int(mp_roi[2] * 0.6)
@@ -1573,17 +2242,18 @@ class OCRProcessor:
                             if self._debug:
                                 print(f"MP ROI fallback: ({x0}, {y0}, {x1-x0}, {y1-y0}), crop shape: {mp_crop2.shape if mp_crop2.size > 0 else 'empty'}")
                             if mp_crop2.size > 0:
-                                mp_texts = self._readtext_strings(mp_crop2, allowlist="0123456789/|")
+                                mp_texts = self._readtext_strings(mp_crop2, allowlist="0123456789/|", deadline_ts=hpmp_deadline_ts)
                                 mp_text = mp_texts[0] if mp_texts else mp_text
                         if self._debug:
                             print(f"MP texto crudo: '{mp_text}'")
                         if mp_text:
                             mp_current, mp_max, mp_reason = _pick_best_cur_max(mp_texts or [mp_text], "MP")
                             if mp_current is None and mp_max is None:
-                                v, why = _pick_unique_single_number(mp_texts or [mp_text], "MP")
-                                if v is not None:
-                                    mp_current, mp_max = int(v), None
-                                    mp_reason = why
+                                if allow_single_number:
+                                    v, why = _pick_unique_single_number(mp_texts or [mp_text], "MP")
+                                    if v is not None:
+                                        mp_current, mp_max = int(v), None
+                                        mp_reason = why
                             if mp_current is not None:
                                 self._set_last_ocr_meta(kind="mp", source="top_ocr", reason=("ok" if mp_max is not None else (mp_reason or "single_number")))
                             else:
@@ -1650,6 +2320,12 @@ class OCRProcessor:
         if self._debug and reason == "single_number" and cur is not None and mx is None:
             print(f"{label}: Usando valor único encontrado: {cur}")
         if self._debug and reason in {"parse_fail", "invalid_range"}:
+            # Avoid log spam for OCR artifacts like a lone '|' with no digits.
+            try:
+                if not re.search(r"\d", str(text or "")):
+                    return cur, mx, reason
+            except Exception:
+                pass
             print(f"{label}: No se pudo parsear valor de: '{text}' (reason={reason})")
         return cur, mx, reason
 
@@ -1657,3 +2333,18 @@ class OCRProcessor:
         """Parsea current/max si existe; si no, devuelve (current, None)."""
         cur, mx, _reason = self._parse_current_and_max_with_reason(text, label)
         return cur, mx
+
+
+# Shared OCR instance across the process.
+#
+# This prevents multiple EasyOCR/Torch GPU initializations (slow + noisy) and
+# keeps all OCR users (GameStateBuilder, battlelist parsing/targeting) consistent.
+_OCR_SHARED: OCRProcessor | None = None
+
+
+def get_shared_ocr_processor() -> OCRProcessor:
+    global _OCR_SHARED
+    if _OCR_SHARED is not None:
+        return _OCR_SHARED
+    _OCR_SHARED = OCRProcessor()
+    return _OCR_SHARED

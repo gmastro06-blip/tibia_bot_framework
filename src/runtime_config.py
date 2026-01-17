@@ -190,6 +190,10 @@ class TelemetrySnapshot:
     cap_roi: int | None = None
     cap_panel: int | None = None
     cap_panel_source: str = ""  # regex|bbox_row|""
+
+    soul_current: int | None = None
+    soul_method: str = ""
+    soul_reason: str = ""
     pos_x: int | None = None
     pos_y: int | None = None
     pos_z: int | None = None
@@ -361,6 +365,11 @@ class HealthSnapshot:
     roi_offset_dx_px: float | None = None
     roi_offset_dy_px: float | None = None
     roi_offset_score: float | None = None
+    # Active ROIs config info (what the bot actually loaded)
+    rois_config_path: str = ""
+    rois_source_resolution: list[int] | None = None
+    rois_file_mtime: float | None = None
+    rois_n: int | None = None
     # Optional warning text
     warn: str = ""
 
@@ -380,6 +389,7 @@ class RuntimeConfig:
     assistant_status: AssistantStatus = field(default_factory=AssistantStatus)
     _advance_counter: int = field(default=0, init=False, repr=False)
     _replay_force_counter: int = field(default=0, init=False, repr=False)
+    _rois_reload_counter: int = field(default=0, init=False, repr=False)
     _step_jump_counter: int = field(default=0, init=False, repr=False)
     _step_jump_index: int = field(default=0, init=False, repr=False)
     _reseed_counter: int = field(default=0, init=False, repr=False)
@@ -474,7 +484,20 @@ class RuntimeConfig:
                 mp_current=self.telemetry.mp_current,
                 mp_max=self.telemetry.mp_max,
                 mp_pct=self.telemetry.mp_pct,
+                hp_method=str(getattr(self.telemetry, "hp_method", "") or ""),
+                hp_reason=str(getattr(self.telemetry, "hp_reason", "") or ""),
+                mp_method=str(getattr(self.telemetry, "mp_method", "") or ""),
+                mp_reason=str(getattr(self.telemetry, "mp_reason", "") or ""),
                 cap_current=self.telemetry.cap_current,
+                cap_method=str(getattr(self.telemetry, "cap_method", "") or ""),
+                cap_reason=str(getattr(self.telemetry, "cap_reason", "") or ""),
+                cap_roi=getattr(self.telemetry, "cap_roi", None),
+                cap_panel=getattr(self.telemetry, "cap_panel", None),
+                cap_panel_source=str(getattr(self.telemetry, "cap_panel_source", "") or ""),
+
+                soul_current=getattr(self.telemetry, "soul_current", None),
+                soul_method=str(getattr(self.telemetry, "soul_method", "") or ""),
+                soul_reason=str(getattr(self.telemetry, "soul_reason", "") or ""),
                 pos_x=self.telemetry.pos_x,
                 pos_y=self.telemetry.pos_y,
                 pos_z=self.telemetry.pos_z,
@@ -553,6 +576,13 @@ class RuntimeConfig:
 
     def health_snapshot(self) -> HealthSnapshot:
         with self._lock:
+            rois_src_res = None
+            try:
+                raw = getattr(self.health, "rois_source_resolution", None)
+                if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+                    rois_src_res = [int(raw[0]), int(raw[1])]
+            except Exception:
+                rois_src_res = None
             return HealthSnapshot(
                 ts=float(self.health.ts),
                 uptime_s=self.health.uptime_s,
@@ -575,6 +605,13 @@ class RuntimeConfig:
                 vision_ms_last=self.health.vision_ms_last,
                 decision_ms_last=self.health.decision_ms_last,
                 capture_latency_ms=self.health.capture_latency_ms,
+                roi_offset_dx_px=getattr(self.health, "roi_offset_dx_px", None),
+                roi_offset_dy_px=getattr(self.health, "roi_offset_dy_px", None),
+                roi_offset_score=getattr(self.health, "roi_offset_score", None),
+                rois_config_path=str(getattr(self.health, "rois_config_path", "") or ""),
+                rois_source_resolution=rois_src_res,
+                rois_file_mtime=getattr(self.health, "rois_file_mtime", None),
+                rois_n=getattr(self.health, "rois_n", None),
                 warn=str(self.health.warn),
             )
 
@@ -924,6 +961,17 @@ class RuntimeConfig:
             self._replay_force_counter += 1
             return int(self._replay_force_counter)
 
+    def request_rois_reload(self) -> int:
+        """Solicita recargar ROIs en el próximo frame disponible.
+
+        Útil cuando el wizard guardó un JSON y quieres aplicar cambios sin
+        esperar un poll interval (o sin ROIS_HOT_RELOAD).
+        """
+
+        with self._lock:
+            self._rois_reload_counter += 1
+            return int(self._rois_reload_counter)
+
     def request_reseed_minimap(self) -> int:
         """Solicita un reseed/realineación del provider de coords (minimap)."""
         with self._lock:
@@ -937,6 +985,10 @@ class RuntimeConfig:
     def replay_force_counter_snapshot(self) -> int:
         with self._lock:
             return int(self._replay_force_counter)
+
+    def rois_reload_counter_snapshot(self) -> int:
+        with self._lock:
+            return int(self._rois_reload_counter)
 
     def update_logging(
         self,
@@ -972,6 +1024,9 @@ class RuntimeConfig:
         cap_roi: int | None = None,
         cap_panel: int | None = None,
         cap_panel_source: str | None = None,
+        soul_current: int | None = None,
+        soul_method: str | None = None,
+        soul_reason: str | None = None,
         pos_x: int | None = None,
         pos_y: int | None = None,
         pos_z: int | None = None,
@@ -1105,6 +1160,16 @@ class RuntimeConfig:
                     self.telemetry.cap_panel = None
             if cap_panel_source is not None:
                 self.telemetry.cap_panel_source = str(cap_panel_source)
+
+            if soul_current is not None:
+                try:
+                    self.telemetry.soul_current = int(soul_current)
+                except Exception:
+                    self.telemetry.soul_current = None
+            if soul_method is not None:
+                self.telemetry.soul_method = str(soul_method)
+            if soul_reason is not None:
+                self.telemetry.soul_reason = str(soul_reason)
             if pos_x is not None:
                 self.telemetry.pos_x = int(pos_x)
             if pos_y is not None:
@@ -1417,6 +1482,10 @@ class RuntimeConfig:
         roi_offset_dx_px: float | None = None,
         roi_offset_dy_px: float | None = None,
         roi_offset_score: float | None = None,
+        rois_config_path: str | None = None,
+        rois_source_resolution: list[int] | None = None,
+        rois_file_mtime: float | None = None,
+        rois_n: int | None = None,
         warn: str | None = None,
     ) -> None:
         with self._lock:
@@ -1467,5 +1536,20 @@ class RuntimeConfig:
                 self.health.roi_offset_dy_px = float(roi_offset_dy_px)
             if roi_offset_score is not None:
                 self.health.roi_offset_score = float(roi_offset_score)
+            if rois_config_path is not None:
+                self.health.rois_config_path = str(rois_config_path)
+            if rois_source_resolution is not None:
+                try:
+                    self.health.rois_source_resolution = [int(rois_source_resolution[0]), int(rois_source_resolution[1])]
+                except Exception:
+                    # Keep raw if it's already list-like, otherwise ignore.
+                    try:
+                        self.health.rois_source_resolution = [int(x) for x in list(rois_source_resolution)][:2]
+                    except Exception:
+                        self.health.rois_source_resolution = None
+            if rois_file_mtime is not None:
+                self.health.rois_file_mtime = float(rois_file_mtime)
+            if rois_n is not None:
+                self.health.rois_n = int(rois_n)
             if warn is not None:
                 self.health.warn = str(warn)

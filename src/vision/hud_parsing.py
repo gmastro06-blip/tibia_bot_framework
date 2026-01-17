@@ -23,6 +23,7 @@ def parse_current_and_max_with_reason(
       - ok
       - invalid_range
       - single_number
+            - no_digits
       - parse_fail
       - exception
     """
@@ -45,6 +46,14 @@ def parse_current_and_max_with_reason(
             norm = raw
 
         cleaned = re.sub(r"[^0-9/\s]", "", norm)
+
+        # OCR sometimes returns only separators (e.g. "|" -> "/") with no digits.
+        # This is not actionable and should not be treated as a parsing failure.
+        try:
+            if not re.search(r"\d", cleaned or ""):
+                return None, None, "no_digits"
+        except Exception:
+            pass
 
         # Config de límites (fallback compatible con HPMP_MAX_OCR).
         if max_value is None:

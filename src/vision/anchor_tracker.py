@@ -42,6 +42,8 @@ class AnchorTracker:
         self._last_update_ts: float = 0.0
         self._offset_src: Tuple[float, float] = (0.0, 0.0)
         self._last_score: float = 0.0
+        # Simple stability/gating state: avoid applying bad matches.
+        self._stable_hits: int = 0
 
     @staticmethod
     def _enabled() -> bool:
@@ -84,16 +86,42 @@ class AnchorTracker:
                 max_shift_src_px=max(50.0, _f("max_shift_src_px", 800.0)),
             )
 
+        # Auto anchor is opt-in: template matching on full frames can be
+        # ambiguous and applying a global offset can break all ROIs.
+        try:
+            auto_on = os.getenv("ANCHOR_AUTO", "0").strip().lower() in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            auto_on = False
+        if not auto_on:
+            return None
+
         # No explicit _anchor config: try an automatic anchor based on a *real* template file.
         # We intentionally do NOT use template_mode=self here: learning a template from the
         # (possibly wrong) expected ROI can lock onto the wrong place and report dx=0.
+        # Choose an automatic anchor ROI that is likely to be stable AND large
+        # enough to allow matching even when the default template is big.
+        # (If the ROI is too small/near the edge, the search window can become
+        # smaller than the template and tracking will never update.)
         auto_roi = None
-        for key in ("equipment_slots", "hpmp_low_panel", "skills_panel", "right_hud_panel"):
+        best_area = -1.0
+        for key in (
+            "hpmp_top_strip",
+            "right_hud_panel",
+            "skills_panel",
+            "battlelist_panel",
+            "equipment_slots",
+            "hpmp_low_panel",
+        ):
             try:
                 v = rois.get(key)
-                if isinstance(v, Mapping):
+                if not isinstance(v, Mapping):
+                    continue
+                w = float(v.get("w", 0.0) or 0.0)
+                h = float(v.get("h", 0.0) or 0.0)
+                area = w * h
+                if area > best_area:
+                    best_area = area
                     auto_roi = v
-                    break
             except Exception:
                 continue
         if auto_roi is None:
@@ -121,9 +149,13 @@ class AnchorTracker:
         except Exception:
             sr = 560
         try:
-            ms = float(os.getenv("ANCHOR_MIN_SCORE", "0.45").strip() or "0.45")
+            # Auto mode should be permissive; false negatives are worse than a
+            # slightly noisy offset because we smooth/clamp updates.
+            # In practice, low thresholds can lock onto wrong HUD-like textures
+            # and shift all ROIs, breaking OCR. Prefer fail-safe defaults.
+            ms = float(os.getenv("ANCHOR_MIN_SCORE", "0.55").strip() or "0.55")
         except Exception:
-            ms = 0.45
+            ms = 0.55
         try:
             interval = float(os.getenv("ANCHOR_UPDATE_INTERVAL_S", "0.5").strip() or "0.5")
         except Exception:
@@ -194,6 +226,20 @@ class AnchorTracker:
             edges = cv2.Canny(g, cfg.canny_low, cfg.canny_high)
         except Exception:
             edges = g
+
+        # Keep file templates reasonably sized for performance and to ensure
+        # they can fit within the local search window.
+        try:
+            th, tw = int(edges.shape[0]), int(edges.shape[1])
+            max_dim = int(float(os.getenv("ANCHOR_TEMPLATE_MAX_PX_FILE", "520").strip() or "520"))
+            max_dim = max(40, int(max_dim))
+            if max(th, tw) > max_dim:
+                scale = float(max_dim) / float(max(th, tw))
+                new_w = max(40, int(round(tw * scale)))
+                new_h = max(40, int(round(th * scale)))
+                edges = cv2.resize(edges, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        except Exception:
+            pass
 
         if edges is None or edges.size == 0:
             self._tmpl_edges = None
@@ -319,27 +365,160 @@ class AnchorTracker:
             return
 
         # Template must fit inside window.
+        # If it does not, fall back to a larger search region (up to full-frame).
         th, tw = int(tmpl.shape[0]), int(tmpl.shape[1])
-        if th <= 0 or tw <= 0 or th >= win_edges.shape[0] or tw >= win_edges.shape[1]:
+        if th <= 0 or tw <= 0:
             return
+        if th >= win_edges.shape[0] or tw >= win_edges.shape[1]:
+            # Full-frame fallback: more robust (HUD might have moved far from expected).
+            sx0, sy0, sx1, sy1 = 0, 0, frame_w, frame_h
+            win = frame
+            win_g = self._to_gray(win)
+            try:
+                win_edges = cv2.Canny(win_g, cfg.canny_low, cfg.canny_high)
+            except Exception:
+                win_edges = win_g
+            if int(tmpl.shape[0]) >= int(win_edges.shape[0]) or int(tmpl.shape[1]) >= int(win_edges.shape[1]):
+                return
 
+        # Performance guard: matchTemplate cost grows quickly with window/template size.
+        # Downscale large windows to keep the vision thread responsive.
         try:
+            max_px = int(float(os.getenv("ANCHOR_MATCH_MAX_PX", "520").strip() or "520"))
+        except Exception:
+            max_px = 520
+        max_px = max(160, int(max_px))
+
+        win_arr: np.ndarray = np.asarray(win_edges, dtype=np.uint8)
+        tmpl_arr: np.ndarray = np.asarray(tmpl, dtype=np.uint8)
+
+        scale = 1.0
+        try:
+            wh, ww = int(win_arr.shape[0]), int(win_arr.shape[1])
+            th, tw = int(tmpl_arr.shape[0]), int(tmpl_arr.shape[1])
+            # Ensure both fit into max_px while preserving aspect ratio.
+            denom = float(max(ww, wh))
+            if denom > float(max_px):
+                scale = float(max_px) / denom
+                # Avoid pathological tiny scales.
+                scale = max(0.15, min(1.0, scale))
+
+            if scale < 1.0:
+                new_w = max(20, int(round(ww * scale)))
+                new_h = max(20, int(round(wh * scale)))
+                win_arr = np.asarray(
+                    cv2.resize(win_arr, (new_w, new_h), interpolation=cv2.INTER_AREA),
+                    dtype=np.uint8,
+                )
+
+                new_tw = max(8, int(round(tw * scale)))
+                new_th = max(8, int(round(th * scale)))
+                tmpl_arr = np.asarray(
+                    cv2.resize(tmpl_arr, (new_tw, new_th), interpolation=cv2.INTER_AREA),
+                    dtype=np.uint8,
+                )
+
+            # Template must fit inside (possibly downscaled) window.
+            if int(tmpl_arr.shape[0]) >= int(win_arr.shape[0]) or int(tmpl_arr.shape[1]) >= int(win_arr.shape[1]):
+                return
+        except Exception:
+            # If resize logic fails, fall back to original arrays.
             win_arr = np.asarray(win_edges, dtype=np.uint8)
             tmpl_arr = np.asarray(tmpl, dtype=np.uint8)
+            scale = 1.0
+
+        try:
             res = cv2.matchTemplate(win_arr, tmpl_arr, cv2.TM_CCOEFF_NORMED)  # type: ignore[arg-type]
             _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(res)
         except Exception:
             return
 
         score = float(max_val)
+
+        # If match is weak, retry once on full-frame (HUD may have moved far
+        # from the expected ROI). This is rate-limited by update_interval_s and
+        # capped by ANCHOR_MATCH_MAX_PX resizing.
+        if score < cfg.min_score and (sx0 != 0 or sy0 != 0 or sx1 != frame_w or sy1 != frame_h):
+            try:
+                win2 = frame
+                win2_g = self._to_gray(win2)
+                try:
+                    win2_edges = cv2.Canny(win2_g, cfg.canny_low, cfg.canny_high)
+                except Exception:
+                    win2_edges = win2_g
+
+                win2_arr: np.ndarray = np.asarray(win2_edges, dtype=np.uint8)
+                tmpl2_arr: np.ndarray = np.asarray(tmpl, dtype=np.uint8)
+
+                scale2 = 1.0
+                try:
+                    wh2, ww2 = int(win2_arr.shape[0]), int(win2_arr.shape[1])
+                    th2, tw2 = int(tmpl2_arr.shape[0]), int(tmpl2_arr.shape[1])
+                    denom2 = float(max(ww2, wh2))
+                    if denom2 > float(max_px):
+                        scale2 = float(max_px) / denom2
+                        scale2 = max(0.15, min(1.0, scale2))
+                    if scale2 < 1.0:
+                        new_w2 = max(40, int(round(ww2 * scale2)))
+                        new_h2 = max(40, int(round(wh2 * scale2)))
+                        win2_arr = np.asarray(
+                            cv2.resize(win2_arr, (new_w2, new_h2), interpolation=cv2.INTER_AREA),
+                            dtype=np.uint8,
+                        )
+
+                        new_tw2 = max(8, int(round(tw2 * scale2)))
+                        new_th2 = max(8, int(round(th2 * scale2)))
+                        tmpl2_arr = np.asarray(
+                            cv2.resize(tmpl2_arr, (new_tw2, new_th2), interpolation=cv2.INTER_AREA),
+                            dtype=np.uint8,
+                        )
+
+                    if int(tmpl2_arr.shape[0]) < int(win2_arr.shape[0]) and int(tmpl2_arr.shape[1]) < int(win2_arr.shape[1]):
+                        res2 = cv2.matchTemplate(win2_arr, tmpl2_arr, cv2.TM_CCOEFF_NORMED)  # type: ignore[arg-type]
+                        _mn2, mx2, _ml2, loc2 = cv2.minMaxLoc(res2)
+                        score2 = float(mx2)
+                        if score2 >= cfg.min_score:
+                            score = score2
+                            max_loc = loc2
+                            sx0, sy0 = 0, 0
+                            # Overwrite the local scaling used below.
+                            scale = float(scale2)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
         if score < cfg.min_score:
             # Don't update offset if match is weak; keep last known offset.
             self._last_update_ts = now
             self._last_score = score
+            self._stable_hits = 0
             return
 
-        found_x = int(sx0 + int(max_loc[0]))
-        found_y = int(sy0 + int(max_loc[1]))
+        # Additional fail-safe gating: even if score clears cfg.min_score,
+        # require a higher threshold before we actually *apply* global shifts.
+        try:
+            apply_min = float(os.getenv("ANCHOR_APPLY_MIN_SCORE", "").strip() or "0")
+        except Exception:
+            apply_min = 0.0
+        apply_min = max(float(cfg.min_score), float(apply_min))
+        if score < float(apply_min):
+            self._last_update_ts = now
+            self._last_score = score
+            self._stable_hits = 0
+            return
+
+        # Convert back to original frame coordinates.
+        try:
+            if scale > 0.0 and scale < 1.0:
+                found_x = int(sx0 + int(round(float(max_loc[0]) / float(scale))))
+                found_y = int(sy0 + int(round(float(max_loc[1]) / float(scale))))
+            else:
+                found_x = int(sx0 + int(max_loc[0]))
+                found_y = int(sy0 + int(max_loc[1]))
+        except Exception:
+            found_x = int(sx0 + int(max_loc[0]))
+            found_y = int(sy0 + int(max_loc[1]))
 
         dx_frame = float(found_x - int(x_exp))
         dy_frame = float(found_y - int(y_exp))
@@ -358,10 +537,32 @@ class AnchorTracker:
         dx_src = dx_frame / scale
         dy_src = dy_frame / scale
 
+        # Large-jump guard: if the new offset would change a lot vs current
+        # smoothed offset, demand a very strong match.
+        try:
+            max_jump = float(os.getenv("ANCHOR_MAX_JUMP_SRC_PX", "160").strip() or "160")
+        except Exception:
+            max_jump = 160.0
+        try:
+            min_score_jump = float(os.getenv("ANCHOR_MIN_SCORE_LARGE_JUMP", "0.75").strip() or "0.75")
+        except Exception:
+            min_score_jump = 0.75
+
         # Clamp to avoid wild jumps.
         try:
             dx_src = max(-cfg.max_shift_src_px, min(cfg.max_shift_src_px, dx_src))
             dy_src = max(-cfg.max_shift_src_px, min(cfg.max_shift_src_px, dy_src))
+        except Exception:
+            pass
+
+        try:
+            ox, oy = self._offset_src
+            if (abs(float(dx_src) - float(ox)) > float(max_jump)) or (abs(float(dy_src) - float(oy)) > float(max_jump)):
+                if score < float(min_score_jump):
+                    self._last_update_ts = now
+                    self._last_score = score
+                    self._stable_hits = 0
+                    return
         except Exception:
             pass
 
@@ -373,6 +574,7 @@ class AnchorTracker:
         self._offset_src = (float(new_ox), float(new_oy))
         self._last_update_ts = now
         self._last_score = score
+        self._stable_hits = int(self._stable_hits) + 1
 
         # Write into the shared rois mapping if it's mutable.
         try:

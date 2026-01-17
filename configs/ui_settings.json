@@ -119,7 +119,7 @@
     "ui_fail_s": 0.0
   },
   "rois": {
-    "config_override": ""
+    "config_override": "configs\\rois_guess_1920x1080.json"
   },
   "stats": {
     "hp_max": "",

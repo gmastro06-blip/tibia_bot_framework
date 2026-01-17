@@ -102,9 +102,9 @@ def load_roi_config(resolution: tuple) -> tuple:
             with open(cand, "r") as f:
                 config = json.load(f)
                 print(f"Configuración ROIs cargada desde override {rois_override}")
-                return config.get("rois_guess_norm", config.get("rois", config)), config.get(
-                    "source_resolution", [width, height]
-                )
+                rois_out = config.get("rois_guess_norm", config.get("rois", config))
+                src_res = config.get("source_resolution", [width, height])
+                return rois_out, src_res, cand
         except Exception as e:
             print(f"ROIS_CONFIG inválido ({rois_override}): {e}. Usando configuración por resolución.")
 
@@ -128,7 +128,7 @@ def load_roi_config(resolution: tuple) -> tuple:
         with open(config_path, 'r') as f:
             config = json.load(f)
             print(f"Configuración cargada desde {config_file} para resolución {width}x{height}")
-            return config["rois_guess_norm"], config["source_resolution"]
+            return config["rois_guess_norm"], config["source_resolution"], config_path
     except FileNotFoundError:
         print(f"Archivo de configuración {config_path} no encontrado, usando configuración por defecto")
         # Configuración por defecto (2048x1076)
@@ -150,7 +150,7 @@ def load_roi_config(resolution: tuple) -> tuple:
             "game_viewport": {"x": 0.000000, "y": 0.037174, "w": 0.822754, "h": 0.780669},
             "chat_panel": {"x": 0.000000, "y": 0.817843, "w": 0.822754, "h": 0.182157}
         }
-        return default_rois, [2048, 1076]
+        return default_rois, [2048, 1076], config_path
 
 
 def build_capture_backend(*, force_monitor: int | None):
@@ -255,6 +255,14 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         from console_sanitize import maybe_install_no_emoji_output
 
         maybe_install_no_emoji_output()
+    except Exception:
+        pass
+
+    # Best-effort native crash diagnostics (helps with segfaults/abort()).
+    try:
+        import faulthandler
+
+        faulthandler.enable(all_threads=True)
     except Exception:
         pass
 
@@ -648,8 +656,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 _h_set("last_frame_ts", time.time())
                 if rois is None or resolution is None:
                     resolution = (int(frame.shape[1]), int(frame.shape[0]))
-                    rois_loaded, source_resolution = load_roi_config(resolution)
+                    rois_loaded, source_resolution, used_path = load_roi_config(resolution)
                     rois_loaded["_source_resolution"] = source_resolution
+                    rois_loaded["_config_path"] = str(used_path)
                     rois = rois_loaded
                 _put_drop_oldest(
                     frame_queue,
@@ -678,11 +687,22 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     def vision_thread():
         print("👁️  Thread de visión iniciado")
         profile = os.getenv("BOT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
+        # Optional: hot-reload ROIs when the config file changes (wizard saves).
+        # Enable with ROIS_HOT_RELOAD=1.
+        rois_hot_reload = (os.getenv("ROIS_HOT_RELOAD", "0") or "0").strip().lower() in {"1", "true", "yes", "y", "on"}
+        try:
+            rois_reload_every_s = float((os.getenv("ROIS_HOT_RELOAD_EVERY_S", "0.5") or "0.5").strip() or "0.5")
+        except Exception:
+            rois_reload_every_s = 0.5
+        rois_reload_every_s = max(0.2, float(rois_reload_every_s))
+        last_rois_check_ts = 0.0
+        last_rois_mtime = None
         prof_every_s = 5.0
         last_prof = time.time()
         n_vis = 0
         vis_ms_sum = 0.0
         last_force_seen = 0
+        last_rois_force_seen = 0
 
         # Env-based replay config (used when no RuntimeConfig/UI is attached).
         rep_enabled_env = env_replay_enabled()
@@ -702,6 +722,97 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     pass
                 if rois is None or resolution is None:
                     continue
+
+                # UI/manual ROIs reload pulse (works even when ROIS_HOT_RELOAD is off).
+                try:
+                    if runtime_config is not None:
+                        cur_force = int(runtime_config.rois_reload_counter_snapshot())
+                        if cur_force != int(last_rois_force_seen):
+                            last_rois_force_seen = int(cur_force)
+                            try:
+                                rois_loaded, source_resolution, used_path = load_roi_config(resolution)
+                                if isinstance(rois_loaded, dict):
+                                    rois_loaded["_source_resolution"] = source_resolution
+                                    rois_loaded["_config_path"] = str(used_path)
+                                    try:
+                                        rois_loaded.pop("_roi_offset_px", None)
+                                        rois_loaded.pop("_roi_offset_score", None)
+                                        rois_loaded.pop("_viewport_auto", None)
+                                    except Exception:
+                                        pass
+                                    try:
+                                        rois.clear()
+                                        rois.update(rois_loaded)
+                                    except Exception:
+                                        pass
+                                    try:
+                                        print(f"🔁 ROIs recargadas (UI): {rois_loaded.get('_config_path')}")
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+                # Hot reload ROIs (in-place) when JSON changes.
+                if rois_hot_reload:
+                    try:
+                        now_r = time.time()
+                        if (now_r - float(last_rois_check_ts)) >= float(rois_reload_every_s):
+                            last_rois_check_ts = float(now_r)
+
+                            cfg_path = None
+                            try:
+                                if isinstance(rois, dict):
+                                    cfg_path = rois.get("_config_path")
+                            except Exception:
+                                cfg_path = None
+
+                            env_path = (os.getenv("ROIS_CONFIG", "") or "").strip()
+                            if env_path:
+                                try:
+                                    if not os.path.isabs(env_path):
+                                        env_path = os.path.join(project_root, env_path)
+                                except Exception:
+                                    pass
+                                cfg_path = env_path
+
+                            if cfg_path and os.path.isfile(str(cfg_path)):
+                                try:
+                                    mtime = os.path.getmtime(str(cfg_path))
+                                except Exception:
+                                    mtime = None
+
+                                if mtime is not None:
+                                    if last_rois_mtime is None:
+                                        last_rois_mtime = float(mtime)
+                                    elif float(mtime) > float(last_rois_mtime) + 1e-6:
+                                        rois_loaded, source_resolution, used_path = load_roi_config(resolution)
+                                        if isinstance(rois_loaded, dict):
+                                            rois_loaded["_source_resolution"] = source_resolution
+                                            rois_loaded["_config_path"] = str(used_path or cfg_path)
+                                            # Reset any previous auto-alignment state on reload.
+                                            try:
+                                                rois_loaded.pop("_roi_offset_px", None)
+                                                rois_loaded.pop("_roi_offset_score", None)
+                                                rois_loaded.pop("_viewport_auto", None)
+                                            except Exception:
+                                                pass
+                                            try:
+                                                rois.clear()
+                                                rois.update(rois_loaded)
+                                            except Exception:
+                                                pass
+                                            try:
+                                                last_rois_mtime = float(os.path.getmtime(str(rois_loaded.get("_config_path") or cfg_path)))
+                                            except Exception:
+                                                last_rois_mtime = float(mtime)
+                                            try:
+                                                print(f"🔁 ROIs recargadas: {rois_loaded.get('_config_path')}")
+                                            except Exception:
+                                                pass
+                    except Exception:
+                        pass
 
                 # Auto-align ROIs if an anchor is configured (handles HUD moves).
                 try:
@@ -876,6 +987,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     # Keep it compact and focused.
                                     tel_payload["hud_debug_hp"] = hd.get("hp")
                                     tel_payload["hud_debug_mp"] = hd.get("mp")
+                                    tel_payload["hud_debug_presence"] = hd.get("presence")
                                     tel_payload["hud_rois_px"] = hd.get("rois_px")
                                     tel_payload["vision_guard"] = hd.get("vision_guard")
                             except Exception:
@@ -1092,6 +1204,58 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             info_lines.append(line)
                     except Exception:
                         pass
+
+                    # Presence debug (ring/amulet/hungry) - opt-in via env to avoid noise.
+                    try:
+                        raw_pd = (os.getenv("OVERLAY_PRESENCE_DEBUG", "0") or "0").strip().lower()
+                        pd_on = raw_pd in {"1", "true", "yes", "y", "on"}
+                    except Exception:
+                        pd_on = False
+
+                    if pd_on:
+                        try:
+                            def _ynq(v) -> str:
+                                if v is True:
+                                    return "Y"
+                                if v is False:
+                                    return "N"
+                                return "?"
+
+                            hd = getattr(gamestate, "hud_debug", None)
+                            pres = hd.get("presence", {}) if isinstance(hd, dict) else {}
+                            ring = pres.get("ring", {}) if isinstance(pres, dict) else {}
+                            amu = pres.get("amulet", {}) if isinstance(pres, dict) else {}
+                            hun = pres.get("hungry", {}) if isinstance(pres, dict) else {}
+
+                            def _fmt_conf(d: dict) -> str:
+                                try:
+                                    c = d.get("conf", None)
+                                    mc = d.get("min_conf", None)
+                                    if c is None and mc is None:
+                                        return ""
+                                    if c is None:
+                                        return f"(min={float(mc):.2f})"
+                                    if mc is None:
+                                        return f"({float(c):.2f})"
+                                    return f"({float(c):.2f}/min={float(mc):.2f})"
+                                except Exception:
+                                    return ""
+
+                            line = (
+                                f"presence ring={_ynq(getattr(gamestate, 'ring_equipped', None))}{_fmt_conf(ring)} "
+                                f"amulet={_ynq(getattr(gamestate, 'amulet_equipped', None))}{_fmt_conf(amu)} "
+                                f"hungry={_ynq(getattr(gamestate, 'hungry', None))}"
+                            )
+                            src = ""
+                            try:
+                                src = str(hun.get("source", "") or "")
+                            except Exception:
+                                src = ""
+                            if src:
+                                line = f"{line} src={src}"
+                            info_lines.append(line)
+                        except Exception:
+                            pass
 
                     # Navigation mode snapshot (from telemetry when available).
                     try:
@@ -1372,6 +1536,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         selector = TargetSelector()
         last_target: Target | None = None
         bot_debug = os.getenv("BOT_DEBUG", "").strip().lower() in {"1", "true", "yes"}
+
+        # Optional: log bar diagnostics (top-strip vs legacy low bars).
+        hpmp_log_bars = (os.getenv("HPMP_LOG_BARS", "0") or "0").strip().lower() in {"1", "true", "yes"}
+        try:
+            hpmp_log_bars_every_s = float(os.getenv("HPMP_LOG_BARS_EVERY_S", "2.0").strip() or "2.0")
+        except Exception:
+            hpmp_log_bars_every_s = 2.0
+        hpmp_log_bars_every_s = max(0.2, float(hpmp_log_bars_every_s))
+        last_hpmp_bars_log_ts = 0.0
 
         # Optional coordinate recording (for building cavebot routes).
         record_route_path = os.getenv("RECORD_ROUTE_PATH", "").strip()
@@ -2362,6 +2535,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 if sig is not None and sig.mp_pct is not None:
                     mp_pct_str = f"{sig.mp_pct:.1f}%"
 
+                def _fmt_abs(cur, mx) -> str:
+                    try:
+                        if cur is None or mx is None:
+                            return "?"
+                        return f"{int(cur)}/{int(mx)}"
+                    except Exception:
+                        return "?"
+
+                hp_abs = _fmt_abs(getattr(gamestate, "hp_current", None), getattr(gamestate, "hp_max", None))
+                mp_abs = _fmt_abs(getattr(gamestate, "mp_current", None), getattr(gamestate, "mp_max", None))
+
                 cap_str = "?"
                 try:
                     if cap_current is not None:
@@ -2382,10 +2566,45 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 extra_str = (", " + ", ".join(extras)) if extras else ""
 
                 print(
-                    f"🎮 Estado: HP {getattr(gamestate, 'hp_current', None)}/{getattr(gamestate, 'hp_max', None)} ({hp_pct_str}), "
-                    f"MP {getattr(gamestate, 'mp_current', None)}/{getattr(gamestate, 'mp_max', None)} ({mp_pct_str}), "
+                    f"🎮 Estado: HP {hp_abs} ({hp_pct_str}), "
+                    f"MP {mp_abs} ({mp_pct_str}), "
                     f"Cap {cap_str}{extra_str}"
                 )
+
+                # Bar diagnostics line (rate-limited to avoid spam).
+                try:
+                    if hpmp_log_bars:
+                        nowb = time.time()
+                        if (nowb - float(last_hpmp_bars_log_ts or 0.0)) >= float(hpmp_log_bars_every_s):
+                            last_hpmp_bars_log_ts = float(nowb)
+                            hd = getattr(gamestate, "hud_debug", None)
+                            hp = (hd.get("hp", {}) if isinstance(hd, dict) else {})
+                            mp = (hd.get("mp", {}) if isinstance(hd, dict) else {})
+
+                            def _fmt_ratio(x) -> str:
+                                try:
+                                    return "?" if x is None else f"{float(x):.3f}"
+                                except Exception:
+                                    return "?"
+
+                            def _fmt_pres(x) -> str:
+                                try:
+                                    return "?" if x is None else f"{float(x):.3f}"
+                                except Exception:
+                                    return "?"
+
+                            line = (
+                                "📊 Bars "
+                                f"HP top={_fmt_ratio(hp.get('bar_top_ratio'))} p={_fmt_pres(hp.get('bar_top_presence'))} "
+                                f"low={_fmt_ratio(hp.get('bar_low_ratio'))} p={_fmt_pres(hp.get('bar_low_presence'))} "
+                                f"chosen={_fmt_ratio(hp.get('bar_ratio'))} src={hp.get('bar_source','')} pres={_fmt_pres(hp.get('bar_presence'))} | "
+                                f"MP top={_fmt_ratio(mp.get('bar_top_ratio'))} p={_fmt_pres(mp.get('bar_top_presence'))} "
+                                f"low={_fmt_ratio(mp.get('bar_low_ratio'))} p={_fmt_pres(mp.get('bar_low_presence'))} "
+                                f"chosen={_fmt_ratio(mp.get('bar_ratio'))} src={mp.get('bar_source','')} pres={_fmt_pres(mp.get('bar_presence'))}"
+                            )
+                            print(line)
+                except Exception:
+                    pass
             except Exception:
                 extras = []
                 try:
@@ -3987,6 +4206,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             else None
                         ),
                         cap_current=cap_current,
+                        soul_current=getattr(gamestate, "soul_current", None),
+                        soul_method=str(getattr(gamestate, "soul_method", "") or ""),
+                        soul_reason=str(getattr(gamestate, "soul_reason", "") or ""),
                         pos_x=getattr(gamestate, "pos_x", None),
                         pos_y=getattr(gamestate, "pos_y", None),
                         pos_z=getattr(gamestate, "pos_z", None),
@@ -4308,6 +4530,35 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "stuck_blockers": getattr(tel, "stuck_blockers", None),
                         "stuck_extra": getattr(tel, "stuck_extra", ""),
                     }
+
+                    # Include bar diagnostics (top-strip vs legacy low bars) when available.
+                    # This helps validate HP/MP correctness in real runs even when OCR is disabled.
+                    try:
+                        hd = getattr(gamestate, "hud_debug", None)
+                        if isinstance(hd, dict):
+                            hp = hd.get("hp") if isinstance(hd.get("hp"), dict) else {}
+                            mp = hd.get("mp") if isinstance(hd.get("mp"), dict) else {}
+                            tel_event["hp_bar"] = {
+                                "top_ratio": hp.get("bar_top_ratio"),
+                                "top_presence": hp.get("bar_top_presence"),
+                                "low_ratio": hp.get("bar_low_ratio"),
+                                "low_presence": hp.get("bar_low_presence"),
+                                "ratio": hp.get("bar_ratio"),
+                                "presence": hp.get("bar_presence"),
+                                "source": hp.get("bar_source"),
+                            }
+                            tel_event["mp_bar"] = {
+                                "top_ratio": mp.get("bar_top_ratio"),
+                                "top_presence": mp.get("bar_top_presence"),
+                                "low_ratio": mp.get("bar_low_ratio"),
+                                "low_presence": mp.get("bar_low_presence"),
+                                "ratio": mp.get("bar_ratio"),
+                                "presence": mp.get("bar_presence"),
+                                "source": mp.get("bar_source"),
+                            }
+                    except Exception:
+                        pass
+
                     try:
                         ar, _ac, ats, ip, _src, _ars = _a_snapshot()
                         if ar and ats:
@@ -4418,6 +4669,34 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "nav_astar_path_len": nav_astar_path_len,
                         "nav_astar_visited": nav_astar_visited,
                     }
+
+                    # Include bar diagnostics (top-strip vs legacy low bars) when available.
+                    try:
+                        hd = getattr(gamestate, "hud_debug", None)
+                        if isinstance(hd, dict):
+                            hp = hd.get("hp") if isinstance(hd.get("hp"), dict) else {}
+                            mp = hd.get("mp") if isinstance(hd.get("mp"), dict) else {}
+                            tel_event["hp_bar"] = {
+                                "top_ratio": hp.get("bar_top_ratio"),
+                                "top_presence": hp.get("bar_top_presence"),
+                                "low_ratio": hp.get("bar_low_ratio"),
+                                "low_presence": hp.get("bar_low_presence"),
+                                "ratio": hp.get("bar_ratio"),
+                                "presence": hp.get("bar_presence"),
+                                "source": hp.get("bar_source"),
+                            }
+                            tel_event["mp_bar"] = {
+                                "top_ratio": mp.get("bar_top_ratio"),
+                                "top_presence": mp.get("bar_top_presence"),
+                                "low_ratio": mp.get("bar_low_ratio"),
+                                "low_presence": mp.get("bar_low_presence"),
+                                "ratio": mp.get("bar_ratio"),
+                                "presence": mp.get("bar_presence"),
+                                "source": mp.get("bar_source"),
+                            }
+                    except Exception:
+                        pass
+
                     try:
                         ar, _ac, ats, ip, _src, _ars = _a_snapshot()
                         if ar and ats:
@@ -4517,6 +4796,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
         last_warn_ts = 0.0
         last_health_emit_ts = 0.0
+        dumped_stacks = False
         health_emit_s = 2.0
         try:
             health_emit_s = max(0.5, float(os.getenv("WATCHDOG_HEALTH_EMIT_S", "2").strip() or "2"))
@@ -4549,6 +4829,52 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             # Avoid emitting noisy 'stale' warnings during startup.
             gs_age = (now - last_gs) if last_gs > 0 else None
 
+            # Optional: dump Python thread stacks when vision appears stalled.
+            # This helps diagnose hangs where the process doesn't crash.
+            try:
+                dump_on_stall = (os.getenv("WATCHDOG_DUMP_STACKS_ON_STALL", "0") or "0").strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                }
+            except Exception:
+                dump_on_stall = False
+
+            if dump_on_stall and not dumped_stacks:
+                try:
+                    # Stall heuristic: capture is producing frames but vision never produced a GameState.
+                    cap_ok = int(float(snap.get("capture_ok", 0.0) or 0.0))
+                    vis_ok = int(float(snap.get("vision_ok", 0.0) or 0.0))
+                    qf = int(getattr(frame_queue, "qsize", lambda: 0)())
+                    uptime_s = max(0.0, now - float(snap.get("start_ts", now)))
+                    if uptime_s >= 6.0 and cap_ok >= 10 and vis_ok == 0 and qf > 0:
+                        import faulthandler
+                        from pathlib import Path
+
+                        out_path = None
+                        try:
+                            dtp = (os.getenv("DECISION_TRACE_PATH", "") or "").strip()
+                            if dtp:
+                                out_path = str(Path(dtp).with_suffix(".stacks.txt"))
+                        except Exception:
+                            out_path = None
+                        if out_path:
+                            try:
+                                Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+                            except Exception:
+                                pass
+                            try:
+                                with open(out_path, "w", encoding="utf-8") as f:
+                                    f.write(
+                                        f"watchdog stack dump (uptime_s={uptime_s:.1f} cap_ok={cap_ok} vis_ok={vis_ok} q_frame={qf})\n"
+                                    )
+                                    faulthandler.dump_traceback(file=f, all_threads=True)
+                                dumped_stacks = True
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
             # Publish health snapshot to UI (separate from TelemetrySnapshot.ts).
             try:
                 if runtime_config is not None:
@@ -4559,6 +4885,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     roi_dx = None
                     roi_dy = None
                     roi_score = None
+                    rois_cfg_path = ""
+                    rois_src_res = None
+                    rois_mtime = None
+                    rois_n = None
                     try:
                         if isinstance(rois, dict):
                             off = rois.get("_roi_offset_px")
@@ -4568,10 +4898,37 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             roi_score = rois.get("_roi_offset_score")
                             if roi_score is not None:
                                 roi_score = float(roi_score)
+
+                            # Active ROIs config info (what the bot is using right now)
+                            try:
+                                rois_cfg_path = str(rois.get("_config_path", "") or "")
+                            except Exception:
+                                rois_cfg_path = ""
+                            try:
+                                rr = rois.get("_source_resolution")
+                                if isinstance(rr, (list, tuple)) and len(rr) >= 2:
+                                    rois_src_res = [int(rr[0]), int(rr[1])]
+                            except Exception:
+                                rois_src_res = None
+                            try:
+                                # Count only user ROI entries (ignore metadata keys starting with '_').
+                                rois_n = int(len([k for k in rois.keys() if isinstance(k, str) and not k.startswith("_")]))
+                            except Exception:
+                                rois_n = None
+
+                            try:
+                                if rois_cfg_path and os.path.isfile(str(rois_cfg_path)):
+                                    rois_mtime = float(os.path.getmtime(str(rois_cfg_path)))
+                            except Exception:
+                                rois_mtime = None
                     except Exception:
                         roi_dx = None
                         roi_dy = None
                         roi_score = None
+                        rois_cfg_path = ""
+                        rois_src_res = None
+                        rois_mtime = None
+                        rois_n = None
 
                     runtime_config.update_health(
                         ts=now,
@@ -4598,6 +4955,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         roi_offset_dx_px=roi_dx,
                         roi_offset_dy_px=roi_dy,
                         roi_offset_score=roi_score,
+                        rois_config_path=(rois_cfg_path or "") or None,
+                        rois_source_resolution=rois_src_res,
+                        rois_file_mtime=rois_mtime,
+                        rois_n=rois_n,
                         warn=(
                             f"dead={dead}"
                             if dead

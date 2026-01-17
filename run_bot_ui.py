@@ -889,6 +889,10 @@ class BotUI:
         self.hp_text = tk.StringVar(value="?")
         self.mp_text = tk.StringVar(value="?")
         self.cap_text = tk.StringVar(value="?")
+        self.soul_text = tk.StringVar(value="?")
+        self.ring_text = tk.StringVar(value="N")
+        self.amulet_text = tk.StringVar(value="N")
+        self.hungry_text = tk.StringVar(value="N")
         self.signals_text = tk.StringVar(value="-")
         self.target_text = tk.StringVar(value="-")
         self.reco_text = tk.StringVar(value="-")
@@ -998,14 +1002,17 @@ class BotUI:
         tk.Label(info_in, text="Cap:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         tk.Label(info_in, textvariable=self.cap_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
 
-        if bool(getattr(self, "_show_hpmp_max_inputs", False)):
-            tk.Label(info_in, text="HP Max:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-            _hp_entry = tk.Entry(info_in, textvariable=self.hp_max_override, width=8)
-            _hp_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Label(info_in, text="Soul:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.soul_text, width=22, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-            tk.Label(info_in, text="MP Max:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        if bool(getattr(self, "_show_hpmp_max_inputs", False)):
+            tk.Label(info_in, text="HP Max:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+            _hp_entry = tk.Entry(info_in, textvariable=self.hp_max_override, width=8)
+            _hp_entry.grid(row=4, column=1, sticky="w", pady=(6, 0))
+
+            tk.Label(info_in, text="MP Max:").grid(row=5, column=0, sticky="w", pady=(6, 0))
             _mp_entry = tk.Entry(info_in, textvariable=self.mp_max_override, width=8)
-            _mp_entry.grid(row=4, column=1, sticky="w", pady=(6, 0))
+            _mp_entry.grid(row=5, column=1, sticky="w", pady=(6, 0))
 
             def _on_apply(_evt=None) -> None:
                 try:
@@ -1019,10 +1026,25 @@ class BotUI:
             _mp_entry.bind("<FocusOut>", _on_apply)
 
             self._hpmp_apply_btn = self._make_btn(info_in, text="Aplicar", width=10, command=self._apply_hpmp_max_env)
-            self._hpmp_apply_btn.grid(row=5, column=1, sticky="w", pady=(6, 0))
-            sig_row = 6
+            self._hpmp_apply_btn.grid(row=6, column=1, sticky="w", pady=(6, 0))
+            base_row = 7
         else:
-            sig_row = 3
+            base_row = 4
+
+        tk.Label(info_in, text="Ring:").grid(row=base_row, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.ring_text, width=22, anchor="w").grid(
+            row=base_row, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(info_in, text="Amulet:").grid(row=base_row + 1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.amulet_text, width=22, anchor="w").grid(
+            row=base_row + 1, column=1, sticky="w", pady=(6, 0)
+        )
+        tk.Label(info_in, text="Hungry:").grid(row=base_row + 2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.hungry_text, width=22, anchor="w").grid(
+            row=base_row + 2, column=1, sticky="w", pady=(6, 0)
+        )
+
+        sig_row = base_row + 3
 
         tk.Label(info_in, text="Señales:").grid(row=sig_row, column=0, sticky="w", pady=(6, 0))
         tk.Label(info_in, textvariable=self.signals_text, width=32, anchor="w").grid(row=sig_row, column=1, sticky="w", pady=(6, 0))
@@ -1525,7 +1547,41 @@ class BotUI:
         def run_roi_wizard_english_ui() -> None:
             """Interactive: configure the full ROI set (English names + legacy aliases) in one go."""
 
-            rois_path = str(self.rois_config_override.get()).strip()
+            # Determine which ROIs JSON the wizard should edit.
+            # If the user didn't pick an override, default to ROIS_CONFIG env var
+            # (if set), otherwise fall back to the most common template.
+            rois_path = ""
+            try:
+                rois_path = str(self.rois_config_override.get()).strip()
+            except Exception:
+                rois_path = ""
+
+            if not rois_path:
+                try:
+                    rois_path = str(os.getenv("ROIS_CONFIG", "") or "").strip()
+                except Exception:
+                    rois_path = ""
+
+            if not rois_path:
+                try:
+                    # Prefer the 1920x1080 profile (most setups); fall back to the legacy one.
+                    cand = str(Path("configs") / "rois_guess_1920x1080.json")
+                    rois_path = cand if Path(cand).exists() else str(Path("configs") / "rois_guess.json")
+                except Exception:
+                    rois_path = "configs/rois_guess_1920x1080.json"
+
+            # Keep UI + env in sync so Tools preview always knows what to show.
+            try:
+                if rois_path:
+                    self.rois_config_override.set(rois_path)
+            except Exception:
+                pass
+            try:
+                if rois_path:
+                    os.environ["ROIS_CONFIG"] = rois_path
+            except Exception:
+                pass
+
             cmd = [
                 sys.executable,
                 "-m",
@@ -1537,87 +1593,296 @@ class BotUI:
             if rois_path:
                 cmd += ["--rois", rois_path]
 
+            def _on_complete(tool_out_dir: str | None, ok: bool, out: str, summary_short: str | None) -> None:
+                # If the wizard wrote ROIs successfully, reload them in the running bot.
+                if not ok:
+                    return
+                try:
+                    cur = str(self.rois_config_override.get()).strip()
+                    if not cur:
+                        return
+                    os.environ["ROIS_CONFIG"] = cur
+                except Exception:
+                    return
+
+                try:
+                    if self._config is not None:
+                        self._config.request_rois_reload()
+                    try:
+                        print("🔁 ROIs recargadas (wizard)")
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            open_dir = None
             try:
                 if rois_path:
-                    os.environ["ROIS_CONFIG"] = rois_path
+                    p = Path(rois_path)
+                    if p.exists():
+                        open_dir = str(p.parent)
             except Exception:
-                pass
+                open_dir = None
 
-            _run_tool_async(cmd, title="Wizard ROIs (EN)")
-
-        def _open_last_artifact(which: str, kind: str) -> None:
-            try:
-                if kind == "roi":
-                    last_dir = self._last_roi_sanity_dir
-                elif kind == "ocr":
-                    last_dir = self._last_ocr_sanity_dir
-                elif kind == "coords":
-                    last_dir = self._last_coords_sanity_dir
-                else:
-                    last_dir = self._last_anchor_sanity_dir
-                if not last_dir:
-                    self._messagebox.showinfo("Información", "Aún no hay una ejecución reciente.")
-                    return
-                p = Path(last_dir) / ("overlay.png" if which == "overlay" else "report.json")
-                if not p.exists():
-                    self._messagebox.showinfo("Información", f"No existe: {p}")
-                    return
-                os.startfile(os.path.abspath(str(p)))
-            except Exception:
-                pass
+            _run_tool_async(cmd, title="Wizard ROIs (EN)", open_dir=open_dir, on_complete=_on_complete)
 
         # --- TAB: Herramientas ---
         tools_root = tk.Frame(tab_tools, padx=10, pady=10)
         tools_root.pack(fill="both", expand=True)
 
-        sanity_frame, sanity_in = self._classic_groupbox(tools_root, title="Chequeos")
-        sanity_frame.pack(fill="x")
-        self._make_btn(sanity_in, text="Chequeo ROI", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
-        self._make_btn(sanity_in, text="Probar OCR", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self._make_btn(sanity_in, text="Probar coords", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        self._make_btn(sanity_in, text="Probar ancla", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
-        self._make_btn(sanity_in, text="Configurar ancla", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
-        self._make_btn(sanity_in, text="Configurar paneles", width=18, command=run_panel_setup_ui).grid(row=1, column=0, sticky="w", pady=(8, 0))
-        self._make_btn(sanity_in, text="Wizard ROIs (EN)", width=18, command=run_roi_wizard_english_ui).grid(
-            row=1, column=1, sticky="w", pady=(8, 0), padx=(8, 0)
+        # Tools UI simplified: focus on ROI wizard + fast verification.
+        wiz_frame, wiz_in = self._classic_groupbox(tools_root, title="Wizard ROIs")
+        wiz_frame.pack(fill="both", expand=True)
+
+        self._make_btn(wiz_in, text="Wizard ROIs (EN)", width=18, command=run_roi_wizard_english_ui).grid(
+            row=0, column=0, sticky="w"
         )
 
-        artifacts_frame, artifacts_in = self._classic_groupbox(tools_root, title="Abrir artefactos")
-        artifacts_frame.pack(fill="x", pady=(10, 0))
+        # Live preview of the ROIs JSON values (so you can verify changes right after closing the wizard).
+        rois_preview_var = tk.StringVar(value="")
 
-        self._make_btn(artifacts_in, text="Overlay ROI", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(row=0, column=0, sticky="w")
-        self._make_btn(artifacts_in, text="Reporte ROI", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self._make_btn(artifacts_in, text="Overlay OCR", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        self._make_btn(artifacts_in, text="Reporte OCR", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(row=0, column=3, sticky="w", padx=(8, 0))
+        def _get_bot_active_rois_path() -> str:
+            try:
+                if self._config is None:
+                    return ""
+                hs = self._config.health_snapshot()
+                return str(getattr(hs, "rois_config_path", "") or "").strip()
+            except Exception:
+                return ""
 
-        self._make_btn(artifacts_in, text="Overlay coords", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self._make_btn(artifacts_in, text="Reporte coords", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
-        self._make_btn(artifacts_in, text="Overlay ancla", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
-        self._make_btn(artifacts_in, text="Reporte ancla", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        def _use_bot_active_rois_as_override() -> None:
+            # When the override is wrong/empty, let the user quickly adopt the
+            # currently-loaded ROIs file as the override target.
+            p = _get_bot_active_rois_path()
+            if not p:
+                return
+            try:
+                self.rois_config_override.set(str(p))
+            except Exception:
+                pass
+            try:
+                os.environ["ROIS_CONFIG"] = str(p)
+            except Exception:
+                pass
+            try:
+                if self._config is not None:
+                    self._config.request_rois_reload()
+            except Exception:
+                pass
+            try:
+                _refresh_rois_preview()
+                _sync_preview_text()
+            except Exception:
+                pass
 
-        last_frame, last_in = self._classic_groupbox(tools_root, title="Últimos resultados")
-        last_frame.pack(fill="x", pady=(10, 0))
+        def _format_roi_line(name: str, roi: object) -> str:
+            try:
+                if not isinstance(roi, dict):
+                    return f"{name}: <invalid>"
+                x = roi.get("x")
+                y = roi.get("y")
+                w = roi.get("w")
+                h = roi.get("h")
+                return f"{name}: x={x} y={y} w={w} h={h}"
+            except Exception:
+                return f"{name}: <error>"
 
-        tk.Label(last_in, text="ROI:").grid(row=0, column=0, sticky="w")
-        tk.Label(last_in, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(row=0, column=1, sticky="w")
-        tk.Label(last_in, textvariable=self.last_roi_dir_var, width=60, anchor="w").grid(row=1, column=1, columnspan=3, sticky="w")
+        def _refresh_rois_preview() -> None:
+            rois_path = ""
+            try:
+                rois_path = str(self.rois_config_override.get()).strip()
+            except Exception:
+                rois_path = ""
 
-        tk.Label(last_in, text="OCR:").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_ocr_dir_var, width=60, anchor="w").grid(row=3, column=1, columnspan=3, sticky="w")
+            bot_path = _get_bot_active_rois_path()
 
-        tk.Label(last_in, text="Coords:").grid(row=4, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_coords_dir_var, width=60, anchor="w").grid(row=5, column=1, columnspan=3, sticky="w")
+            # Source label for the preview (override vs bot-active fallback)
+            preview_source = "override"
 
-        tk.Label(last_in, text="Ancla:").grid(row=6, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(row=6, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_in, textvariable=self.last_anchor_dir_var, width=60, anchor="w").grid(row=7, column=1, columnspan=3, sticky="w")
+            if not rois_path:
+                # Fallback to env var, which the wizard sets automatically.
+                try:
+                    rois_path = str(os.getenv("ROIS_CONFIG", "") or "").strip()
+                except Exception:
+                    rois_path = ""
+                if not rois_path:
+                    # If the bot already loaded a ROIs file, use it for preview.
+                    if bot_path:
+                        rois_path = str(bot_path)
+                        preview_source = "bot_active"
+                    else:
+                        rois_preview_var.set("Selecciona un ROIs JSON en Configuración (ROIs override).")
+                        return
 
+                # Keep UI in sync with the env var so the user can see/edit it.
+                try:
+                    self.rois_config_override.set(rois_path)
+                except Exception:
+                    pass
+
+            try:
+                p = Path(rois_path)
+                if not p.exists():
+                    msg = [f"Override: NO EXISTE -> {rois_path}"]
+                    if bot_path:
+                        msg.append(f"ROIs activos (bot): {bot_path}")
+                        msg.append("Tip: pulsa 'Usar ROIs activos' para corregir el override.")
+                    rois_preview_var.set("\n".join(msg))
+                    return
+            except Exception:
+                rois_preview_var.set(f"Path inválido: {rois_path}")
+                return
+
+            try:
+                import json
+
+                raw = json.loads(Path(rois_path).read_text(encoding="utf-8"))
+            except Exception as e:
+                rois_preview_var.set(f"No pude leer JSON: {e}")
+                return
+
+            rois_obj = None
+            try:
+                if isinstance(raw, dict):
+                    rois_obj = raw.get("rois_guess_norm", raw.get("rois", raw))
+            except Exception:
+                rois_obj = None
+
+            if not isinstance(rois_obj, dict):
+                rois_preview_var.set("JSON sin 'rois_guess_norm'/'rois' válido.")
+                return
+
+            try:
+                mtime = Path(rois_path).stat().st_mtime
+            except Exception:
+                mtime = None
+
+            try:
+                src_res = raw.get("source_resolution") if isinstance(raw, dict) else None
+            except Exception:
+                src_res = None
+
+            # Useful subset for quick validation.
+            keys = [
+                "hpmp_top_strip",
+                "hp_top_ocr",
+                "mp_top_ocr",
+                "coords_ocr",
+                "minimap_content",
+                "battlelist_rows",
+                "ring_slot",
+                "amulet_slot",
+                "hungry_icon",
+            ]
+
+            lines: list[str] = []
+            try:
+                override_ui = str(self.rois_config_override.get()).strip()
+            except Exception:
+                override_ui = ""
+            lines.append(f"Override (UI): {override_ui or '<vacío>'}")
+            if bot_path:
+                lines.append(f"ROIs activos (bot): {bot_path}")
+
+            if preview_source == "bot_active":
+                lines.append("preview_source: bot_active (no hay override seleccionado)")
+                lines.append("Tip: pulsa 'Usar ROIs activos' para copiarlo como override.")
+            else:
+                lines.append("preview_source: override")
+                try:
+                    if str(bot_path).strip() and str(override_ui).strip() and (str(bot_path).strip() != str(override_ui).strip()):
+                        lines.append("⚠️  MISMATCH: el bot está usando otro ROIs distinto al override")
+                except Exception:
+                    pass
+            if src_res is not None:
+                lines.append(f"source_resolution: {src_res}")
+            if mtime is not None:
+                try:
+                    import time as _time
+
+                    lines.append(f"mtime: {float(mtime):.0f} ({_time.strftime('%H:%M:%S', _time.localtime(float(mtime)))})")
+                except Exception:
+                    lines.append(f"mtime: {mtime}")
+            try:
+                if self._config is not None:
+                    lines.append(f"reload_requests: {int(self._config.rois_reload_counter_snapshot())}")
+            except Exception:
+                pass
+            # Active ROIs meta from bot (when available)
+            try:
+                if self._config is not None:
+                    hs = self._config.health_snapshot()
+                    bn = getattr(hs, "rois_n", None)
+                    if bn is not None:
+                        lines.append(f"bot_rois_n: {int(bn)}")
+                    bm = getattr(hs, "rois_file_mtime", None)
+                    if bm is not None:
+                        try:
+                            import time as _time
+
+                            lines.append(
+                                f"bot_rois_mtime: {float(bm):.0f} ({_time.strftime('%H:%M:%S', _time.localtime(float(bm)))})"
+                            )
+                        except Exception:
+                            lines.append(f"bot_rois_mtime: {bm}")
+                    bsr = getattr(hs, "rois_source_resolution", None)
+                    if bsr is not None:
+                        lines.append(f"bot_source_resolution: {bsr}")
+            except Exception:
+                pass
+            lines.append(f"n_rois: {len(rois_obj)}")
+            lines.append("---")
+            for k in keys:
+                if k in rois_obj:
+                    lines.append(_format_roi_line(k, rois_obj.get(k)))
+            rois_preview_var.set("\n".join(lines))
+
+        self._make_btn(wiz_in, text="Actualizar", width=10, command=_refresh_rois_preview).grid(
+            row=0, column=1, sticky="w", padx=(8, 0)
+        )
+
+        self._make_btn(wiz_in, text="Usar ROIs activos", width=16, command=_use_bot_active_rois_as_override).grid(
+            row=0, column=2, sticky="w", padx=(8, 0)
+        )
+
+        tk.Label(wiz_in, text="Vista rápida (ROIs JSON)", anchor="w").grid(row=1, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        preview = tk.Text(wiz_in, height=14, width=96, wrap="none")
+        preview.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(4, 0))
         try:
-            self._register_measure_widget("tools.sanity", sanity_frame)
-            self._register_measure_widget("tools.artifacts", artifacts_frame)
-            self._register_measure_widget("tools.last", last_frame)
+            wiz_in.grid_columnconfigure(0, weight=1)
+            wiz_in.grid_rowconfigure(2, weight=1)
+        except Exception:
+            pass
+
+        def _sync_preview_text() -> None:
+            try:
+                preview.configure(state="normal")
+                preview.delete("1.0", "end")
+                preview.insert("1.0", str(rois_preview_var.get() or ""))
+                preview.configure(state="disabled")
+            except Exception:
+                pass
+
+        def _tick_preview() -> None:
+            # Cheap poll so the view updates even if another tool edits the file.
+            try:
+                _refresh_rois_preview()
+                _sync_preview_text()
+            except Exception:
+                pass
+            try:
+                self.root.after(750, _tick_preview)
+            except Exception:
+                pass
+
+        # First render + start polling.
+        try:
+            _refresh_rois_preview()
+            _sync_preview_text()
+        except Exception:
+            pass
+        try:
+            self.root.after(750, _tick_preview)
         except Exception:
             pass
 
@@ -2714,6 +2979,36 @@ class BotUI:
             row=0, column=1, sticky="w", pady=(4, 0)
         )
 
+        def reload_rois_now() -> None:
+            """Force the running bot to reload the ROIs JSON immediately."""
+
+            try:
+                rois_path = str(self.rois_config_override.get()).strip()
+            except Exception:
+                rois_path = ""
+
+            # Keep main.py's load_roi_config consistent with what the user selected.
+            try:
+                if rois_path:
+                    os.environ["ROIS_CONFIG"] = rois_path
+                else:
+                    os.environ.pop("ROIS_CONFIG", None)
+            except Exception:
+                pass
+
+            try:
+                self._config.request_rois_reload()
+            except Exception:
+                pass
+
+            try:
+                self._messagebox.showinfo(
+                    "ROIs",
+                    "Recarga solicitada. Revisa la consola: debería aparecer '🔁 ROIs recargadas (UI)'.",
+                )
+            except Exception:
+                pass
+
         def browse_rois() -> None:
             try:
                 from tkinter import filedialog
@@ -2732,89 +3027,18 @@ class BotUI:
             row=0, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        # ROI picker UI (writes into the selected ROIs config file).
-        tk.Label(cfg_left, text="Editar ROI").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        tk.Entry(cfg_left, textvariable=self.roi_pick_name, width=18).grid(row=1, column=1, sticky="w", pady=(8, 0))
-
-        def _ensure_rois_path_for_tools() -> str:
-            rois_path = str(self.rois_config_override.get()).strip()
-            if rois_path:
-                return rois_path
-            # Default to the most common profile; user can override anytime.
-            fallback = str(self._repo_root / "configs" / "rois_guess_1920x1080.json")
-            try:
-                self.rois_config_override.set(fallback)
-            except Exception:
-                pass
-            return fallback
-
-        def pick_one_roi() -> None:
-            roi_name = str(self.roi_pick_name.get()).strip()
-            if not roi_name:
-                try:
-                    self._messagebox.showinfo("ROI Picker", "Define un nombre de ROI (ej: ring_slot, chat_panel, hpmp_top_strip)")
-                except Exception:
-                    pass
-                return
-
-            rois_path = _ensure_rois_path_for_tools()
-            try:
-                mon = int(self.roi_pick_monitor.get())
-            except Exception:
-                mon = _monitor_default()
-
-            cmd = [
-                sys.executable,
-                str(self._repo_root / "tools" / "roi_pick_one.py"),
-                "--rois",
-                str(rois_path),
-                "--out",
-                str(rois_path),
-                "--roi",
-                str(roi_name),
-                "--monitor",
-                str(int(mon)),
-            ]
-            _run_tool_async(cmd, title=f"Selector de ROI ({roi_name})")
-
-        def pick_ring_amulet() -> None:
-            rois_path = _ensure_rois_path_for_tools()
-            try:
-                mon = int(self.roi_pick_monitor.get())
-            except Exception:
-                mon = _monitor_default()
-            cmd = [
-                sys.executable,
-                str(self._repo_root / "tools" / "roi_pick_slots.py"),
-                "--rois",
-                str(rois_path),
-                "--out",
-                str(rois_path),
-                "--monitor",
-                str(int(mon)),
-            ]
-            _run_tool_async(cmd, title="Selector de ROI (ring/amulet)")
-
-        self._make_btn(cfg_left, text="Ajustar interface", width=14, command=pick_one_roi).grid(
-            row=1, column=2, sticky="w", padx=(8, 0), pady=(8, 0)
-        )
-
-        tk.Label(cfg_left, text="Monitor").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(cfg_left, from_=0, to=9, increment=1, textvariable=self.roi_pick_monitor, width=6).grid(
-            row=2, column=1, sticky="w", pady=(6, 0)
-        )
-        self._make_btn(cfg_left, text="Ajustar ring/amulet", width=14, command=pick_ring_amulet).grid(
-            row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
+        self._make_btn(cfg_left, text="Recargar", width=10, command=reload_rois_now).grid(
+            row=0, column=3, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
         tk.Label(
             cfg_left,
-            text="(Se aplica al iniciar el bot; requiere reinicio)",
-        ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+            text="(Edita ROIs desde Herramientas → Wizard ROIs. Luego se aplica al cerrar el wizard.)",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(10, 0))
 
         # Debug (opcional): simulación de señales
         sim_frame, sim_in = self._classic_groupbox(cfg_left, title="Simulación (debug)", padx=8, pady=6)
-        sim_frame.grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        sim_frame.grid(row=2, column=0, columnspan=3, sticky="w", pady=(10, 0))
         tk.Checkbutton(sim_in, text="Habilitar", variable=self.sim_enabled).grid(row=0, column=0, sticky="w")
         tk.Checkbutton(sim_in, text="Paralizado", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Checkbutton(sim_in, text="Haste", variable=self.sim_haste_active).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(6, 0))
@@ -3756,27 +3980,123 @@ class BotUI:
                     except Exception:
                         return None
 
+                # Helpers LOCALES: SOLO para el panel "Estado".
+                def _fmt_stat(cur: Any, maxv: Any, pct: Any) -> str:
+                    cur_i = _safe_int(cur)
+                    max_i = _safe_int(maxv)
+                    pct_f = _safe_pct(pct)
+
+                    cur_ok = cur_i is not None
+                    max_ok = max_i is not None
+
+                    if cur_ok and max_ok:
+                        # Regla consistente: si cur > max (o max inválido), no mostramos cur/max.
+                        try:
+                            if int(max_i) > 0 and int(cur_i) <= int(max_i):
+                                base = f"{int(cur_i)}/{int(max_i)}"
+                            else:
+                                base = f"{int(cur_i)}/?"
+                        except Exception:
+                            base = f"{int(cur_i)}/?"
+                    elif cur_ok and not max_ok:
+                        base = f"{int(cur_i)}/?"
+                    else:
+                        base = "?"
+
+                    if pct_f is not None:
+                        return f"{base} ({float(pct_f):.1f}%)"
+                    return base
+
+                def _fmt_cap(capv: Any) -> str:
+                    c = _safe_int(capv)
+                    return str(int(c)) if c is not None else "?"
+
+                def _fmt_soul(soulv: Any) -> str:
+                    s = _safe_int(soulv)
+                    return str(int(s)) if s is not None else "?"
+
+                def _yn(v: Any) -> str:
+                    return "Y" if bool(v is True) else "N"
+
+                def _get_attr_if_present(obj: Any, names: list[str]) -> tuple[bool, Any]:
+                    """Return (present, value) for the first attribute name that exists.
+
+                    Important for UI semantics:
+                    - If the attribute exists but is None, we treat it as 'known None'
+                      (and show N), we do NOT fall back to tel.signals.
+                    """
+                    for n in names:
+                        try:
+                            if hasattr(obj, n):
+                                return True, getattr(obj, n)
+                        except Exception:
+                            continue
+                    return False, None
+
+                def _get_presence_from_signals(key: str) -> bool:
+                    try:
+                        sigs = getattr(tel, "signals", None)
+                        if sigs is None:
+                            return False
+                        if isinstance(sigs, str):
+                            items = [s.strip().lower() for s in sigs.split(",") if s.strip()]
+                            return str(key).strip().lower() in set(items)
+                        if isinstance(sigs, (list, tuple, set)):
+                            items = {str(s).strip().lower() for s in sigs if str(s).strip()}
+                            return str(key).strip().lower() in items
+                    except Exception:
+                        return False
+                    return False
+
                 # Defaults always set (never leave stale values on exceptions).
                 try:
-                    hp_str = format_vital_text(
-                        getattr(tel, "hp_current", None),
-                        getattr(tel, "hp_max", None),
-                        getattr(tel, "hp_pct", None),
-                    )
+                    hp_str = _fmt_stat(getattr(tel, "hp_current", None), getattr(tel, "hp_max", None), getattr(tel, "hp_pct", None))
                 except Exception:
                     hp_str = "?"
                 try:
-                    mp_str = format_vital_text(
-                        getattr(tel, "mp_current", None),
-                        getattr(tel, "mp_max", None),
-                        getattr(tel, "mp_pct", None),
-                    )
+                    mp_str = _fmt_stat(getattr(tel, "mp_current", None), getattr(tel, "mp_max", None), getattr(tel, "mp_pct", None))
                 except Exception:
                     mp_str = "?"
                 try:
-                    cap_str = format_vital_text(getattr(tel, "cap_current", None), None, None)
+                    cap_str = _fmt_cap(getattr(tel, "cap_current", None))
                 except Exception:
                     cap_str = "?"
+                try:
+                    soul_str = _fmt_soul(getattr(tel, "soul_current", None))
+                except Exception:
+                    soul_str = "?"
+
+                # Ring/Amulet/Hungry: Y SOLO si realmente es True; si es False o None => N.
+                try:
+                    ring_present, ring_val = _get_attr_if_present(tel, ["ring", "ring_equipped"])
+                    if not ring_present:
+                        ring_val = _get_presence_from_signals("ring")
+                    self.ring_text.set(_yn(ring_val))
+                except Exception:
+                    try:
+                        self.ring_text.set("N")
+                    except Exception:
+                        pass
+                try:
+                    amulet_present, amulet_val = _get_attr_if_present(tel, ["amulet", "amulet_equipped"])
+                    if not amulet_present:
+                        amulet_val = _get_presence_from_signals("amulet")
+                    self.amulet_text.set(_yn(amulet_val))
+                except Exception:
+                    try:
+                        self.amulet_text.set("N")
+                    except Exception:
+                        pass
+                try:
+                    hungry_present, hungry_val = _get_attr_if_present(tel, ["hungry", "is_hungry"])
+                    if not hungry_present:
+                        hungry_val = _get_presence_from_signals("hungry")
+                    self.hungry_text.set(_yn(hungry_val))
+                except Exception:
+                    try:
+                        self.hungry_text.set("N")
+                    except Exception:
+                        pass
 
                 try:
                     self.hp_text.set(hp_str)
@@ -3788,6 +4108,10 @@ class BotUI:
                     pass
                 try:
                     self.cap_text.set(cap_str)
+                except Exception:
+                    pass
+                try:
+                    self.soul_text.set(soul_str)
                 except Exception:
                     pass
 
@@ -3866,18 +4190,19 @@ class BotUI:
                         parts.append("low_potions")
                 except Exception:
                     pass
-                if getattr(tel, "ring_equipped", None) is True:
-                    parts.append("ring")
-                if getattr(tel, "amulet_equipped", None) is True:
-                    parts.append("amulet")
                 if tel.paralyzed:
                     parts.append("paralyzed")
                 if tel.haste_active:
                     parts.append("haste")
                 if tel.utamo_active:
                     parts.append("utamo")
-                if tel.hungry:
-                    parts.append("hungry")
+
+                # Señales: NO incluir ring/amulet/hungry (se muestran aparte como Y/N).
+                try:
+                    banned = {"ring", "amulet", "hungry"}
+                    parts = [p for p in parts if str(p).strip().lower() not in banned]
+                except Exception:
+                    pass
 
                 self.signals_text.set(", ".join(parts) if parts else "-")
 

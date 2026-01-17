@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from vision.battlelist import extract_rows, parse_row
-from vision.ocr import OCRProcessor
+from vision.ocr import get_shared_ocr_processor
 
 
 @dataclass
@@ -39,7 +39,7 @@ class TargetingDebug:
 
 class BattlelistLocator:
     def __init__(self) -> None:
-        self._ocr = OCRProcessor()
+        self._ocr = get_shared_ocr_processor()
 
     def locate(self, frame: np.ndarray, rois: Dict[str, Any], resolution: Tuple[int, int]) -> Tuple[Optional[np.ndarray], float, Tuple[int, int, int, int]]:
         if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:

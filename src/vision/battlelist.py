@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, MutableMapping
 
 import numpy as np
 
-from vision.ocr import OCRProcessor
+from vision.ocr import OCRProcessor, get_shared_ocr_processor
 
 
 # Public types (dict-based to keep it simple and JSONL-friendly)
@@ -63,14 +63,12 @@ def _load_corrections() -> Dict[str, str]:
 
 
 def _get_ocr() -> OCRProcessor | None:
-    global _OCR_SINGLETON
-    if _OCR_SINGLETON is not None:
-        return _OCR_SINGLETON
+    # Reuse the shared OCR instance used by the main GameStateBuilder.
+    # This avoids repeated GPU init and keeps OCR behavior consistent.
     try:
-        _OCR_SINGLETON = OCRProcessor()
+        return get_shared_ocr_processor()
     except Exception:
-        _OCR_SINGLETON = None
-    return _OCR_SINGLETON
+        return None
 
 
 def _normalize_name(text: str) -> tuple[str, str]:

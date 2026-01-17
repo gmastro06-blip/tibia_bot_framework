@@ -101,45 +101,158 @@ def _select_roi_tk(title: str, img_bgr):
 
     img_h, img_w = int(img_bgr.shape[0]), int(img_bgr.shape[1])
 
+    # Base scale to fit the window; user-controlled zoom multiplies this.
     max_w, max_h = 1200, 800
-    scale = min(1.0, max_w / max(1, img_w), max_h / max(1, img_h))
-    disp = img_bgr
-    if scale < 1.0:
-        disp = cv2.resize(img_bgr, (int(img_w * scale), int(img_h * scale)), interpolation=cv2.INTER_AREA)
+    base_scale = min(1.0, max_w / max(1, img_w), max_h / max(1, img_h))
+    if base_scale <= 0:
+        base_scale = 1.0
 
-    disp_rgb = cv2.cvtColor(disp, cv2.COLOR_BGR2RGB)
+    # Selection stored in original image pixels, so zoom changes preserve rectangle.
+    sel_orig: list[int] = []  # [x0, y0, x1, y1]
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".ppm") as tmp:
         ppm_path = tmp.name
-    _write_ppm(ppm_path, disp_rgb)
 
     root = tk.Tk()
     root.title(title)
 
-    img = tk.PhotoImage(file=ppm_path)
-    canvas = tk.Canvas(root, width=img.width(), height=img.height(), highlightthickness=0)
+    zoom_var = tk.DoubleVar(value=1.0)
+    img_ref: dict[str, object] = {"photo": None}
+    image_id: int | str | None = None
+    rect_id: int | None = None
+
+    top = tk.Frame(root)
+    top.pack(fill="x")
+    tk.Label(top, text="Zoom").pack(side="left", padx=(6, 4))
+
+    def _set_zoom(v: float) -> None:
+        try:
+            v0 = float(v)
+        except Exception:
+            v0 = float(zoom_var.get() or 1.0)
+        v0 = max(0.5, min(4.0, v0))
+        try:
+            zoom_var.set(v0)
+        except Exception:
+            pass
+
+    def _zoom_in() -> None:
+        _set_zoom(float(zoom_var.get() or 1.0) * 1.25)
+        _render()
+
+    def _zoom_out() -> None:
+        _set_zoom(float(zoom_var.get() or 1.0) / 1.25)
+        _render()
+
+    tk.Button(top, text="-", width=3, command=_zoom_out).pack(side="left")
+    tk.Button(top, text="+", width=3, command=_zoom_in).pack(side="left", padx=(4, 6))
+
+    zoom_scale = tk.Scale(
+        top,
+        from_=0.5,
+        to=4.0,
+        resolution=0.1,
+        orient="horizontal",
+        variable=zoom_var,
+        showvalue=True,
+        length=280,
+        command=lambda _v: _render(),
+    )
+    zoom_scale.pack(side="left")
+
+    canvas = tk.Canvas(root, width=int(img_w * base_scale), height=int(img_h * base_scale), highlightthickness=0)
     canvas.pack()
-    canvas.create_image(0, 0, anchor=tk.NW, image=img)
+
+    def _eff_scale() -> float:
+        try:
+            z = float(zoom_var.get() or 1.0)
+        except Exception:
+            z = 1.0
+        s = float(base_scale) * float(z)
+        return s if s > 0 else 1.0
+
+    def _render() -> None:
+        nonlocal rect_id
+
+        s = _eff_scale()
+        disp = img_bgr
+        if s != 1.0:
+            disp = cv2.resize(
+                img_bgr,
+                (max(1, int(round(img_w * s))), max(1, int(round(img_h * s)))),
+                interpolation=(cv2.INTER_AREA if s < 1.0 else cv2.INTER_NEAREST),
+            )
+        disp_rgb = cv2.cvtColor(disp, cv2.COLOR_BGR2RGB)
+        try:
+            _write_ppm(ppm_path, disp_rgb)
+        except Exception:
+            pass
+
+        photo = tk.PhotoImage(file=ppm_path)
+        img_ref["photo"] = photo
+
+        try:
+            canvas.config(width=photo.width(), height=photo.height())
+        except Exception:
+            pass
+
+        nonlocal image_id
+        if image_id is None:
+            image_id = canvas.create_image(0, 0, anchor=tk.NW, image=photo)
+        else:
+            try:
+                canvas.itemconfig(image_id, image=photo)
+            except Exception:
+                pass
+
+        if len(sel_orig) == 4:
+            try:
+                dx0 = int(round(sel_orig[0] * s))
+                dy0 = int(round(sel_orig[1] * s))
+                dx1 = int(round(sel_orig[2] * s))
+                dy1 = int(round(sel_orig[3] * s))
+                if rect_id is None:
+                    rect_id = canvas.create_rectangle(dx0, dy0, dx1, dy1, outline="red", width=2)
+                else:
+                    canvas.coords(rect_id, dx0, dy0, dx1, dy1)
+            except Exception:
+                pass
+
+    _render()
 
     class _DragState(TypedDict):
         x0: int | None
         y0: int | None
-        x1: int | None
-        y1: int | None
         rect: int | None
         cancel: bool
 
-    state: _DragState = {"x0": None, "y0": None, "x1": None, "y1": None, "rect": None, "cancel": False}
+    state: _DragState = {"x0": None, "y0": None, "rect": None, "cancel": False}
 
     def _clamp(v: int, lo: int, hi: int) -> int:
         return max(lo, min(hi, v))
 
+    def _sync_sel_from_disp(x0d: int, y0d: int, x1d: int, y1d: int) -> None:
+        s = _eff_scale()
+        if s <= 0:
+            s = 1.0
+        ox0 = int(round(min(x0d, x1d) / s))
+        oy0 = int(round(min(y0d, y1d) / s))
+        ox1 = int(round(max(x0d, x1d) / s))
+        oy1 = int(round(max(y0d, y1d) / s))
+        ox0 = max(0, min(img_w - 1, ox0))
+        oy0 = max(0, min(img_h - 1, oy0))
+        ox1 = max(0, min(img_w - 1, ox1))
+        oy1 = max(0, min(img_h - 1, oy1))
+        sel_orig[:] = [ox0, oy0, ox1, oy1]
+
     def on_down(event):
-        x0 = _clamp(int(event.x), 0, img.width() - 1)
-        y0 = _clamp(int(event.y), 0, img.height() - 1)
+        w = int(canvas.winfo_width() or 0)
+        h = int(canvas.winfo_height() or 0)
+        x0 = _clamp(int(event.x), 0, max(0, w - 1))
+        y0 = _clamp(int(event.y), 0, max(0, h - 1))
         state["x0"] = x0
         state["y0"] = y0
-        state["x1"] = x0
-        state["y1"] = y0
+        _sync_sel_from_disp(int(x0), int(y0), int(x0), int(y0))
         if state["rect"] is not None:
             try:
                 canvas.delete(state["rect"])
@@ -153,10 +266,11 @@ def _select_roi_tk(title: str, img_bgr):
         x0 = state["x0"]
         y0 = state["y0"]
         rect = state["rect"]
-        x1 = _clamp(int(event.x), 0, img.width() - 1)
-        y1 = _clamp(int(event.y), 0, img.height() - 1)
-        state["x1"] = x1
-        state["y1"] = y1
+        w = int(canvas.winfo_width() or 0)
+        h = int(canvas.winfo_height() or 0)
+        x1 = _clamp(int(event.x), 0, max(0, w - 1))
+        y1 = _clamp(int(event.y), 0, max(0, h - 1))
+        _sync_sel_from_disp(int(x0), int(y0), int(x1), int(y1))
         canvas.coords(rect, x0, y0, x1, y1)
 
     def on_accept(_event=None):
@@ -166,8 +280,22 @@ def _select_roi_tk(title: str, img_bgr):
         state["cancel"] = True
         root.quit()
 
+    def on_wheel(event):
+        try:
+            d = int(getattr(event, "delta", 0) or 0)
+        except Exception:
+            d = 0
+        if d == 0:
+            return
+        if d > 0:
+            _set_zoom(float(zoom_var.get() or 1.0) * 1.10)
+        else:
+            _set_zoom(float(zoom_var.get() or 1.0) / 1.10)
+        _render()
+
     canvas.bind("<Button-1>", on_down)
     canvas.bind("<B1-Motion>", on_drag)
+    canvas.bind("<MouseWheel>", on_wheel)
     root.bind("<Return>", on_accept)
     root.bind("<Escape>", on_cancel)
 
@@ -189,35 +317,9 @@ def _select_roi_tk(title: str, img_bgr):
         except Exception:
             pass
 
-    if state["cancel"] or state["x0"] is None or state["y0"] is None:
+    if state["cancel"] or len(sel_orig) != 4:
         return 0, 0, 0, 0
-
-    x0v = state.get("x0")
-    y0v = state.get("y0")
-    x1v = state.get("x1")
-    y1v = state.get("y1")
-    if x0v is None or y0v is None:
-        return 0, 0, 0, 0
-    if x1v is None:
-        x1v = x0v
-    if y1v is None:
-        y1v = y0v
-
-    x0 = int(min(x0v, x1v))
-    y0 = int(min(y0v, y1v))
-    x1 = int(max(x0v, x1v))
-    y1 = int(max(y0v, y1v))
-
-    if scale <= 0:
-        scale = 1.0
-    ox0 = int(round(x0 / scale))
-    oy0 = int(round(y0 / scale))
-    ox1 = int(round(x1 / scale))
-    oy1 = int(round(y1 / scale))
-
-    ox0 = max(0, min(img_w - 1, ox0))
-    oy0 = max(0, min(img_h - 1, oy0))
-    ox1 = max(0, min(img_w - 1, ox1))
+    ox0, oy0, ox1, oy1 = sel_orig
     oy1 = max(0, min(img_h - 1, oy1))
 
     return int(ox0), int(oy0), int(max(1, ox1 - ox0)), int(max(1, oy1 - oy0))
