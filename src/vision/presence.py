@@ -151,6 +151,7 @@ def is_nonempty_equipment_slot(
     min_std: float = 18.0,
     min_mean: float = 8.0,
     min_sat_pct: float = 0.006,
+    min_sat_pct_high: float = 0.020,
     sat_thr: int = 30,
     v_thr: int = 40,
     high_std: float = 45.0,
@@ -178,14 +179,30 @@ def is_nonempty_equipment_slot(
 
     if mean < float(min_mean):
         return False
-    if std < float(min_std):
-        return False
 
     # Prefer colored pixels as a strong indicator of an item icon.
+    # Some icons can be fairly flat (low std) but still strongly saturated.
     try:
         sat_pct = _saturation_pct(crop, s_thr=int(sat_thr), v_thr=int(v_thr), strip_border=True)
     except Exception:
         sat_pct = 0.0
+    # High-confidence "flat color" detection uses stricter S/V thresholds to
+    # avoid counting faint UI tint/borders as an item.
+    try:
+        sat_pct_hi = _saturation_pct(
+            crop,
+            s_thr=int(max(int(sat_thr), 50)),
+            v_thr=int(max(int(v_thr), 60)),
+            strip_border=True,
+        )
+    except Exception:
+        sat_pct_hi = 0.0
+    if float(sat_pct_hi) >= float(min_sat_pct_high):
+        return True
+
+    if std < float(min_std):
+        return False
+
     if float(sat_pct) >= float(min_sat_pct):
         return True
 
@@ -202,10 +219,105 @@ def is_nonempty_equipment_slot(
     return dark_pct >= float(gray_min_dark_pct)
 
 
+def detect_equipment_slot(
+    crop: Optional[np.ndarray],
+    kind: str = "slot",
+    *,
+    min_std: float = 18.0,
+    min_mean: float = 8.0,
+    min_sat_pct: float = 0.006,
+    min_sat_pct_high: float = 0.020,
+    sat_thr: int = 30,
+    v_thr: int = 40,
+    high_std: float = 45.0,
+    gray_dark_thr: int = 55,
+    gray_min_dark_pct: float = 0.01,
+) -> tuple[bool | None, float]:
+    """Tri-state equipment slot detector.
+
+    Returns:
+      - (True, conf)  when we have strong evidence of an item icon.
+      - (False, conf) when we have strong evidence the slot is empty.
+      - (None, conf)  when the crop is missing/invalid or ambiguous.
+
+    The heuristics mirror `is_nonempty_equipment_slot` but expose uncertainty and
+    a confidence score for UI/telemetry.
+    """
+
+    if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
+        return None, 0.0
+
+    gray = _to_gray(crop)
+    gray = _strip_border(gray)
+    try:
+        mean = float(gray.mean())
+        std = float(gray.std())
+    except Exception:
+        return None, 0.0
+
+    # If the crop is almost black, ROI is likely wrong/hidden => unknown.
+    try:
+        if mean < 2.0:
+            return None, 0.0
+    except Exception:
+        pass
+
+    # Saturation-based evidence (colored icons)
+    try:
+        sat_pct = _saturation_pct(crop, s_thr=int(sat_thr), v_thr=int(v_thr), strip_border=True)
+    except Exception:
+        sat_pct = 0.0
+    try:
+        sat_pct_hi = _saturation_pct(
+            crop,
+            s_thr=int(max(int(sat_thr), 50)),
+            v_thr=int(max(int(v_thr), 60)),
+            strip_border=True,
+        )
+    except Exception:
+        sat_pct_hi = 0.0
+
+    if float(sat_pct_hi) >= float(min_sat_pct_high):
+        # Very strong evidence; confidence grows with saturation fraction.
+        try:
+            conf = min(1.0, 0.85 + (float(sat_pct_hi) - float(min_sat_pct_high)) * 5.0)
+        except Exception:
+            conf = 0.9
+        return True, float(max(0.0, min(1.0, conf)))
+
+    # Texture + darkness evidence (grayscale icons)
+    try:
+        dark_pct = float(np.count_nonzero(gray < int(gray_dark_thr))) / float(gray.size)
+    except Exception:
+        dark_pct = 0.0
+
+    # Strong empty case: too little signal.
+    if mean < float(min_mean) and std < float(min_std):
+        return False, 0.7
+
+    # Strong present case: high texture + dark strokes.
+    if std >= float(high_std) and dark_pct >= float(gray_min_dark_pct):
+        return True, 0.7
+
+    # Moderate present: some texture + some saturation.
+    if std >= float(min_std) and float(sat_pct) >= float(min_sat_pct):
+        return True, 0.55
+
+    # Moderate empty: little texture and little saturation.
+    if std < float(min_std) and float(sat_pct) < float(min_sat_pct):
+        return False, 0.6
+
+    # Ambiguous.
+    _ = kind  # reserved for future per-kind tuning
+    return None, 0.3
+
+
 def is_hungry_hsv(
     crop: Optional[np.ndarray],
     *,
     min_pct: float = 0.012,
+    min_component_pct: float = 0.0,
+    strip_border_frac: float = 0.10,
     low_h: int = 8,
     low_s: int = 80,
     low_v: int = 80,
@@ -227,11 +339,49 @@ def is_hungry_hsv(
     try:
         import cv2
 
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        img = crop
+        # Many HUD crops include a border/slot frame; strip a margin to reduce
+        # false positives from colored outlines.
+        try:
+            frac = float(strip_border_frac)
+        except Exception:
+            frac = 0.10
+        frac = float(max(0.0, min(0.45, frac)))
+        try:
+            h, w = int(img.shape[0]), int(img.shape[1])
+            pad = int(max(0, round(min(h, w) * frac)))
+            if pad >= 1 and (h - 2 * pad) >= 2 and (w - 2 * pad) >= 2:
+                img = img[pad : h - pad, pad : w - pad]
+        except Exception:
+            img = crop
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         lower = np.array([int(low_h), int(low_s), int(low_v)], dtype=np.uint8)
         upper = np.array([int(high_h), int(high_s), int(high_v)], dtype=np.uint8)
         mask = cv2.inRange(hsv, lower, upper)  # type: ignore[arg-type]
         pct = float(np.count_nonzero(mask)) / float(mask.size)
-        return pct >= float(min_pct)
+
+        if pct < float(min_pct):
+            return False
+
+        # Optional robustness: require a reasonably large contiguous blob, not
+        # just scattered orange pixels.
+        try:
+            mcp = float(min_component_pct)
+        except Exception:
+            mcp = 0.0
+        if mcp <= 0.0:
+            return True
+
+        try:
+            n, _labels, stats, _centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            if n <= 1:
+                return False
+            # stats[0] is background.
+            max_area = int(np.max(stats[1:, cv2.CC_STAT_AREA]))
+            max_pct = float(max_area) / float(mask.size)
+            return max_pct >= float(mcp)
+        except Exception:
+            return True
     except Exception:
         return False

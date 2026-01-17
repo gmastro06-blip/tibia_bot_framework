@@ -9,11 +9,51 @@ from vision.ocr import OCRProcessor
 from vision.roboflow_inference import RoboflowInference
 from vision.bar_analysis import estimate_bar_fill_ratio_with_reason
 from vision.obstacles import compute_viewport_tile_offsets
-from vision.presence import is_hungry_hsv, is_nonempty_equipment_slot, detect_status_icons
+from vision.presence import detect_equipment_slot, is_hungry_hsv, is_nonempty_equipment_slot, detect_status_icons
 from vision.minimap_motion import MinimapMotionTracker
 from vision import battlelist
 from vision.roi import roi_to_px_result
 from layout_tracker import LayoutTracker
+
+
+def _sanitize_current_max(
+    cur: Optional[int],
+    mx: Optional[int],
+    *,
+    last_cur: Optional[int],
+    last_mx: Optional[int],
+) -> tuple[Optional[int], Optional[int], str]:
+    """Sanitize OCR values to avoid impossible states like current > max.
+
+    Returns (cur, mx, reason_suffix).
+    """
+
+    if cur is None or mx is None:
+        return cur, mx, ""
+    try:
+        cur_i = int(cur)
+        mx_i = int(mx)
+    except Exception:
+        return None, mx, "invalid_int"
+
+    if mx_i <= 0:
+        return None, None, "invalid_max"
+    if cur_i < 0:
+        return None, mx_i, "invalid_cur"
+    if cur_i <= mx_i:
+        return cur_i, mx_i, ""
+
+    # cur > max: prefer last-known sane value when it matches this max.
+    try:
+        if last_cur is not None and last_mx is not None:
+            lc = int(last_cur)
+            lm = int(last_mx)
+            if lm == mx_i and 0 <= lc <= mx_i:
+                return lc, mx_i, "cur_gt_max_use_last"
+    except Exception:
+        pass
+
+    return None, mx_i, "cur_gt_max_drop_cur"
 
 @dataclass
 class GameState:
@@ -128,6 +168,9 @@ class GameStateBuilder:
         self._last_pos_y: Optional[int] = None
         self._last_pos_z: Optional[int] = None
 
+        # HP/MP top-strip signature for cheap OCR caching.
+        self._last_hpmp_strip_sig: bytes | None = None
+
         # Coords por minimapa (minimap_motion): requiere seed y ROI minimap_content.
         # No hace OCR de coords; infiere movimiento y lo acumula.
         # Puede hacer fallback a steps (sin coords) u OCR según config.
@@ -185,6 +228,16 @@ class GameStateBuilder:
         self._status_state: Dict[str, bool] = {"paralyzed": False, "haste_active": False, "utamo_active": False}
         self._status_on_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
         self._status_off_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
+
+        # Presence flags (ring/amulet/hungry): debounce across K frames.
+        try:
+            self._presence_persist_k = int(float(os.getenv("PRESENCE_PERSIST_K", "3").strip() or "3"))
+        except Exception:
+            self._presence_persist_k = 3
+        self._presence_persist_k = max(1, min(20, int(self._presence_persist_k)))
+        self._presence_state: Dict[str, bool] = {"ring_equipped": False, "amulet_equipped": False, "hungry": False}
+        self._presence_on_streak: Dict[str, int] = {"ring_equipped": 0, "amulet_equipped": 0, "hungry": 0}
+        self._presence_off_streak: Dict[str, int] = {"ring_equipped": 0, "amulet_equipped": 0, "hungry": 0}
 
         # Vision real-time guard: if a vision update becomes too slow (often due to
         # OCR/EasyOCR or Roboflow inference), the pipeline can effectively stall and
@@ -612,6 +665,30 @@ class GameStateBuilder:
         except Exception:
             return None, False
 
+    def _hpmp_strip_signature(self, crop: np.ndarray) -> bytes | None:
+        """Compute a small signature for the hpmp_top_strip crop.
+
+        Used to skip expensive OCR when the strip didn't change.
+        """
+
+        if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
+            return None
+        try:
+            import cv2
+
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            # Very small downsample is enough to detect UI changes.
+            small = cv2.resize(gray, (32, 8), interpolation=cv2.INTER_AREA)
+            return small.tobytes()
+        except Exception:
+            try:
+                # Fallback: mean/std only (less reliable but safe).
+                m = float(np.mean(crop))
+                s = float(np.std(crop))
+                return f"{m:.2f}|{s:.2f}".encode("utf-8")
+            except Exception:
+                return None
+
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
         t0 = time.time()
@@ -688,6 +765,41 @@ class GameStateBuilder:
         hp_reason = ""
         mp_method = ""
         mp_reason = ""
+
+        # Strip signature caching: when the strip ROI exists and hasn't changed,
+        # reuse last-known values and skip OCR (keeps the pipeline real-time).
+        if do_ocr:
+            try:
+                if isinstance(rois, dict) and rois.get("hpmp_top_strip") is not None:
+                    rr = roi_to_px_result(
+                        frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                        rois=rois,
+                        resolution=resolution,
+                        roi_def=rois["hpmp_top_strip"],
+                    )
+                    if rr.ok and rr.roi is not None:
+                        x, y, w, h = rr.roi
+                        if int(w) >= 12 and int(h) >= 6:
+                            crop = frame[int(y) : int(y) + int(h), int(x) : int(x) + int(w)]
+                            sig = self._hpmp_strip_signature(crop)
+                            if sig is not None and sig == getattr(self, "_last_hpmp_strip_sig", None):
+                                if any(
+                                    v is not None
+                                    for v in [
+                                        getattr(self, "_last_hp_current", None),
+                                        getattr(self, "_last_hp_max", None),
+                                        getattr(self, "_last_mp_current", None),
+                                        getattr(self, "_last_mp_max", None),
+                                    ]
+                                ):
+                                    do_ocr = False
+                                    hp_method = "cached_strip"
+                                    mp_method = "cached_strip"
+                                    hp_reason = "strip_unchanged"
+                                    mp_reason = "strip_unchanged"
+                            self._last_hpmp_strip_sig = sig
+            except Exception:
+                pass
         cap_method = ""
         cap_reason = ""
 
@@ -861,6 +973,30 @@ class GameStateBuilder:
                     if not mp_method or mp_method in {"top_ocr", "top_strip", "rf_box"}:
                         mp_method = "cached_max"
                     mp_reason = f"reuse_last_max:{mp_reason}" if mp_reason else "reuse_last_max"
+        except Exception:
+            pass
+
+        # Final sanity: prevent impossible OCR like 1215/215.
+        try:
+            hp_current, hp_max, why = _sanitize_current_max(
+                hp_current,
+                hp_max,
+                last_cur=getattr(self, "_last_hp_current", None),
+                last_mx=getattr(self, "_last_hp_max", None),
+            )
+            if why:
+                hp_reason = f"{hp_reason}|{why}" if hp_reason else why
+        except Exception:
+            pass
+        try:
+            mp_current, mp_max, why = _sanitize_current_max(
+                mp_current,
+                mp_max,
+                last_cur=getattr(self, "_last_mp_current", None),
+                last_mx=getattr(self, "_last_mp_max", None),
+            )
+            if why:
+                mp_reason = f"{mp_reason}|{why}" if mp_reason else why
         except Exception:
             pass
 
@@ -1143,6 +1279,10 @@ class GameStateBuilder:
             hp_current = int(round(hp_ratio * hp_max))
             hp_method = "bar_low"
             hp_reason = f"fallback:{hp_reason}" if hp_reason else "fallback_no_ocr"
+        elif hp_current is None and hp_ratio is not None and hp_max is None:
+            # We can still estimate HP% from the bar even if max isn't known.
+            hp_method = "bar_low_pct"
+            hp_reason = "pct_only"
         elif hp_current is None and not hp_method:
             hp_method = "none"
             hp_reason = "no_ocr_no_bar"
@@ -1320,11 +1460,11 @@ class GameStateBuilder:
             gamestate.haste_active = None
             gamestate.utamo_active = None
 
-            # These are *presence* flags; defaulting to False avoids UI confusion.
-            # We only set True on a positive detection.
-            gamestate.ring_equipped = False
-            gamestate.amulet_equipped = False
-            gamestate.hungry = False
+            # These are *presence* flags. Use None for "unknown" when we can't
+            # reliably detect (e.g., ROI missing) to avoid false "N" reports.
+            gamestate.ring_equipped = None
+            gamestate.amulet_equipped = None
+            gamestate.hungry = None
 
             # Prefer dedicated ROIs if present.
             if isinstance(rois, dict):
@@ -1356,17 +1496,36 @@ class GameStateBuilder:
                         except Exception:
                             r_high_std = 45.0
 
-                        gamestate.ring_equipped = bool(
-                            is_nonempty_equipment_slot(
-                                frame[ry : ry + rh, rx : rx + rw],
-                                min_std=r_std,
-                                min_mean=r_mean,
-                                min_sat_pct=r_min_sat,
-                                sat_thr=r_sat_thr,
-                                v_thr=r_v_thr,
-                                high_std=r_high_std,
-                            )
+                        detected, _conf = detect_equipment_slot(
+                            frame[ry : ry + rh, rx : rx + rw],
+                            kind="ring",
+                            min_std=r_std,
+                            min_mean=r_mean,
+                            min_sat_pct=r_min_sat,
+                            sat_thr=r_sat_thr,
+                            v_thr=r_v_thr,
+                            high_std=r_high_std,
                         )
+
+                        # Debounce to reduce flicker / rare false positives.
+                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
+                        key = "ring_equipped"
+                        if detected is None:
+                            # Unknown: keep showing True if we were already stable True.
+                            gamestate.ring_equipped = True if bool(self._presence_state.get(key, False)) else None
+                        else:
+                            if bool(detected):
+                                self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
+                                self._presence_off_streak[key] = 0
+                                if int(self._presence_on_streak[key]) >= int(k):
+                                    self._presence_state[key] = True
+                            else:
+                                self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
+                                self._presence_on_streak[key] = 0
+                                if int(self._presence_off_streak[key]) >= int(k):
+                                    self._presence_state[key] = False
+
+                            gamestate.ring_equipped = bool(self._presence_state.get(key, False))
                 if rois.get("amulet_slot") is not None:
                     ax, ay, aw, ah = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["amulet_slot"])
                     if aw >= 8 and ah >= 8:
@@ -1395,17 +1554,34 @@ class GameStateBuilder:
                         except Exception:
                             a_high_std = 45.0
 
-                        gamestate.amulet_equipped = bool(
-                            is_nonempty_equipment_slot(
-                                frame[ay : ay + ah, ax : ax + aw],
-                                min_std=a_std,
-                                min_mean=a_mean,
-                                min_sat_pct=a_min_sat,
-                                sat_thr=a_sat_thr,
-                                v_thr=a_v_thr,
-                                high_std=a_high_std,
-                            )
+                        detected, _conf = detect_equipment_slot(
+                            frame[ay : ay + ah, ax : ax + aw],
+                            kind="amulet",
+                            min_std=a_std,
+                            min_mean=a_mean,
+                            min_sat_pct=a_min_sat,
+                            sat_thr=a_sat_thr,
+                            v_thr=a_v_thr,
+                            high_std=a_high_std,
                         )
+
+                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
+                        key = "amulet_equipped"
+                        if detected is None:
+                            gamestate.amulet_equipped = True if bool(self._presence_state.get(key, False)) else None
+                        else:
+                            if bool(detected):
+                                self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
+                                self._presence_off_streak[key] = 0
+                                if int(self._presence_on_streak[key]) >= int(k):
+                                    self._presence_state[key] = True
+                            else:
+                                self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
+                                self._presence_on_streak[key] = 0
+                                if int(self._presence_off_streak[key]) >= int(k):
+                                    self._presence_state[key] = False
+
+                            gamestate.amulet_equipped = bool(self._presence_state.get(key, False))
 
                 # Hunger icon: prefer tight ROI if available; else fall back to HSV heuristic on states_icons.
                 if rois.get("hungry_icon") is not None:
@@ -1417,6 +1593,14 @@ class GameStateBuilder:
                         except Exception:
                             min_pct = 0.012
                         try:
+                            min_comp = float(os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.004"))
+                        except Exception:
+                            min_comp = 0.004
+                        try:
+                            border_frac = float(os.getenv("HUNGRY_BORDER_FRAC", "0.10"))
+                        except Exception:
+                            border_frac = 0.10
+                        try:
                             low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
                         except Exception:
                             low_h = 8
@@ -1424,14 +1608,31 @@ class GameStateBuilder:
                             high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
                         except Exception:
                             high_h = 35
-                        gamestate.hungry = bool(
+                        detected = bool(
                             is_hungry_hsv(
                                 frame[hy : hy + hh, hx : hx + hw],
                                 min_pct=min_pct,
+                                min_component_pct=min_comp,
+                                strip_border_frac=border_frac,
                                 low_h=low_h,
                                 high_h=high_h,
                             )
                         )
+
+                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
+                        key = "hungry"
+                        if detected:
+                            self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
+                            self._presence_off_streak[key] = 0
+                            if int(self._presence_on_streak[key]) >= int(k):
+                                self._presence_state[key] = True
+                        else:
+                            self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
+                            self._presence_on_streak[key] = 0
+                            if int(self._presence_off_streak[key]) >= int(k):
+                                self._presence_state[key] = False
+
+                        gamestate.hungry = bool(self._presence_state.get(key, False))
                 elif rois.get("states_icons") is not None:
                     sx, sy, sw, sh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["states_icons"])
                     crop = frame[sy : sy + sh, sx : sx + sw]
@@ -1469,11 +1670,50 @@ class GameStateBuilder:
                         gamestate.haste_active = bool(self._status_state.get("haste_active", False))
                         gamestate.utamo_active = bool(self._status_state.get("utamo_active", False))
 
-                    # Tunables via env vars
-                    min_pct = float(os.getenv("HUNGRY_MIN_PCT", "0.012"))
+                    # Tunables via env vars (separate defaults for broader ROI).
+                    try:
+                        min_pct = float(os.getenv("HUNGRY_STATES_MIN_PCT", os.getenv("HUNGRY_MIN_PCT", "0.020")))
+                    except Exception:
+                        min_pct = 0.020
+                    try:
+                        min_comp = float(os.getenv("HUNGRY_STATES_MIN_COMPONENT_PCT", os.getenv("HUNGRY_MIN_COMPONENT_PCT", "0.006")))
+                    except Exception:
+                        min_comp = 0.006
+                    try:
+                        border_frac = float(os.getenv("HUNGRY_BORDER_FRAC", "0.10"))
+                    except Exception:
+                        border_frac = 0.10
                     low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
                     high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
-                    gamestate.hungry = bool(is_hungry_hsv(crop, min_pct=min_pct, low_h=low_h, high_h=high_h))
+                    gamestate.hungry = bool(
+                        is_hungry_hsv(
+                            crop,
+                            min_pct=min_pct,
+                            min_component_pct=min_comp,
+                            strip_border_frac=border_frac,
+                            low_h=low_h,
+                            high_h=high_h,
+                        )
+                    )
+
+                    # Debounce hungry from broad ROI too (reduces random orange pixels).
+                    try:
+                        detected = bool(gamestate.hungry)
+                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
+                        key = "hungry"
+                        if detected:
+                            self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
+                            self._presence_off_streak[key] = 0
+                            if int(self._presence_on_streak[key]) >= int(k):
+                                self._presence_state[key] = True
+                        else:
+                            self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
+                            self._presence_on_streak[key] = 0
+                            if int(self._presence_off_streak[key]) >= int(k):
+                                self._presence_state[key] = False
+                        gamestate.hungry = bool(self._presence_state.get(key, False))
+                    except Exception:
+                        pass
         except Exception:
             pass
 

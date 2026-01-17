@@ -3,6 +3,8 @@ import numpy as np
 import easyocr
 import re
 import os
+import time
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List, Sequence, Mapping, cast
 import json
 from vision.hud_parsing import parse_current_and_max_with_reason
@@ -88,23 +90,196 @@ class OCRProcessor:
 
         return dilated
 
+    def _preprocess_no_dilate(self, image: np.ndarray) -> np.ndarray:
+        """Baseline preprocess but without dilation (can help avoid merging digits)."""
+
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+
+        h, w = thresh.shape[:2]
+        scaled = cv2.resize(thresh, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+
+        try:
+            denoised = cv2.fastNlMeansDenoising(scaled, h=10)
+        except Exception:
+            denoised = cv2.medianBlur(scaled, 3)
+
+        try:
+            blur = cv2.GaussianBlur(denoised, (0, 0), 1.0)
+            sharpened = cv2.addWeighted(denoised, 1.5, blur, -0.5, 0)
+        except Exception:
+            sharpened = denoised
+
+        return sharpened
+
+    def _preprocess_otsu_3x(self, image: np.ndarray) -> np.ndarray:
+        """Alternative preprocess: Otsu threshold + 3x upscale + median blur."""
+
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        try:
+            gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        except Exception:
+            pass
+
+        try:
+            _thr, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        except Exception:
+            th = gray
+
+        try:
+            h, w = th.shape[:2]
+            th = cv2.resize(th, (w * 3, h * 3), interpolation=cv2.INTER_CUBIC)
+        except Exception:
+            pass
+
+        try:
+            th = cv2.medianBlur(th, 3)
+        except Exception:
+            pass
+
+        return th
+
+    def _preprocess_variants(self, image: np.ndarray) -> list[tuple[str, np.ndarray]]:
+        """Return multiple preprocess variants for robust OCR selection."""
+
+        variants: list[tuple[str, np.ndarray]] = []
+        try:
+            if image is not None and getattr(image, "size", 0) != 0:
+                variants.append(("raw", image))
+        except Exception:
+            pass
+        try:
+            variants.append(("pre", self.preprocess_image(image)))
+        except Exception:
+            pass
+        try:
+            variants.append(("no_dilate", self._preprocess_no_dilate(image)))
+        except Exception:
+            pass
+        try:
+            variants.append(("otsu3x", self._preprocess_otsu_3x(image)))
+        except Exception:
+            pass
+        try:
+            variants.append(("hsv_white", self._preprocess_hsv_white_digits(image)))
+        except Exception:
+            pass
+        return variants
+
+    def _preprocess_hsv_white_digits(self, image: np.ndarray) -> np.ndarray:
+        """Preprocess tuned for white digits on dark HUD backgrounds.
+
+        Uses an HSV band for low saturation + high value (near-white), then
+        returns a high-contrast single-channel image suitable for EasyOCR.
+        """
+
+        import cv2
+
+        if image is None or getattr(image, "size", 0) == 0:
+            return image
+
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # White-ish: low saturation, high value.
+        # Keep conservative to avoid pulling in colorful HUD elements.
+        lower = np.array([0, 0, 160], dtype=np.uint8)
+        upper = np.array([180, 60, 255], dtype=np.uint8)
+        mask = cv2.inRange(hsv, lower, upper)
+
+        try:
+            k = np.ones((2, 2), np.uint8)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
+            mask = cv2.dilate(mask, k, iterations=1)
+        except Exception:
+            pass
+
+        # EasyOCR tends to like dark text on light background.
+        img = 255 - mask
+
+        try:
+            h, w = img.shape[:2]
+            img = cv2.resize(img, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+        except Exception:
+            pass
+
+        return img
+
+    def extract_text_best(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> str:
+        """Extract best candidate string (multi-variant, multi-result).
+
+        Keeps API compatible with `extract_text`, but is more robust:
+        - considers multiple OCR candidates (detail=1)
+        - tries multiple preprocess variants
+        """
+
+        if image is None or getattr(image, "size", 0) == 0:
+            return ""
+
+        best_text = ""
+        best_score = -1e9
+
+        for _name, img in self._preprocess_variants(image):
+            try:
+                results = self.reader.readtext(img, detail=1, allowlist=allowlist)
+            except Exception:
+                results = []
+
+            for item in results or []:
+                try:
+                    _bbox, text, conf = item
+                except Exception:
+                    continue
+
+                try:
+                    raw = str(text or "")
+                except Exception:
+                    raw = ""
+
+                # Limpiar: solo números y separadores /|
+                cleaned = re.sub(r"[^0-9/|]", "", raw)
+                cleaned = cleaned.replace("|", "/")
+                cleaned = str(self.corrections.get(cleaned, cleaned))
+                if not cleaned:
+                    continue
+
+                # Heurística simple de scoring.
+                try:
+                    conf_f = float(conf) if conf is not None else 0.0
+                except Exception:
+                    conf_f = 0.0
+
+                digits = len(re.findall(r"\d", cleaned))
+                has_sep = 1 if "/" in cleaned else 0
+                looks_cur_max = 1 if re.search(r"\d{1,7}\s*/\s*\d{1,7}", cleaned) else 0
+
+                score = (conf_f * 10.0) + (looks_cur_max * 10.0) + (has_sep * 2.0) + (digits * 0.1)
+                if score > best_score:
+                    best_score = score
+                    best_text = cleaned
+
+        if self._debug and best_text:
+            try:
+                print(f"OCR best: '{best_text}' score={best_score:.2f}")
+            except Exception:
+                pass
+
+        return best_text
+
     def extract_text(self, image: np.ndarray, *, allowlist: Optional[str] = None) -> str:
         """Extrae texto de una imagen usando OCR"""
         try:
-            processed = self.preprocess_image(image)
-            results = self.reader.readtext(processed, detail=0, allowlist=allowlist)
-
-            if not results:
-                return ""
-
-            text = str(results[0])
-            if self._debug:
-                print(f"OCR encontró: '{text}'")
-
-            # Limpiar texto: solo números y separadores /|
-            cleaned = re.sub(r"[^0-9/|]", "", text)
-            cleaned = cleaned.replace("|", "/")
-            return str(self.corrections.get(cleaned, cleaned))
+            # Backward compatible API: now delegates to best-candidate selection.
+            return self.extract_text_best(image, allowlist=allowlist)
         except Exception:
             return ""
 
@@ -118,28 +293,112 @@ class OCRProcessor:
             return []
 
         out: List[str] = []
-        # Raw OCR
-        try:
-            res = self.reader.readtext(image, detail=0, allowlist=allowlist)
-            for r in res or []:
-                s = str(r).strip()
-                if s:
-                    out.append(s)
-        except Exception:
-            pass
+        seen: set[str] = set()
 
-        # Preprocessed OCR (often improves digits)
-        try:
-            proc = self.preprocess_image(image)
-            res2 = self.reader.readtext(proc, detail=0, allowlist=allowlist)
-            for r in res2 or []:
-                s = str(r).strip()
-                if s:
-                    out.append(s)
-        except Exception:
-            pass
+        for _name, img in self._preprocess_variants(image):
+            try:
+                res = self.reader.readtext(img, detail=0, allowlist=allowlist)
+            except Exception:
+                res = []
+            for r in res or []:
+                try:
+                    s = str(r).strip()
+                except Exception:
+                    continue
+                if not s:
+                    continue
+                if s in seen:
+                    continue
+                seen.add(s)
+                out.append(s)
 
         return out
+
+    def _maybe_dump_hpmp_failure(
+        self,
+        *,
+        crops: dict[str, np.ndarray],
+        meta: dict[str, object],
+    ) -> None:
+        """Optional: dump HP/MP crops + preprocess variants when OCR fails."""
+
+        # Strict gating: only dump when OCR_DEBUG=1.
+        if not (os.getenv("OCR_DEBUG", "").strip().lower() in {"1", "true", "yes"}):
+            return
+        if not (os.getenv("HPMP_DUMP_ON_FAIL", "").strip().lower() in {"1", "true", "yes"}):
+            return
+
+        try:
+            keep = int(float(os.getenv("HPMP_DUMP_N", "10").strip() or "10"))
+        except Exception:
+            keep = 10
+        keep = max(1, int(keep))
+
+        out_dir = Path((os.getenv("HPMP_DUMP_DIR", "logs/hpmp_dump") or "logs/hpmp_dump").strip())
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return
+
+        ts = float(time.time())
+        base = out_dir / f"{ts:.6f}"
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return
+
+        # Write JSON meta
+        try:
+            (base / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, default=str, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+        # Write images (raw + variants)
+        try:
+            import cv2
+
+            for name, crop in (crops or {}).items():
+                if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
+                    continue
+                try:
+                    cv2.imwrite(str(base / f"{name}_raw.png"), crop)
+                except Exception:
+                    pass
+
+                try:
+                    for vname, vimg in self._preprocess_variants(crop):
+                        if vimg is None or not isinstance(vimg, np.ndarray) or vimg.size == 0:
+                            continue
+                        try:
+                            cv2.imwrite(str(base / f"{name}_{vname}.png"), vimg)
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Prune old dumps (keep latest N)
+        try:
+            dirs = [p for p in out_dir.iterdir() if p.is_dir()]
+            dirs.sort(key=lambda p: p.name)
+            extra = max(0, len(dirs) - keep)
+            for p in dirs[:extra]:
+                try:
+                    for child in p.glob("**/*"):
+                        try:
+                            if child.is_file():
+                                child.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    try:
+                        p.rmdir()
+                    except Exception:
+                        pass
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     def _set_last_ocr_meta(self, *, kind: str, source: str, reason: str) -> None:
         """Store per-tick OCR observability for HP/MP."""
@@ -923,9 +1182,23 @@ class OCRProcessor:
             def _pick_best_cur_max(texts: list[str], label: str) -> tuple[Optional[int], Optional[int], str]:
                 best = None
                 best_score = -1
+                try:
+                    max_value = int(float(os.getenv("HPMP_MAX_OCR", "100000").strip() or "100000"))
+                except Exception:
+                    max_value = 100000
+                max_value = int(max(1000, max_value))
                 for t in texts:
                     cur, mx, reason = self._parse_current_and_max_with_reason(str(t), label)
                     if mx is None:
+                        continue
+                    try:
+                        mx_i = int(mx)
+                        cur_i = int(cur) if cur is not None else None
+                    except Exception:
+                        continue
+                    if mx_i <= 0 or mx_i > max_value:
+                        continue
+                    if cur_i is not None and (cur_i < 0 or cur_i > mx_i):
                         continue
                     try:
                         score = int(mx)
@@ -1021,20 +1294,58 @@ class OCRProcessor:
                             self._set_last_ocr_meta(kind="mp", source="rf_box", reason="ocr_empty")
 
             # Fallback: OCR fijo por ROIs
-            # (0) Fallback robusto: OCR sobre el strip superior completo.
-            # Usamos detail=1 para obtener bbox y separar izquierda (HP) / derecha (MP).
-            if 'hpmp_top_strip' in rois and (hp_current is None or mp_current is None):
+            # (0) Prioridad: top strip (HP/MP juntos). Primero intentamos split
+            # 0..60% (HP) / 60..100% (MP) para evitar confusiones con stamina/soul.
+            if 'hpmp_top_strip' in rois:
                 strip_roi = normalize_to_px(rois['hpmp_top_strip'])
                 ok, reason = _valid_roi(strip_roi)
                 if not ok:
-                    if hp_current is None:
-                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason=f"invalid_roi:{reason}")
-                    if mp_current is None:
-                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason=f"invalid_roi:{reason}")
+                    self._set_last_ocr_meta(kind="hp", source="top_strip", reason=f"invalid_roi:{reason}")
+                    self._set_last_ocr_meta(kind="mp", source="top_strip", reason=f"invalid_roi:{reason}")
                 else:
                     strip_crop = frame[strip_roi[1]:strip_roi[1]+strip_roi[3], strip_roi[0]:strip_roi[0]+strip_roi[2]]
                     if strip_crop.size > 0:
                         try:
+                            # Split-first strategy (most robust).
+                            try:
+                                w0 = int(strip_crop.shape[1])
+                                sx = int(max(1, round(float(w0) * 0.60)))
+                                left_crop = strip_crop[:, :sx]
+                                right_crop = strip_crop[:, sx:]
+                            except Exception:
+                                left_crop = strip_crop
+                                right_crop = strip_crop
+
+                            if left_crop is not None and getattr(left_crop, "size", 0) != 0:
+                                hp_texts = self._readtext_strings(left_crop, allowlist="0123456789/|")
+                                hp_current, hp_max, hp_reason = _pick_best_cur_max(hp_texts or [], "HP")
+                                if hp_current is None and hp_max is None:
+                                    v, why = _pick_unique_single_number(hp_texts or [], "HP")
+                                    if v is not None:
+                                        hp_current, hp_max = int(v), None
+                                        hp_reason = why
+                                if hp_current is not None:
+                                    self._set_last_ocr_meta(kind="hp", source="top_strip_split", reason=("ok" if hp_max is not None else (hp_reason or "single_number")))
+                                else:
+                                    self._set_last_ocr_meta(kind="hp", source="top_strip_split", reason=(hp_reason or "parse_fail"))
+
+                            if right_crop is not None and getattr(right_crop, "size", 0) != 0:
+                                mp_texts = self._readtext_strings(right_crop, allowlist="0123456789/|")
+                                mp_current, mp_max, mp_reason = _pick_best_cur_max(mp_texts or [], "MP")
+                                if mp_current is None and mp_max is None:
+                                    v, why = _pick_unique_single_number(mp_texts or [], "MP")
+                                    if v is not None:
+                                        mp_current, mp_max = int(v), None
+                                        mp_reason = why
+                                if mp_current is not None:
+                                    self._set_last_ocr_meta(kind="mp", source="top_strip_split", reason=("ok" if mp_max is not None else (mp_reason or "single_number")))
+                                else:
+                                    self._set_last_ocr_meta(kind="mp", source="top_strip_split", reason=(mp_reason or "parse_fail"))
+
+                            # If split already worked for both, skip the heavier bbox-based parsing.
+                            if (hp_current is not None or hp_max is not None) and (mp_current is not None or mp_max is not None):
+                                raise StopIteration()
+
                             # When the user adds/removes HUD bars, the strip can contain extra numbers
                             # (stamina, soul, etc). To avoid mis-assigning HP/MP, estimate where the
                             # red/blue bars are inside the strip and choose OCR candidates closest to them.
@@ -1185,6 +1496,9 @@ class OCRProcessor:
                                     self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_candidates")
                                 if mp_current is None:
                                     self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_candidates")
+                        except StopIteration:
+                            # Split succeeded; no need to fall back.
+                            pass
                         except Exception as e:
                             print(f"Error OCR strip superior: {e}")
 
@@ -1279,6 +1593,51 @@ class OCRProcessor:
 
         except Exception as e:
             print(f"Error extrayendo HP/MP: {e}")
+
+        # Optional diagnostics: dump evidence when we couldn't recover a stable HP/MP.
+        try:
+            incomplete = bool(
+                (hp_current is None) or (mp_current is None) or (hp_current is not None and hp_max is None) or (mp_current is not None and mp_max is None)
+            )
+        except Exception:
+            incomplete = False
+
+        if incomplete:
+            try:
+                crops: dict[str, np.ndarray] = {}
+                try:
+                    if 'hpmp_top_strip' in rois:
+                        x, y, w, h = normalize_to_px(rois['hpmp_top_strip'])
+                        crop = frame[y:y+h, x:x+w]
+                        if crop is not None and getattr(crop, 'size', 0) != 0:
+                            crops['hpmp_top_strip'] = crop
+                except Exception:
+                    pass
+                try:
+                    if 'hp_top_ocr' in rois:
+                        x, y, w, h = normalize_to_px(rois['hp_top_ocr'])
+                        crop = frame[y:y+h, x:x+w]
+                        if crop is not None and getattr(crop, 'size', 0) != 0:
+                            crops['hp_top_ocr'] = crop
+                except Exception:
+                    pass
+                try:
+                    if 'mp_top_ocr' in rois:
+                        x, y, w, h = normalize_to_px(rois['mp_top_ocr'])
+                        crop = frame[y:y+h, x:x+w]
+                        if crop is not None and getattr(crop, 'size', 0) != 0:
+                            crops['mp_top_ocr'] = crop
+                except Exception:
+                    pass
+
+                meta = {
+                    'ts': float(time.time()),
+                    'hp': {'cur': hp_current, 'max': hp_max, 'source': self.last_hp_ocr_source, 'reason': self.last_hp_ocr_reason},
+                    'mp': {'cur': mp_current, 'max': mp_max, 'source': self.last_mp_ocr_source, 'reason': self.last_mp_ocr_reason},
+                }
+                self._maybe_dump_hpmp_failure(crops=crops, meta=meta)
+            except Exception:
+                pass
 
         return hp_current, hp_max, mp_current, mp_max
 

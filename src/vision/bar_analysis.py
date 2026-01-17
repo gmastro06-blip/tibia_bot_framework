@@ -29,6 +29,21 @@ def estimate_bar_fill_ratio(frame_bgr: np.ndarray, roi: Tuple[int, int, int, int
     if crop.size == 0:
         return None
 
+    # Bars often have a colored border or glow. To reduce false "full bar"
+    # detections from borders, analyze a central horizontal band.
+    try:
+        frac = float(os.getenv("BAR_INNER_BAND_FRAC", "0.25").strip() or "0.25")
+    except Exception:
+        frac = 0.25
+    frac = float(max(0.0, min(0.45, frac)))
+    try:
+        if crop.ndim == 3 and crop.shape[0] >= 6:
+            pad = int(round(float(crop.shape[0]) * frac))
+            if (crop.shape[0] - 2 * pad) >= 2:
+                crop = crop[pad : crop.shape[0] - pad, :, :]
+    except Exception:
+        pass
+
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
 
     # OpenCV stubs are overly strict about argument types (Mat vs ndarray).
@@ -79,6 +94,20 @@ def estimate_bar_fill_ratio_with_reason(
     crop = frame_bgr[y : y + h, x : x + w]
     if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
         return None, "empty_crop"
+
+    # Same as `estimate_bar_fill_ratio`: ignore top/bottom border band.
+    try:
+        frac = float(os.getenv("BAR_INNER_BAND_FRAC", "0.25").strip() or "0.25")
+    except Exception:
+        frac = 0.25
+    frac = float(max(0.0, min(0.45, frac)))
+    try:
+        if crop.ndim == 3 and crop.shape[0] >= 6:
+            pad = int(round(float(crop.shape[0]) * frac))
+            if (crop.shape[0] - 2 * pad) >= 2:
+                crop = crop[pad : crop.shape[0] - pad, :, :]
+    except Exception:
+        pass
 
     try:
         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)

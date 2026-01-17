@@ -186,6 +186,7 @@ def default_replay_roi_names() -> list[str]:
         "hp_low_bar",
         "mp_low_bar",
         "states_icons",
+        "hungry_icon",
         "equipment_slots",
         "skills_panel",
         "right_hud_panel",

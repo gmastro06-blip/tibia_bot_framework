@@ -23,3 +23,27 @@ def test_is_hungry_hsv_runs_without_cv2() -> None:
     img = np.zeros((10, 10, 3), dtype=np.uint8)
     out = is_hungry_hsv(img)
     assert out in (True, False)
+
+
+def test_is_hungry_hsv_detects_orange_blob() -> None:
+    # Synthetic positive: a centered orange/yellow blob should be detected.
+    # If OpenCV isn't installed in this environment, skip (function returns False).
+    try:
+        import cv2  # noqa: F401
+    except Exception as e:
+        import pytest
+
+        pytest.skip(f"cv2 no disponible: {e}")
+
+    from src.vision.presence import is_hungry_hsv
+
+    img = np.zeros((40, 40, 3), dtype=np.uint8)
+    # BGR orange (common): should land in the default HSV band.
+    img[10:30, 10:30] = (0, 165, 255)
+
+    assert is_hungry_hsv(img) is True
+
+    # Synthetic negative: pure blue should not match the orange/yellow band.
+    img2 = np.zeros((40, 40, 3), dtype=np.uint8)
+    img2[10:30, 10:30] = (255, 0, 0)
+    assert is_hungry_hsv(img2) is False

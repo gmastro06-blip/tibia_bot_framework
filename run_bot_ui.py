@@ -28,6 +28,75 @@ def _add_src_to_syspath() -> None:
         sys.path.insert(0, str(src_dir))
 
 
+def format_vital_text(cur: Any, mx: Any, pct: Any) -> str:
+    """Format vitals consistently for UI (HP/MP/CAP).
+
+    Rules:
+    - If cur/max exists -> "cur/max" and append "(pct%)" when available.
+    - If only cur exists -> show cur (optionally with "(pct%)").
+    - If only pct exists -> show "pct%".
+    - "?" only when no signal exists.
+    """
+
+    def _safe_int(v: Any) -> int | None:
+        try:
+            if v is None or isinstance(v, bool):
+                return None
+            if isinstance(v, int):
+                return int(v)
+            if isinstance(v, float):
+                if v != v:  # NaN
+                    return None
+                return int(v)
+            s = str(v).strip()
+            if not s:
+                return None
+            return int(float(s))
+        except Exception:
+            return None
+
+    def _safe_pct(v: Any) -> float | None:
+        try:
+            if v is None or isinstance(v, bool):
+                return None
+            s = str(v).strip().replace("%", "")
+            if not s:
+                return None
+            f = float(s)
+            if f < 0.0:
+                f = 0.0
+            if f > 100.0:
+                f = 100.0
+            return float(f)
+        except Exception:
+            return None
+
+    c = _safe_int(cur)
+    m = _safe_int(mx)
+    p = _safe_pct(pct)
+
+    if c is not None and m is not None:
+        base = f"{c}/{m}"
+        if p is not None:
+            return f"{base} ({p:.1f}%)"
+        try:
+            if int(m) > 0:
+                return f"{base} ({(float(c) / float(m)) * 100.0:.1f}%)"
+        except Exception:
+            pass
+        return base
+
+    if c is not None and m is None:
+        base = f"{c}"
+        if p is not None:
+            return f"{base} ({p:.1f}%)"
+        return base
+
+    if p is not None:
+        return f"{p:.1f}%"
+    return "?"
+
+
 class BotUI:
     _measure_widgets: dict[str, object]
 
@@ -325,6 +394,7 @@ class BotUI:
         from main import run_bot  # import dentro para respetar sys.path
         from runtime_config import RuntimeConfig
         from route_editor.models import SetupConfig, WaypointStep
+        from route_editor.macro_recorder import MacroRecorder
         from route_editor.setup_loader import load_setup, save_setup
         from route_editor.waypoints import (
             expand_move_macros,
@@ -840,6 +910,12 @@ class BotUI:
         self.item_name_var = tk.StringVar(value="")
         self.item_hotkey_var = tk.StringVar(value="")
         self.item_use_var = tk.StringVar(value="self")
+
+        # Macro Recorder (Route / Cavebot tab)
+        self._macro_recorder = MacroRecorder()
+        self.macro_rec_nodes_var = tk.BooleanVar(value=True)
+        self.macro_rec_committed_only_var = tk.BooleanVar(value=True)
+        self.macro_rec_status_var = tk.StringVar(value="REC: OFF")
 
         # System tray (pystray)
         self._tray_icon = None
@@ -3554,16 +3630,71 @@ class BotUI:
                 tel = self._config.telemetry_snapshot()
                 health = self._config.health_snapshot()
 
+                # Macro Recorder tick (best-effort; never break UI).
+                try:
+                    mr = getattr(self, "_macro_recorder", None)
+                    if mr is not None and bool(getattr(mr, "active", False)):
+                        try:
+                            mr.record_nodes = bool(self.macro_rec_nodes_var.get())
+                        except Exception:
+                            mr.record_nodes = True
+                        try:
+                            mr.committed_only = bool(self.macro_rec_committed_only_var.get())
+                        except Exception:
+                            mr.committed_only = True
+
+                        pos = None
+                        try:
+                            x = getattr(tel, "pos_x", None)
+                            y = getattr(tel, "pos_y", None)
+                            z = getattr(tel, "pos_z", None)
+                            if x is not None and y is not None and z is not None:
+                                pos = (x, y, z)
+                        except Exception:
+                            pos = None
+
+                        actions = None
+                        try:
+                            actions = getattr(tel, "action_requests", None)
+                        except Exception:
+                            actions = None
+
+                        mr.on_tick(time.time(), pos, actions)
+
+                        try:
+                            n_events = len(getattr(mr, "events", []) or [])
+                            last = str(getattr(mr, "last_event_summary", "-") or "-")
+                            if len(last) > 60:
+                                last = last[:57] + "..."
+                            self.macro_rec_status_var.set(f"REC: ON | events={n_events} | last={last}")
+                        except Exception:
+                            self.macro_rec_status_var.set("REC: ON")
+                    else:
+                        # Keep it stable when OFF.
+                        self.macro_rec_status_var.set("REC: OFF")
+                except Exception:
+                    pass
+
                 # Injection/steps status (assistant-only). Fail-safe if core doesn't provide it.
                 try:
                     st = getattr(self._config, "assistant_status_snapshot", None)
                     if callable(st):
                         ss = st()
-                        i = getattr(ss, "step_index", None)
-                        n = getattr(ss, "total_steps", None)
-                        if i is not None and n is not None and int(n) > 0:
+                        step_index_raw: Any = getattr(ss, "step_index", None)
+                        total_steps_raw: Any = getattr(ss, "total_steps", None)
+
+                        try:
+                            i = int(step_index_raw) if step_index_raw is not None else None
+                        except Exception:
+                            i = None
+                        try:
+                            n_steps = int(total_steps_raw) if total_steps_raw is not None else None
+                        except Exception:
+                            n_steps = None
+
+                        if i is not None and n_steps is not None and int(n_steps) > 0:
                             # `step_index` is 0-based in core; display 1-based.
-                            self.injection_step_var.set(f"{int(i) + 1}/{int(n)}")
+                            self.injection_step_var.set(f"{int(i) + 1}/{int(n_steps)}")
                         else:
                             self.injection_step_var.set("-")
                         self.injection_label_var.set(str(getattr(ss, "current_label", "") or "-") or "-")
@@ -3625,41 +3756,25 @@ class BotUI:
                     except Exception:
                         return None
 
-                def _fmt_vital(cur, mx, pct) -> str:
-                    c = _safe_int(cur)
-                    m = _safe_int(mx)
-                    p = _safe_pct(pct)
-
-                    # If we have absolute numbers, show them even if pct is missing.
-                    if c is not None and m is not None:
-                        base = f"{c}/{m}"
-                        if p is not None:
-                            return f"{base} ({p:.1f}%)"
-                        # If pct missing but we can compute safely, do it.
-                        try:
-                            if m > 0:
-                                return f"{base} ({(float(c) / float(m)) * 100.0:.1f}%)"
-                        except Exception:
-                            pass
-                        return base
-
-                    # Otherwise fall back to pct only.
-                    if p is not None:
-                        return f"{p:.1f}%"
-                    return "?"
-
                 # Defaults always set (never leave stale values on exceptions).
                 try:
-                    hp_str = _fmt_vital(getattr(tel, "hp_current", None), getattr(tel, "hp_max", None), getattr(tel, "hp_pct", None))
+                    hp_str = format_vital_text(
+                        getattr(tel, "hp_current", None),
+                        getattr(tel, "hp_max", None),
+                        getattr(tel, "hp_pct", None),
+                    )
                 except Exception:
                     hp_str = "?"
                 try:
-                    mp_str = _fmt_vital(getattr(tel, "mp_current", None), getattr(tel, "mp_max", None), getattr(tel, "mp_pct", None))
+                    mp_str = format_vital_text(
+                        getattr(tel, "mp_current", None),
+                        getattr(tel, "mp_max", None),
+                        getattr(tel, "mp_pct", None),
+                    )
                 except Exception:
                     mp_str = "?"
                 try:
-                    cap_v = _safe_int(getattr(tel, "cap_current", None))
-                    cap_str = "?" if cap_v is None else f"{cap_v}"
+                    cap_str = format_vital_text(getattr(tel, "cap_current", None), None, None)
                 except Exception:
                     cap_str = "?"
 
@@ -5104,6 +5219,18 @@ class BotUI:
         self._make_btn(route_in, "Save", self._route_save, width=10).grid(row=0, column=4, padx=(0, 4))
         self._make_btn(route_in, "Validate", self._route_validate, width=10).grid(row=0, column=5)
 
+        # --- Macro Recorder (record nodes + committed actions) ---
+        rec_box, rec_in = self._classic_groupbox(route_in, title="Grabación", padx=8, pady=6)
+        rec_box.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(8, 0))
+        rec_in.grid_columnconfigure(6, weight=1)
+
+        self._make_btn(rec_in, "Start", self._macro_recorder_start, width=10, small=True).grid(row=0, column=0, padx=(0, 6))
+        self._make_btn(rec_in, "Stop+Save", self._macro_recorder_stop_save, width=12, small=True).grid(row=0, column=1, padx=(0, 12))
+        self._make_btn(rec_in, "Open folder", self._macro_recorder_open_folder, width=12, small=True).grid(row=0, column=2, padx=(0, 12))
+        tk.Checkbutton(rec_in, text="Nodes", variable=self.macro_rec_nodes_var).grid(row=0, column=3, sticky="w", padx=(0, 8))
+        tk.Checkbutton(rec_in, text="Committed only", variable=self.macro_rec_committed_only_var).grid(row=0, column=4, sticky="w", padx=(0, 8))
+        tk.Label(rec_in, textvariable=self.macro_rec_status_var, fg="gray25", anchor="w").grid(row=0, column=5, columnspan=2, sticky="ew")
+
         # --- Steps editor (left) ---
         steps_box, steps_in = self._classic_groupbox(main, title="Steps")
         steps_box.grid(row=1, column=0, sticky="nsew")
@@ -5263,6 +5390,189 @@ class BotUI:
 
         self._route_refresh_tree()
 
+    def _macro_recorder_hotkey_map(self) -> dict[str, dict[str, str]]:
+        """Build hotkey -> {action_name,use} map from setup_*.json (best-effort)."""
+
+        out: dict[str, dict[str, str]] = {}
+        cfg = getattr(self, "route_setup_cfg", None)
+        if cfg is None:
+            return out
+        try:
+            items = getattr(cfg, "items", None)
+            if isinstance(items, dict):
+                for item_name, meta in items.items():
+                    if not isinstance(meta, dict):
+                        continue
+                    hk = str(meta.get("hotkey", "") or "").strip().upper()
+                    use = str(meta.get("use", "") or "").strip()
+                    if hk:
+                        out[hk] = {"action_name": str(item_name or ""), "use": use}
+        except Exception:
+            return out
+        return out
+
+    def _macro_recorder_start(self) -> None:
+        tk = self._tk
+        _ = tk  # keep symmetry with rest of file
+
+        route_dir = self.route_path_var.get().strip()
+        if not route_dir:
+            # Default: create a new recording dir.
+            try:
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+            except Exception:
+                stamp = str(int(time.time()))
+            p = self._repo_root / "routes" / "recordings" / stamp
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            route_dir = str(p)
+            self.route_path_var.set(route_dir)
+
+        try:
+            self._macro_recorder.record_nodes = bool(self.macro_rec_nodes_var.get())
+        except Exception:
+            self._macro_recorder.record_nodes = True
+        try:
+            self._macro_recorder.committed_only = bool(self.macro_rec_committed_only_var.get())
+        except Exception:
+            self._macro_recorder.committed_only = True
+
+        try:
+            self._macro_recorder.set_hotkey_map(self._macro_recorder_hotkey_map())
+        except Exception:
+            pass
+
+        try:
+            self._macro_recorder.start(route_dir=route_dir, ts=time.time())
+            out_path = Path(route_dir) / "recording.json"
+            self.route_status_var.set(f"REC started -> {out_path}")
+            self.macro_rec_status_var.set("REC: ON")
+        except Exception as e:
+            self.route_status_var.set(f"REC error: {e}")
+
+    def _macro_recorder_stop_save(self) -> None:
+        mr = getattr(self, "_macro_recorder", None)
+        if mr is None or not bool(getattr(mr, "active", False)):
+            return
+
+        # Refresh enrichment map right before save (in case setup was edited).
+        try:
+            mr.set_hotkey_map(self._macro_recorder_hotkey_map())
+        except Exception:
+            pass
+
+        route_dir = self.route_path_var.get().strip() or str(getattr(mr, "route_dir", "") or "")
+        if not route_dir:
+            self.route_status_var.set("REC error: no route_dir")
+            return
+
+        out_path = Path(route_dir) / "recording.json"
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        try:
+            payload = mr.to_json_dict()
+            out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            mr.stop()
+            # Convert recording -> route_steps + waypoints.in (best-effort).
+            try:
+                from route_editor.models import WaypointStep
+
+                steps: list[WaypointStep] = []
+                events = payload.get("events", []) if isinstance(payload, dict) else []
+                if isinstance(events, list):
+                    for ev in events:
+                        if not isinstance(ev, dict):
+                            continue
+                        typ = str(ev.get("type", "") or "").strip().lower()
+                        if typ == "node":
+                            try:
+                                x = int(ev.get("x"))
+                                y = int(ev.get("y"))
+                                z = int(ev.get("z"))
+                                steps.append(WaypointStep(kind="node", x=x, y=y, z=z))
+                            except Exception:
+                                continue
+                        elif typ == "action":
+                            try:
+                                name = str(ev.get("action_name", "") or "").strip()
+                                if not name:
+                                    k = str(ev.get("kind", "") or "").strip()
+                                    v = str(ev.get("value", "") or "").strip()
+                                    name = f"{k}:{v}".strip(":")
+                                if name:
+                                    steps.append(WaypointStep(kind="action", name=name))
+                            except Exception:
+                                continue
+
+                if not steps:
+                    self.route_status_var.set(f"REC saved -> {out_path} | Ruta vacía")
+                else:
+                    self.route_steps = steps
+                    self.route_path_var.set(route_dir)
+                    self._route_refresh_tree()
+
+                    wp_path = Path(route_dir) / "waypoints.in"
+                    expanded, errs = self._expand_move_macros(self.route_steps)
+                    if errs:
+                        self.route_status_var.set(f"REC saved -> {out_path} | Errores MOVE: {errs[0]}")
+                    else:
+                        try:
+                            wp_path.parent.mkdir(parents=True, exist_ok=True)
+                        except Exception:
+                            pass
+                        wp_path.write_text(self._serialize_waypoints(expanded), encoding="utf-8")
+                        self.route_status_var.set(f"REC saved -> {out_path} | steps={len(self.route_steps)} | wrote {wp_path}")
+            except Exception as e:
+                self.route_status_var.set(f"REC saved -> {out_path} | convert error: {e}")
+            self.macro_rec_status_var.set("REC: OFF")
+        except Exception as e:
+            self.route_status_var.set(f"REC save error: {e}")
+
+    def _macro_recorder_open_folder(self) -> None:
+        """Open the recording output folder in Explorer (best-effort)."""
+
+        mr = getattr(self, "_macro_recorder", None)
+        route_dir = (self.route_path_var.get().strip() if hasattr(self, "route_path_var") else "")
+        if not route_dir and mr is not None:
+            route_dir = str(getattr(mr, "route_dir", "") or "")
+        if not route_dir:
+            return
+
+        p = Path(route_dir)
+        try:
+            if p.is_file():
+                p = p.parent
+        except Exception:
+            p = Path(route_dir)
+
+        # Prefer selecting recording.json when present.
+        rec_file = p / "recording.json"
+        try:
+            if rec_file.exists():
+                try:
+                    subprocess.Popen(["explorer", "/select,", str(rec_file)])
+                    return
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            os.startfile(str(p))  # type: ignore[attr-defined]
+            return
+        except Exception:
+            pass
+
+        try:
+            subprocess.Popen(["explorer", str(p)])
+        except Exception:
+            pass
+
     def _route_new(self) -> None:
         self.route_steps = []
         self.route_path_var.set("")
@@ -5282,6 +5592,20 @@ class BotUI:
         self._route_load_waypoints(p)
 
     def _route_save(self) -> None:
+        # Ensure the currently edited form fields are applied before saving.
+        try:
+            self._route_apply_form()
+        except Exception:
+            pass
+
+        # Validate non-empty route early.
+        try:
+            if not self.route_steps:
+                self.route_status_var.set("Ruta vacía")
+                return
+        except Exception:
+            pass
+
         route_dir = self.route_path_var.get().strip()
         if not route_dir:
             try:

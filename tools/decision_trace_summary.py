@@ -32,6 +32,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Summarize DecisionTrace JSONL (blocked reasons, state counts).")
     ap.add_argument("path", nargs="?", default="logs/decision_trace.jsonl", help="Path to decision_trace.jsonl")
     ap.add_argument("--top", type=int, default=15, help="Show top N reasons")
+    ap.add_argument(
+        "--stats",
+        action="store_true",
+        help="Print JSONL parsing stats (malformed/non-dict lines)",
+    )
     ap.add_argument("--only-sent", action="store_true", help="Only count events where sent_to_driver is true")
     ap.add_argument("--only-not-sent", action="store_true", help="Only count events where sent_to_driver is false")
     ap.add_argument("--state", action="append", default=None, help="Filter by injection.state (repeatable)")
@@ -70,6 +75,11 @@ def main() -> int:
     # Optional time window filter. To keep streaming behavior, we may do a
     # cheap pre-scan to find the most recent ts.
     since_ts: float | None = None
+
+    # Parse robustness stats (useful when a writer crashes and leaves partial lines).
+    lines_total = 0
+    lines_bad_json = 0
+    lines_non_dict = 0
     try:
         if float(args.since_ts or 0.0) > 0.0:
             since_ts = float(args.since_ts)
@@ -84,8 +94,19 @@ def main() -> int:
         if win_s > 0.0:
             last_ts_scan: float | None = None
             for line in _iter_lines(p):
+                lines_total += 1
                 ev = _safe_load_json(line)
                 if ev is None:
+                    # Best-effort: distinguish "bad json" vs "non-dict".
+                    s = (line or "").strip()
+                    if not s:
+                        continue
+                    try:
+                        obj = json.loads(s)
+                        if not isinstance(obj, dict):
+                            lines_non_dict += 1
+                    except Exception:
+                        lines_bad_json += 1
                     continue
                 raw_ts = ev.get("ts")
                 try:
@@ -137,8 +158,18 @@ def main() -> int:
     last_ts: float | None = None
 
     for line in _iter_lines(p):
+        lines_total += 1
         ev = _safe_load_json(line)
         if ev is None:
+            s = (line or "").strip()
+            if not s:
+                continue
+            try:
+                obj = json.loads(s)
+                if not isinstance(obj, dict):
+                    lines_non_dict += 1
+            except Exception:
+                lines_bad_json += 1
             continue
         n_total += 1
 
@@ -246,6 +277,8 @@ def main() -> int:
     print(f"file={p}")
     if since_ts is not None:
         print(f"since_ts={since_ts:.3f}")
+    if bool(getattr(args, "stats", False)):
+        print(f"lines_total={lines_total} bad_json={lines_bad_json} non_dict={lines_non_dict}")
     print(f"events={n}")
     if n:
         sent_rate = (float(sent) / float(n)) * 100.0
