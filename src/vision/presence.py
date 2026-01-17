@@ -96,7 +96,10 @@ def _saturation_pct(
         vmax = np.maximum(np.maximum(r, g), b)
         vmin = np.minimum(np.minimum(r, g), b)
         # Avoid divide-by-zero for dark pixels.
-        s = np.where(vmax > 1.0, (vmax - vmin) / vmax, 0.0) * 255.0
+        # IMPORTANT: np.where evaluates both branches, so use np.divide(where=...).
+        s = np.zeros_like(vmax, dtype=np.float32)
+        np.divide((vmax - vmin), vmax, out=s, where=vmax > 1.0)
+        s *= 255.0
         v_ok = vmax >= float(v_thr)
         s_ok = s >= float(s_thr)
         ok = v_ok & s_ok

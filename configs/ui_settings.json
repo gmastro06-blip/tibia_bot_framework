@@ -19,7 +19,9 @@
     "action": "",
     "hp_action": "F2",
     "mp_action": "",
-    "cooldown_s": 1.0
+    "cooldown_s": 1.0,
+    "spells_enabled": false,
+    "spell_hotkeys": {}
   },
   "cavebot": {
     "enabled": true,
@@ -41,7 +43,33 @@
     "recovery_enabled": true,
     "recovery_idle_s": 0.0,
     "recovery_max_attempts": 4,
-    "recovery_stop_on_fail": false
+    "recovery_stop_on_fail": false,
+    "alerts_matrix": [
+      {
+        "condition": "Low HP",
+        "beep": true,
+        "stop": false,
+        "note": ""
+      },
+      {
+        "condition": "Low MP",
+        "beep": false,
+        "stop": false,
+        "note": ""
+      },
+      {
+        "condition": "Paralyzed",
+        "beep": true,
+        "stop": false,
+        "note": ""
+      },
+      {
+        "condition": "Stuck",
+        "beep": true,
+        "stop": false,
+        "note": ""
+      }
+    ]
   },
   "simulation": {
     "enabled": true,
@@ -96,5 +124,61 @@
   "stats": {
     "hp_max": "",
     "mp_max": ""
+  },
+  "healing_table": [
+    {
+      "name": "Spell Hi",
+      "health_pct": 70,
+      "mana_pct": "",
+      "type": "spell",
+      "action": "",
+      "delay_ms": 1000
+    },
+    {
+      "name": "Spell Lo",
+      "health_pct": "",
+      "mana_pct": "",
+      "type": "spell",
+      "action": "",
+      "delay_ms": 0
+    },
+    {
+      "name": "UH Rune",
+      "health_pct": "",
+      "mana_pct": "",
+      "type": "rune",
+      "action": "",
+      "delay_ms": 0
+    },
+    {
+      "name": "HP Potion",
+      "health_pct": "",
+      "mana_pct": "",
+      "type": "potion",
+      "action": "",
+      "delay_ms": 0
+    },
+    {
+      "name": "MP Potion",
+      "health_pct": "",
+      "mana_pct": 30,
+      "type": "potion",
+      "action": "",
+      "delay_ms": 1000
+    }
+  ],
+  "autotarget": {
+    "enabled": false,
+    "follow_on_enable": true,
+    "follow_distance_tiles": 1,
+    "retarget_if_lost_ms": 800,
+    "whitelist": [],
+    "blacklist": []
+  },
+  "targeting": {
+    "profile_name": "default",
+    "rules": {
+      "monsters": []
+    }
   }
 }

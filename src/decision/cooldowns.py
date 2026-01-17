@@ -45,6 +45,11 @@ class CooldownManager:
         self._last_by_key: dict[str, float] = {}
         self._last_by_group: dict[str, float] = {}
 
+        # Diagnostics: allow disabling cooldown enforcement via env.
+        # This is useful for dry-run runs where we want DecisionTrace to
+        # reflect planner output rather than rate-limits.
+        self.enabled = (self._env("COOLDOWNS_ENABLED") or "1").strip().lower() not in {"0", "false", "no"}
+
         self.move_min_interval_s = self._env_float("MOVE_MIN_INTERVAL_S", 0.15, lo=0.0, hi=2.0)
         self.hotkey_min_interval_s = self._env_float("HOTKEY_MIN_INTERVAL_S", 0.12, lo=0.0, hi=2.0)
 
@@ -186,6 +191,8 @@ class CooldownManager:
         return float(cd)
 
     def decision(self, kind: str, value: str, *, now: float | None = None) -> CooldownDecision:
+        if not bool(getattr(self, "enabled", True)):
+            return CooldownDecision(ready=True, remaining_s=0.0, reason="disabled")
         t = _now() if now is None else float(now)
         k = _norm_text(kind)
         v = str(value or "")
@@ -214,6 +221,8 @@ class CooldownManager:
 
     def is_ready(self, kind: str, value: str, *, now: float | None = None) -> bool:
         try:
+            if not bool(getattr(self, "enabled", True)):
+                return True
             return bool(self.decision(kind, value, now=now).ready)
         except Exception:
             return True

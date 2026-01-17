@@ -261,6 +261,15 @@ def update_capture_target_state() -> CaptureTargetState:
             st.target_is_minimized = bool(win_window.is_minimized(st.target_hwnd))
         except Exception:
             st.target_is_minimized = False
+
+        # Diagnostic override: allow forcing minimized behavior even when the
+        # window isn't actually minimized. Useful to validate capture fallbacks
+        # and avoid STALE_GS regressions in automated smoke runs.
+        try:
+            if (os.getenv("CAPTURE_FORCE_MINIMIZED", "") or "").strip().lower() in {"1", "true", "yes"}:
+                st.target_is_minimized = True
+        except Exception:
+            pass
         try:
             st.target_is_maximized = bool(win_window.is_maximized(st.target_hwnd))
         except Exception:

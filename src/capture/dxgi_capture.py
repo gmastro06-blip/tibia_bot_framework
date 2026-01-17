@@ -14,10 +14,79 @@ try:
 except Exception:  # pragma: no cover
     update_capture_target_state = None  # type: ignore[assignment]
 
+
+def _build_monitor_priority(
+    *,
+    n_monitors: int,
+    preferred_monitor: Optional[int],
+    last_good_monitor: Optional[int],
+    window_monitor: Optional[int],
+    obs_mode: bool,
+    obs_fallback_monitor: Optional[int],
+    scan_active_monitor: bool,
+    active_monitor: Optional[int],
+) -> list[int]:
+    """Compute MSS monitor indices (1..n, plus 0 virtual) in priority order.
+
+    This is a pure helper to keep the selection logic testable.
+
+    MSS convention:
+      - 1..n => individual monitors
+      - 0    => virtual combined screen
+    """
+
+    try:
+        n = int(n_monitors)
+    except Exception:
+        n = 0
+    if n <= 0:
+        return []
+
+    monitor_indices: list[int] = []
+
+    def _add(idx: Optional[int], *, allow_zero: bool = False) -> None:
+        try:
+            if idx is None:
+                return
+            i = int(idx)
+        except Exception:
+            return
+
+        if not (0 <= i < n):
+            return
+        if i == 0 and not allow_zero:
+            return
+        if i not in monitor_indices:
+            monitor_indices.append(i)
+
+    # --- Hints (highest priority) ---
+    _add(preferred_monitor, allow_zero=False)
+    _add(last_good_monitor, allow_zero=False)
+    _add(window_monitor, allow_zero=False)
+
+    # OBS dual-monitor workflow: if we explicitly want the OBS projector but
+    # cannot infer its monitor, prefer a stable fallback monitor (typically 1).
+    if obs_mode and not monitor_indices:
+        _add(obs_fallback_monitor, allow_zero=False)
+
+    # Only use the "active monitor" heuristic when we have *no* other hints.
+    if scan_active_monitor and not monitor_indices:
+        _add(active_monitor, allow_zero=False)
+
+    # --- Fill remaining monitors ---
+    for i in range(1, n):
+        _add(i, allow_zero=True)
+
+    _add(0, allow_zero=True)
+    return monitor_indices
+
 class DXGICapture:
     def __init__(
         self,
-        title_partial: Union[str, Sequence[str]] = "Tibia",
+        # Window titles are dynamic: the canonical Tibia title is usually
+        # "Tibia - <PlayerName>" where <PlayerName> changes.
+        # We match by substring, so this stays stable.
+        title_partial: Union[str, Sequence[str]] = ("Tibia -", "Tibia"),
         force_monitor: Optional[int] = None,
         *,
         strict_force_monitor: bool = False,
@@ -52,6 +121,9 @@ class DXGICapture:
         self._verbose = os.getenv("CAPTURE_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
         self._last_hwnd_state: Optional[bool] = None
         self._last_ok_log_ts = 0.0
+        # Rate-limit monitor-detection logs to avoid spamming stdout.
+        self._last_window_monitor: Optional[int] = None
+        self._last_window_monitor_log_ts = 0.0
         # Remember a known-good monitor index (MSS indexing).
         # Helps recover from wrong monitor selection / multi-monitor setups.
         self._last_good_monitor_index: Optional[int] = None
@@ -101,50 +173,94 @@ class DXGICapture:
         """
         try:
             with mss() as sct:
-                # Determinar el orden de prioridad de monitores
-                monitor_indices = []
+                n_monitors = len(sct.monitors)
 
-                # Prefer explicit preferred monitor.
+                # Preferred monitor hint (caller): this comes from window monitor inference.
                 try:
                     pm = int(preferred_monitor) if preferred_monitor is not None else None
                 except Exception:
                     pm = None
-                if pm is not None and 0 <= pm < len(sct.monitors):
-                    # Prefer individual monitor indices when possible.
-                    if pm != 0:
-                        monitor_indices.append(pm)
 
-                # Prefer last known-good monitor.
+                # Last known-good monitor hint.
                 try:
                     lg = int(self._last_good_monitor_index) if self._last_good_monitor_index is not None else None
                 except Exception:
                     lg = None
-                if lg is not None and 0 < lg < len(sct.monitors):
-                    if lg not in monitor_indices:
-                        monitor_indices.append(lg)
 
-                # Primero, intentar el monitor donde está la ventana de Tibia (si se encontró)
-                tibia_monitor = self.find_window_monitor()
-                if tibia_monitor is not None and tibia_monitor < len(sct.monitors) and tibia_monitor != 0:
-                    monitor_indices.append(tibia_monitor)
-                    if self._verbose:
-                        print(f"Priorizando monitor {tibia_monitor} donde está la ventana")
-
-                # If we still don't have a good hint, optionally pick the most active monitor.
+                # Infer monitor strictly from the current capture target HWND.
+                # IMPORTANT: do NOT fall back to the Tibia client window here,
+                # otherwise OBS projector workflows can get incorrectly pinned
+                # to the Tibia monitor.
                 try:
-                    if self._scan_active_monitor:
-                        best_idx = self._find_most_active_monitor_index(sct)
-                        if best_idx is not None and best_idx not in monitor_indices:
-                            monitor_indices.append(best_idx)
+                    window_monitor = self.find_window_monitor(self.client_hwnd)
+                except Exception:
+                    window_monitor = None
+                if self._verbose and window_monitor is not None:
+                    try:
+                        print(f"Priorizando monitor {int(window_monitor)} donde está el capture target")
+                    except Exception:
+                        pass
+
+                # OBS projector mode (common dual-monitor workflow): if we
+                # cannot infer the monitor from HWND, prefer monitor 1 by default.
+                obs_mode = False
+                try:
+                    obs_mode = str(self.capture_target or "").strip().lower() in {"obs_projector"} or str(
+                        self.target_reason or ""
+                    ).strip().lower() in {"obs_projector"}
+                except Exception:
+                    obs_mode = False
+                try:
+                    if not obs_mode:
+                        obs_mode = (os.getenv("CAPTURE_TARGET", "") or "").strip().lower() in {"obs", "projector", "obs_projector"}
                 except Exception:
                     pass
 
-                # Luego priorizar monitores individuales (1..n) antes del monitor 0 combinado
-                for i in range(1, len(sct.monitors)):
-                    if i not in monitor_indices:
-                        monitor_indices.append(i)
-                if 0 < len(sct.monitors) and 0 not in monitor_indices:
-                    monitor_indices.append(0)
+                try:
+                    obs_fallback_monitor = int(float(os.getenv("CAPTURE_OBS_FALLBACK_MONITOR", "1").strip() or "1"))
+                except Exception:
+                    obs_fallback_monitor = 1
+
+                # Only compute the expensive "active monitor" heuristic when:
+                # - enabled
+                # - we have no other stable hints
+                # - and we're NOT in OBS projector mode (dual-monitor workflow)
+                has_hint = False
+                try:
+                    has_hint = bool(pm is not None and pm != 0)
+                except Exception:
+                    pass
+                try:
+                    has_hint = bool(has_hint or (lg is not None and lg != 0))
+                except Exception:
+                    pass
+                try:
+                    has_hint = bool(has_hint or (window_monitor is not None and int(window_monitor) != 0))
+                except Exception:
+                    pass
+                try:
+                    if bool(obs_mode):
+                        has_hint = bool(has_hint or (obs_fallback_monitor is not None and int(obs_fallback_monitor) != 0))
+                except Exception:
+                    pass
+
+                active_best = None
+                if bool(self._scan_active_monitor) and (not bool(has_hint)) and (not bool(obs_mode)):
+                    try:
+                        active_best = self._find_most_active_monitor_index(sct)
+                    except Exception:
+                        active_best = None
+
+                monitor_indices = _build_monitor_priority(
+                    n_monitors=n_monitors,
+                    preferred_monitor=pm,
+                    last_good_monitor=lg,
+                    window_monitor=window_monitor,
+                    obs_mode=bool(obs_mode),
+                    obs_fallback_monitor=int(obs_fallback_monitor) if obs_fallback_monitor is not None else None,
+                    scan_active_monitor=bool(self._scan_active_monitor),
+                    active_monitor=active_best,
+                )
 
                 # Intentar capturar en cada monitor en orden de prioridad
                 for i in monitor_indices:
@@ -239,13 +355,39 @@ class DXGICapture:
                             best_monitor = i
 
                 if best_monitor is not None:
-                    print(f"Ventana asignada a monitor {best_monitor} (mejor overlap: {best_overlap_ratio:.2f})")
+                    # Avoid spamming: log only when verbose, or when the chosen
+                    # monitor changes (and rate-limited).
+                    try:
+                        now = time.time()
+                        changed = (self._last_window_monitor is None) or (int(best_monitor) != int(self._last_window_monitor))
+                        if self._verbose or (changed and (now - float(self._last_window_monitor_log_ts or 0.0)) >= 2.0):
+                            print(
+                                f"Ventana asignada a monitor {best_monitor} (mejor overlap: {best_overlap_ratio:.2f})"
+                            )
+                            self._last_window_monitor_log_ts = float(now)
+                        self._last_window_monitor = int(best_monitor)
+                    except Exception:
+                        pass
                     return best_monitor
 
-                print("Ventana no encontrada en ningún monitor")
+                if self._verbose:
+                    try:
+                        now = time.time()
+                        if (now - float(self._last_window_monitor_log_ts or 0.0)) >= 2.0:
+                            print("Ventana no encontrada en ningún monitor")
+                            self._last_window_monitor_log_ts = float(now)
+                    except Exception:
+                        pass
 
         except Exception as e:
-            print(f"Error detectando monitor de ventana: {e}")
+            if self._verbose:
+                try:
+                    now = time.time()
+                    if (now - float(self._last_window_monitor_log_ts or 0.0)) >= 2.0:
+                        print(f"Error detectando monitor de ventana: {e}")
+                        self._last_window_monitor_log_ts = float(now)
+                except Exception:
+                    pass
 
         return None
 
@@ -333,9 +475,13 @@ class DXGICapture:
                 self.target_found = bool(getattr(st, "target_found", False))
                 self.target_reason = str(getattr(st, "reason", "") or "")
                 if bool(getattr(st, "target_is_minimized", False)):
+                    # IMPORTANT: never return None just because the chosen
+                    # capture target window is minimized (OBS projector/client).
+                    # That would starve the pipeline and cause STALE_GS.
+                    # Instead, fall back to fullscreen capture (MSS).
                     self.capture_state = "minimized"
                     self.capture_monitor_index = None
-                    return None
+                    self.capture_bounds = None
         except Exception:
             pass
 

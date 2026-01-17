@@ -39,11 +39,21 @@ def parse_current_and_max_with_reason(
                 max_value = 100000
         max_value = int(max(1000, max_value))
 
+        # Reject obviously bogus OCR maxima (e.g. "0/1") which commonly happen
+        # when the ROI is misaligned or reads UI separators.
+        try:
+            min_max = int(float(os.getenv("HPMP_MIN_OCR_MAX", "50").strip() or "50"))
+        except Exception:
+            min_max = 50
+        min_max = int(max(1, min_max))
+
         # current/max
         m = re.search(r"(\d{1,6})\s*/\s*(\d{1,6})", cleaned)
         if m:
             cur = int(m.group(1))
             mx = int(m.group(2))
+            if mx < int(min_max):
+                return None, None, "invalid_range"
             if mx > 0 and 0 <= cur <= mx <= int(max_value):
                 return cur, mx, "ok"
             return None, None, "invalid_range"

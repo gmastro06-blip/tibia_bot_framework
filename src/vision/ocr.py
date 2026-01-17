@@ -938,6 +938,41 @@ class OCRProcessor:
                     return best
                 return None, None, "no_max_candidates"
 
+            def _pick_unique_single_number(texts: list[str], label: str) -> tuple[Optional[int], str]:
+                """Pick a single unambiguous number from OCR outputs.
+
+                This is intentionally conservative: it only returns a value when
+                there's exactly ONE unique numeric candidate across all OCR strings.
+                """
+
+                try:
+                    max_value = int(float(os.getenv("HPMP_MAX_OCR", "100000").strip() or "100000"))
+                except Exception:
+                    max_value = 100000
+                max_value = int(max(1000, max_value))
+
+                candidates: set[int] = set()
+                for t in texts or []:
+                    try:
+                        raw = str(t or "")
+                        cleaned = re.sub(r"[^0-9/|\s]", "", raw).replace("|", "/")
+                        nums = re.findall(r"\d{1,6}", cleaned)
+                        for s in nums:
+                            try:
+                                v = int(s)
+                            except Exception:
+                                continue
+                            if 0 <= v <= max_value:
+                                candidates.add(int(v))
+                    except Exception:
+                        continue
+
+                if len(candidates) == 1:
+                    return list(candidates)[0], "single_number"
+                if len(candidates) > 1:
+                    return None, "ambiguous_single_number"
+                return None, "no_number"
+
             # Mostrar información de debug de la imagen
             if self._debug:
                 print(f"Imagen de entrada: {frame.shape}, tipo: {frame.dtype}")
@@ -1063,7 +1098,7 @@ class OCRProcessor:
 
                                 parsed.append((x_center, cur, mx, float(conf) if conf is not None else 0.0, cleaned))
 
-                            # If we have no OCR candidates, bail early.
+                            # If we have OCR candidates, try to pick HP/MP.
                             if parsed:
                                 strip_w = float(strip_crop.shape[1])
                                 hp_ref = _estimate_color_x_center(strip_crop, "hp")
@@ -1091,36 +1126,60 @@ class OCRProcessor:
                                             continue
                                     return best[1] if best is not None else None
 
-                                # Prefer candidates that include max (cur/max). If none, skip to fallback.
+                                # Prefer candidates that include max (cur/max).
                                 with_max = [t for t in parsed if t[2] is not None]
                                 if not with_max:
+                                    # Conservative fallback: pick a single-number per side ONLY when unambiguous.
+                                    left = [t for t in parsed if float(t[0]) <= (strip_w * 0.5)]
+                                    right = [t for t in parsed if float(t[0]) > (strip_w * 0.5)]
+
                                     if hp_current is None:
-                                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_max_candidates")
+                                        try:
+                                            vals = sorted({int(t[1]) for t in left if t[1] is not None})
+                                            if len(vals) == 1:
+                                                hp_current = int(vals[0])
+                                                self._set_last_ocr_meta(kind="hp", source="top_strip", reason="single_number")
+                                            else:
+                                                self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_max_candidates")
+                                        except Exception:
+                                            self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_max_candidates")
+
                                     if mp_current is None:
-                                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_max_candidates")
-                                    raise RuntimeError("top_strip: no max candidates")
+                                        try:
+                                            vals = sorted({int(t[1]) for t in right if t[1] is not None})
+                                            if len(vals) == 1:
+                                                mp_current = int(vals[0])
+                                                self._set_last_ocr_meta(kind="mp", source="top_strip", reason="single_number")
+                                            else:
+                                                self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_max_candidates")
+                                        except Exception:
+                                            self._set_last_ocr_meta(kind="mp", source="top_strip", reason="no_max_candidates")
 
-                                # Pick HP
-                                if hp_current is None:
-                                    choice = _pick_best(with_max, float(hp_ref))
-                                    if choice is not None:
-                                        _x, cur, mx, _conf, _txt = choice
-                                        hp_current, hp_max = cur, mx
-                                        self._set_last_ocr_meta(kind="hp", source="top_strip", reason="ok")
+                                    # No max to return here; continue with other ROI fallbacks.
+                                    with_max = []
 
-                                # Pick MP (avoid reusing the same exact candidate when possible)
-                                if mp_current is None:
-                                    pool = list(with_max)
-                                    try:
-                                        if hp_current is not None:
-                                            pool = [t for t in pool if t[0] != (choice[0] if choice is not None else None)]
-                                    except Exception:
+                                if with_max:
+                                    # Pick HP
+                                    if hp_current is None:
+                                        choice = _pick_best(with_max, float(hp_ref))
+                                        if choice is not None:
+                                            _x, cur, mx, _conf, _txt = choice
+                                            hp_current, hp_max = cur, mx
+                                            self._set_last_ocr_meta(kind="hp", source="top_strip", reason="ok")
+
+                                    # Pick MP (avoid reusing the same exact candidate when possible)
+                                    if mp_current is None:
                                         pool = list(with_max)
-                                    choice2 = _pick_best(pool or list(with_max), float(mp_ref))
-                                    if choice2 is not None:
-                                        _x, cur, mx, _conf, _txt = choice2
-                                        mp_current, mp_max = cur, mx
-                                        self._set_last_ocr_meta(kind="mp", source="top_strip", reason="ok")
+                                        try:
+                                            if hp_current is not None:
+                                                pool = [t for t in pool if t[0] != (choice[0] if choice is not None else None)]
+                                        except Exception:
+                                            pool = list(with_max)
+                                        choice2 = _pick_best(pool or list(with_max), float(mp_ref))
+                                        if choice2 is not None:
+                                            _x, cur, mx, _conf, _txt = choice2
+                                            mp_current, mp_max = cur, mx
+                                            self._set_last_ocr_meta(kind="mp", source="top_strip", reason="ok")
                             else:
                                 if hp_current is None:
                                     self._set_last_ocr_meta(kind="hp", source="top_strip", reason="no_candidates")
@@ -1161,8 +1220,14 @@ class OCRProcessor:
                             print(f"HP texto crudo: '{hp_text}'")
                         if hp_text:
                             hp_current, hp_max, hp_reason = _pick_best_cur_max(hp_texts or [hp_text], "HP")
+                            if hp_current is None and hp_max is None:
+                                v, why = _pick_unique_single_number(hp_texts or [hp_text], "HP")
+                                if v is not None:
+                                    hp_current, hp_max = int(v), None
+                                    hp_reason = why
                             if hp_current is not None:
-                                self._set_last_ocr_meta(kind="hp", source="top_ocr", reason="ok")
+                                # If max is missing, expose that in reason.
+                                self._set_last_ocr_meta(kind="hp", source="top_ocr", reason=("ok" if hp_max is not None else (hp_reason or "single_number")))
                             else:
                                 self._set_last_ocr_meta(kind="hp", source="top_ocr", reason=hp_reason)
                         else:
@@ -1200,8 +1265,13 @@ class OCRProcessor:
                             print(f"MP texto crudo: '{mp_text}'")
                         if mp_text:
                             mp_current, mp_max, mp_reason = _pick_best_cur_max(mp_texts or [mp_text], "MP")
+                            if mp_current is None and mp_max is None:
+                                v, why = _pick_unique_single_number(mp_texts or [mp_text], "MP")
+                                if v is not None:
+                                    mp_current, mp_max = int(v), None
+                                    mp_reason = why
                             if mp_current is not None:
-                                self._set_last_ocr_meta(kind="mp", source="top_ocr", reason="ok")
+                                self._set_last_ocr_meta(kind="mp", source="top_ocr", reason=("ok" if mp_max is not None else (mp_reason or "single_number")))
                             else:
                                 self._set_last_ocr_meta(kind="mp", source="top_ocr", reason=mp_reason)
                         else:

@@ -116,13 +116,21 @@ def load_roi_config(resolution: tuple) -> tuple:
 
     config_file = config_files.get((width, height), "configs/rois_guess_1920x1080.json")  # fallback
 
+    # Make loading independent of current working directory.
+    config_path = config_file
     try:
-        with open(config_file, 'r') as f:
+        if not os.path.isabs(config_path):
+            config_path = os.path.join(project_root, config_path)
+    except Exception:
+        config_path = config_file
+
+    try:
+        with open(config_path, 'r') as f:
             config = json.load(f)
             print(f"Configuración cargada desde {config_file} para resolución {width}x{height}")
             return config["rois_guess_norm"], config["source_resolution"]
     except FileNotFoundError:
-        print(f"Archivo de configuración {config_file} no encontrado, usando configuración por defecto")
+        print(f"Archivo de configuración {config_path} no encontrado, usando configuración por defecto")
         # Configuración por defecto (2048x1076)
         default_rois = {
             "hpmp_top_strip": {"x": 0.000000, "y": 0.000000, "w": 0.822754, "h": 0.037174},
@@ -268,6 +276,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         "last_dec_ts": 0.0,
         "capture_ok": 0.0,
         "capture_none": 0.0,
+        "capture_ex": 0.0,
         "vision_ok": 0.0,
         "vision_ex": 0.0,
         "decision_ok": 0.0,
@@ -619,7 +628,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             pass
         while not stop_event.is_set():
             t0 = time.time()
-            frame = capture.capture()
+            try:
+                frame = capture.capture()
+            except Exception:
+                frame = None
+                _h_inc("capture_ex")
+                # Backoff to avoid a tight crash-loop if capture repeatedly errors.
+                try:
+                    time.sleep(0.05)
+                except Exception:
+                    pass
             _h_set("capture_ms_last", (time.time() - t0) * 1000.0)
             if profile:
                 cap_ms_sum += (time.time() - t0) * 1000.0
@@ -842,6 +860,26 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                 "battlelist_top_names": getattr(gamestate, "battlelist_top_names", None),
                                 "battlelist_confidence": getattr(gamestate, "battlelist_confidence", None),
                             }
+
+                        # Optional deep HUD diagnostics (HP/MP OCR+bars+ROI px).
+                        # Off by default to keep replay JSON small.
+                        try:
+                            raw_dbg = (os.getenv("REPLAY_DEBUG_HPMP", "") or "").strip().lower()
+                            dbg_on = raw_dbg in {"1", "true", "yes", "y", "on"}
+                        except Exception:
+                            dbg_on = False
+
+                        if dbg_on:
+                            try:
+                                hd = getattr(gamestate, "hud_debug", None)
+                                if isinstance(hd, dict):
+                                    # Keep it compact and focused.
+                                    tel_payload["hud_debug_hp"] = hd.get("hp")
+                                    tel_payload["hud_debug_mp"] = hd.get("mp")
+                                    tel_payload["hud_rois_px"] = hd.get("rois_px")
+                                    tel_payload["vision_guard"] = hd.get("vision_guard")
+                            except Exception:
+                                pass
 
                         # Always attach latest action request for end-to-end correlation.
                         try:
@@ -1314,6 +1352,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         vis_ms_sum = 0.0
             except Exception:
                 _h_inc("vision_ex")
+                # Backoff to avoid tight loops on persistent exceptions.
+                try:
+                    time.sleep(0.01)
+                except Exception:
+                    pass
                 continue
 
     # Thread de decisión (simplificado)
@@ -1499,6 +1542,13 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             from fail_closed import fail_closed
             from input_focus_guard import get_client_hwnd, is_allowed_to_inject, update_client_state
 
+            # Safe diagnostics mode: allow committing actions (and counting them as
+            # sent) without ever injecting OS input.
+            #
+            # This is useful to validate planner/telemetry end-to-end in headless
+            # runs where focus/foreground constraints would block real injection.
+            dry_run_inputs = (os.getenv("ASSIST_DRY_RUN", "0") or "0").strip().lower() in {"1", "true", "yes"}
+
             mock_driver = MockInputDriver(max_items=500)
             # Force a single input driver policy by code: keyboard injection is ON.
             # UI does not control driver types.
@@ -1515,16 +1565,20 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 allowed_titles = ["Tibia"]
 
             # Always use keyboard driver when armed.
-            input_driver = WindowsKeyboardDriver(
-                target_hotkey=target_hotkey or None,
-                minimap_hotkey=minimap_hotkey or None,
-            )
+            if dry_run_inputs:
+                driver_name = "mock"
+                live_input_armed = False
+                input_driver = mock_driver
+            else:
+                input_driver = WindowsKeyboardDriver(
+                    target_hotkey=target_hotkey or None,
+                    minimap_hotkey=minimap_hotkey or None,
+                )
 
             input_mgr = InputManager(
                 driver=input_driver,
                 fallback=mock_driver,
-                injection_enabled=bool(isinstance(input_driver, (WindowsKeyboardDriver, InputBridgeDriver)))
-                and bool(live_input_armed),
+                injection_enabled=(False if dry_run_inputs else bool(isinstance(input_driver, (WindowsKeyboardDriver, InputBridgeDriver))) and bool(live_input_armed)),
             )
             try:
                 input_mgr.set_live_policy(live_input_armed=bool(live_input_armed), allowed_window_titles=list(allowed_titles))
@@ -1625,6 +1679,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             except Empty:
                 gamestate = None
             except Exception:
+                # Backoff to avoid tight loops on persistent exceptions.
+                try:
+                    time.sleep(0.01)
+                except Exception:
+                    pass
                 continue
 
             healing_cfg, cavebot_cfg = (
@@ -1704,8 +1763,9 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 confirm_mode = False
 
             # Input policy is code/env controlled only (no UI switching).
-            asst_input_mode = "keyboard"
-            live_input_armed = True
+            dry_run_inputs = (os.getenv("ASSIST_DRY_RUN", "0") or "0").strip().lower() in {"1", "true", "yes"}
+            asst_input_mode = "mock" if dry_run_inputs else "keyboard"
+            live_input_armed = False if dry_run_inputs else True
             raw_titles = (os.getenv("ALLOWED_WINDOW_TITLES", "Tibia") or "Tibia").strip()
             allowed_titles = [s.strip() for s in raw_titles.split(",") if s.strip()]
             if not allowed_titles:
@@ -1714,6 +1774,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             live_active = bool(asst_input_mode in {"keyboard", "bridge"} and live_input_armed)
             target_window_active = False
             try:
+                if dry_run_inputs:
+                    target_window_active = True
                 if (os.getenv("ALLOW_BACKGROUND_INPUT", "") or "").strip().lower() in {"1", "true", "yes"}:
                     target_window_active = True
                 # Refresh client snapshot (best-effort) even when the client is background.
@@ -1729,6 +1791,10 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
             needs_confirm = bool(confirm_mode or (live_active and not allow_live_autocommit))
             auto_commit = bool((auto_commit_env or allow_live_autocommit) and (not needs_confirm))
+            if dry_run_inputs and not bool(needs_confirm):
+                # In dry-run mode we auto-commit by default to make headless
+                # diagnostics deterministic (no UI pulse needed).
+                auto_commit = True
 
             # UI confirm-actions pulse: when it changes, we may commit exactly one action.
             advance_pulse = False
@@ -1815,7 +1881,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     target_ok_dbg = (bool(target_window_active) if bool(live_active) else True)
                     can_commit = (
                         bool(commit_flag)
-                        and bool(inj_enabled0_dbg)
+                        and (bool(inj_enabled0_dbg) or bool(dry_run_inputs))
                         and not bool(dis0_dbg)
                         and bool(target_ok_dbg)
                     )
@@ -1884,6 +1950,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     cap_backend = None
                     cap_title = None
                     cap_hwnd = None
+                    cap_state = None
+                    cap_mon = None
                     try:
                         cap_backend = str(getattr(capture, "capture_backend", "") or "")
                     except Exception:
@@ -1896,6 +1964,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         cap_hwnd = int(getattr(capture, "client_hwnd", 0) or 0)
                     except Exception:
                         cap_hwnd = None
+                    try:
+                        cap_state = str(getattr(capture, "capture_state", "") or "")
+                    except Exception:
+                        cap_state = None
+                    try:
+                        raw_mon = getattr(capture, "capture_monitor_index", None)
+                        cap_mon = (int(raw_mon) if raw_mon is not None else None)
+                    except Exception:
+                        cap_mon = None
 
                     evt = {
                         "ts": float(time.time()),
@@ -1903,6 +1980,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                             "backend": cap_backend or None,
                             "target_title": cap_title or None,
                             "target_hwnd": cap_hwnd,
+                            "state": cap_state or None,
+                            "monitor_index": cap_mon,
                             "is_foreground": bool(target_window_active),
                         },
                         "healing": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
@@ -3010,7 +3089,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     mgr0, inj_enabled0, dis0 = _im_snapshot()
                     can_commit = (
                         bool(commit_flag)
-                        and bool(inj_enabled0)
+                        and (bool(inj_enabled0) or bool(dry_run_inputs))
                         and not bool(str(dis0 or "").strip())
                         and (bool(target_window_active) if bool(live_active) else True)
                     )
@@ -3569,6 +3648,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 cap_backend = None
                 cap_title = None
                 cap_hwnd = None
+                cap_state = None
+                cap_mon = None
                 try:
                     cap_backend = str(getattr(capture, "capture_backend", "") or "")
                 except Exception:
@@ -3581,6 +3662,15 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                     cap_hwnd = int(getattr(capture, "client_hwnd", 0) or 0)
                 except Exception:
                     cap_hwnd = None
+                try:
+                    cap_state = str(getattr(capture, "capture_state", "") or "")
+                except Exception:
+                    cap_state = None
+                try:
+                    raw_mon = getattr(capture, "capture_monitor_index", None)
+                    cap_mon = (int(raw_mon) if raw_mon is not None else None)
+                except Exception:
+                    cap_mon = None
 
                 drv_name = ""
                 try:
@@ -3595,6 +3685,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         "backend": cap_backend or None,
                         "target_title": cap_title or None,
                         "target_hwnd": cap_hwnd,
+                        "state": cap_state or None,
+                        "monitor_index": cap_mon,
                         "is_foreground": bool(target_window_active),
                     },
                     "healing": {

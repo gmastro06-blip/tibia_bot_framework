@@ -145,6 +145,31 @@ class GameStateBuilder:
         # Battlelist stabilization buffer: row_index -> last N parsed entries
         self._battlelist_buf: Dict[int, List[Dict[str, Any]]] = {}
 
+        # Battlelist OCR is expensive (per-row EasyOCR). Throttle it aggressively
+        # to keep the vision thread real-time.
+        #
+        # Tunables:
+        #   - BATTLELIST_MIN_INTERVAL_S (default 10s)
+        #   - BATTLELIST_PARSE_MAX_ROWS (default 3)
+        #
+        # Set BATTLELIST_MIN_INTERVAL_S=0 to restore "every frame" behavior.
+        self._battlelist_last_ts = 0.0
+        try:
+            self._battlelist_min_interval_s = float(
+                (os.getenv("BATTLELIST_MIN_INTERVAL_S", "10.0") or "10.0").strip() or "10.0"
+            )
+        except Exception:
+            self._battlelist_min_interval_s = 10.0
+        self._battlelist_min_interval_s = float(max(0.0, self._battlelist_min_interval_s))
+        try:
+            self._battlelist_parse_max_rows = int(
+                float((os.getenv("BATTLELIST_PARSE_MAX_ROWS", "3") or "3").strip() or "3")
+            )
+        except Exception:
+            self._battlelist_parse_max_rows = 3
+        self._battlelist_parse_max_rows = int(max(0, min(30, self._battlelist_parse_max_rows)))
+        self._battlelist_cache: Dict[str, Any] = {}
+
         # Status icons (paralyze/haste/utamo): debounce across K frames.
         try:
             self._status_persist_k = int(float(os.getenv("STATUS_ICON_PERSIST_K", "3").strip() or "3"))
@@ -160,6 +185,38 @@ class GameStateBuilder:
         self._status_state: Dict[str, bool] = {"paralyzed": False, "haste_active": False, "utamo_active": False}
         self._status_on_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
         self._status_off_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
+
+        # Vision real-time guard: if a vision update becomes too slow (often due to
+        # OCR/EasyOCR or Roboflow inference), the pipeline can effectively stall and
+        # produce stale/no GameState.
+        #
+        # This guard is intentionally conservative and fail-safe:
+        # - It never raises.
+        # - It skips expensive work for a short cooldown window.
+        # - HP/MP % can still be derived from bars even without OCR.
+        #
+        # Env tunables:
+        #   - VISION_GUARD_ENABLED=1|0 (default: 1)
+        #   - VISION_GUARD_SLOW_MS (default: 800)
+        #   - VISION_GUARD_COOLDOWN_S (default: 2.0)
+        #   - VISION_GUARD_FORCE=1 (default: 0) force skip expensive work always
+        try:
+            raw = (os.getenv("VISION_GUARD_ENABLED", "1") or "1").strip().lower()
+            self._vision_guard_enabled = raw not in {"0", "false", "no", "off"}
+        except Exception:
+            self._vision_guard_enabled = True
+        try:
+            self._vision_guard_slow_ms = float((os.getenv("VISION_GUARD_SLOW_MS", "800") or "800").strip() or "800")
+        except Exception:
+            self._vision_guard_slow_ms = 800.0
+        self._vision_guard_slow_ms = float(max(1.0, self._vision_guard_slow_ms))
+        try:
+            self._vision_guard_cooldown_s = float((os.getenv("VISION_GUARD_COOLDOWN_S", "2.0") or "2.0").strip() or "2.0")
+        except Exception:
+            self._vision_guard_cooldown_s = 2.0
+        self._vision_guard_cooldown_s = float(max(0.0, self._vision_guard_cooldown_s))
+        self._vision_guard_until_ts = 0.0
+        self._vision_last_update_ms = 0.0
 
     def reseed_minimap(self) -> None:
         """Resetea el tracker de minimapa y obliga a pedir seed de nuevo."""
@@ -328,11 +385,18 @@ class GameStateBuilder:
 
         # Cortar minimapa y actualizar motion tracker.
         try:
-            mx, my, mw, mh = self.ocr_processor._roi_to_px(frame, rois, resolution, rois["minimap_content"])
-            crop = frame[my : my + mh, mx : mx + mw]
-            if crop is None or crop.size == 0:
+            rr = roi_to_px_result(
+                frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                rois=rois,
+                resolution=resolution,
+                roi_def=rois["minimap_content"],
+            )
+            if not (rr.ok and rr.roi is not None):
                 self._minimap_status = "minimap_no_crop"
                 return self._minimap_coords
+
+            x, y, w, h = rr.roi
+            crop = frame[y : y + h, x : x + w].copy()
         except Exception:
             self._minimap_status = "minimap_no_crop"
             return self._minimap_coords
@@ -550,6 +614,7 @@ class GameStateBuilder:
 
     def update_from_frame(self, frame: np.ndarray, rois: Dict[str, Dict[str, float]], resolution: Tuple[int, int]) -> GameState:
         """Actualiza el estado del juego desde un frame"""
+        t0 = time.time()
         frame_mean: Optional[float] = None
         try:
             # Cheap-ish signal to quickly spot dummy/black frames in telemetry.
@@ -561,8 +626,21 @@ class GameStateBuilder:
         rf_hpmp_boxes: Optional[List[Dict[str, Any]]] = None
         viewport_offsets: Optional[List[Tuple[int, int]]] = None
         now = time.time()
+
+        # Real-time guard: temporarily skip expensive work on slow frames.
+        guard_force = False
+        try:
+            guard_force = (os.getenv("VISION_GUARD_FORCE", "0") or "0").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            guard_force = False
+        guard_active = False
+        try:
+            guard_active = bool(self._vision_guard_enabled) and (bool(guard_force) or (float(now) < float(self._vision_guard_until_ts or 0.0)))
+        except Exception:
+            guard_active = bool(guard_force)
+
         if self._rf is not None:
-            if now - self._rf_last_ts >= self._rf_min_interval_s:
+            if (not guard_active) and (now - self._rf_last_ts >= self._rf_min_interval_s):
                 try:
                     pred = self._rf.predict(frame)
                     rf_boxes = self._rf.extract_boxes(pred)
@@ -572,7 +650,7 @@ class GameStateBuilder:
 
         # Separate inference for HP/MP
         if self._rf_hpmp is not None:
-            if now - self._rf_hpmp_last_ts >= self._rf_hpmp_min_interval_s:
+            if (not guard_active) and (now - self._rf_hpmp_last_ts >= self._rf_hpmp_min_interval_s):
                 try:
                     pred_hpmp = self._rf_hpmp.predict(frame)
                     rf_hpmp_boxes = self._rf_hpmp.extract_boxes(pred_hpmp)
@@ -591,6 +669,20 @@ class GameStateBuilder:
         pos_z: Optional[int] = None
 
         do_ocr = (now - self._ocr_last_ts) >= self._ocr_min_interval_s
+        if guard_active:
+            do_ocr = False
+
+        # Battlelist OCR throttling (separate from general OCR throttle).
+        do_battlelist = True
+        try:
+            if float(getattr(self, "_battlelist_min_interval_s", 0.0) or 0.0) > 0.0:
+                do_battlelist = (now - float(getattr(self, "_battlelist_last_ts", 0.0) or 0.0)) >= float(
+                    getattr(self, "_battlelist_min_interval_s", 0.0) or 0.0
+                )
+        except Exception:
+            do_battlelist = True
+        if guard_active:
+            do_battlelist = False
         # Observability of OCR path
         hp_method = ""
         hp_reason = ""
@@ -603,6 +695,7 @@ class GameStateBuilder:
             "ts": float(now),
             "resolution": [int(resolution[0]), int(resolution[1])],
             "frame_mean": frame_mean,
+            "vision_guard": {"active": bool(guard_active), "force": bool(guard_force)},
             "hp": {},
             "mp": {},
             "cap": {},
@@ -750,6 +843,27 @@ class GameStateBuilder:
             except Exception:
                 mp_max = None
 
+        # Compatibility: if OCR intermittently misses the '/max' part, reuse
+        # the last known max (do not erase stable maxima due to transient OCR).
+        try:
+            if hp_max is None and hp_current is not None and self._last_hp_max is not None:
+                if 0 < int(hp_current) <= int(self._last_hp_max):
+                    hp_max = int(self._last_hp_max)
+                    if not hp_method or hp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        hp_method = "cached_max"
+                    hp_reason = f"reuse_last_max:{hp_reason}" if hp_reason else "reuse_last_max"
+        except Exception:
+            pass
+        try:
+            if mp_max is None and mp_current is not None and self._last_mp_max is not None:
+                if 0 < int(mp_current) <= int(self._last_mp_max):
+                    mp_max = int(self._last_mp_max)
+                    if not mp_method or mp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        mp_method = "cached_max"
+                    mp_reason = f"reuse_last_max:{mp_reason}" if mp_reason else "reuse_last_max"
+        except Exception:
+            pass
+
         # (B) Fallback por barras: si current falta y hay max, estimar por fill ratio
         # Intentar usar boxes Roboflow si existen; si no, usar ROIs del config.
         hp_ratio: Optional[float] = None
@@ -802,6 +916,169 @@ class GameStateBuilder:
             if rr.ok and rr.roi is not None:
                 mp_bar_roi = rr.roi
                 mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(frame, rr.roi, "mp")
+
+        # (B-) Fallback: top strip bar estimation.
+        # Some HUD layouts have more reliable bars on the top strip than in the
+        # low panel (or low panel ROI may be missing). This still gives us %.
+        try:
+            if (hp_ratio is None or mp_ratio is None) and isinstance(rois, dict) and "hpmp_top_strip" in rois:
+                rr = roi_to_px_result(
+                    frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
+                    rois=rois,
+                    resolution=resolution,
+                    roi_def=rois["hpmp_top_strip"],
+                )
+                if rr.ok and rr.roi is not None:
+                    x, y, w, h = rr.roi
+                    crop = frame[int(y) : int(y + h), int(x) : int(x + w)]
+                    if crop is not None and getattr(crop, "size", 0) > 0:
+                        if hp_ratio is None:
+                            try:
+                                hp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                                hp_ratio, hp_bar_reason = estimate_bar_fill_ratio_with_reason(crop, hp_bar_roi, "hp")
+                                if hp_ratio is not None and not hp_bar_roi_reason:
+                                    hp_bar_roi_reason = "from_top_strip"
+                            except Exception:
+                                pass
+                        if mp_ratio is None:
+                            try:
+                                mp_bar_roi = (0, 0, int(crop.shape[1]), int(crop.shape[0]))
+                                mp_ratio, mp_bar_reason = estimate_bar_fill_ratio_with_reason(crop, mp_bar_roi, "mp")
+                                if mp_ratio is not None and not mp_bar_roi_reason:
+                                    mp_bar_roi_reason = "from_top_strip"
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+        # (B0) Conservative max inference: if OCR gave a plausible *current* but
+        # missed the '/max', and we have a reliable bar ratio, infer max once
+        # and cache it. This improves UI/telemetry stability without requiring
+        # manual TIBIA_HP_MAX/TIBIA_MP_MAX.
+        # Special-case: if the bar is essentially full, we can safely assume
+        # max == current (restores classic HUD readings like 215/215, 100/100
+        # when OCR drops the slash/max).
+        def _infer_max_if_full(cur: Optional[int], ratio: Optional[float]) -> Optional[int]:
+            try:
+                if cur is None or ratio is None:
+                    return None
+                c = int(cur)
+                if c <= 0:
+                    return None
+                r = float(ratio)
+                try:
+                    full_thr = float((os.getenv("HPMP_FULL_BAR_THR", "0.98") or "0.98").strip() or "0.98")
+                except Exception:
+                    full_thr = 0.98
+                full_thr = float(max(0.90, min(0.999, full_thr)))
+                if r < full_thr:
+                    return None
+
+                try:
+                    min_max = int(float(os.getenv("HPMP_MIN_OCR_MAX", "50").strip() or "50"))
+                except Exception:
+                    min_max = 50
+                min_max = int(max(1, min_max))
+                if c < min_max:
+                    return None
+                return int(c)
+            except Exception:
+                return None
+
+        try:
+            if hp_max is None and hp_current is not None and hp_ratio is not None:
+                est_full = _infer_max_if_full(hp_current, hp_ratio)
+                if est_full is not None:
+                    hp_max = int(est_full)
+                    try:
+                        self._last_hp_max = hp_max
+                    except Exception:
+                        pass
+                    if not hp_method or hp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        hp_method = "infer_max_full_bar"
+                    hp_reason = f"infer_max_full:{hp_reason}" if hp_reason else "infer_max_full"
+        except Exception:
+            pass
+
+        try:
+            if mp_max is None and mp_current is not None and mp_ratio is not None:
+                est_full = _infer_max_if_full(mp_current, mp_ratio)
+                if est_full is not None:
+                    mp_max = int(est_full)
+                    try:
+                        self._last_mp_max = mp_max
+                    except Exception:
+                        pass
+                    if not mp_method or mp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        mp_method = "infer_max_full_bar"
+                    mp_reason = f"infer_max_full:{mp_reason}" if mp_reason else "infer_max_full"
+        except Exception:
+            pass
+
+        def _infer_max_from_cur_ratio(cur: Optional[int], ratio: Optional[float]) -> Optional[int]:
+            try:
+                if cur is None or ratio is None:
+                    return None
+                c = int(cur)
+                r = float(ratio)
+                if c <= 0:
+                    return None
+                # Avoid unstable inference near empty/full bars.
+                if r < 0.20 or r > 0.90:
+                    return None
+                if r <= 0.0:
+                    return None
+                est = int(round(float(c) / float(r)))
+
+                # Sanity bounds
+                try:
+                    max_value = int(float(os.getenv("HPMP_MAX_OCR", "100000").strip() or "100000"))
+                except Exception:
+                    max_value = 100000
+                max_value = int(max(1000, max_value))
+                try:
+                    min_max = int(float(os.getenv("HPMP_MIN_OCR_MAX", "50").strip() or "50"))
+                except Exception:
+                    min_max = 50
+                min_max = int(max(1, min_max))
+
+                if est < min_max or est > max_value:
+                    return None
+                if est < c:
+                    return None
+                return est
+            except Exception:
+                return None
+
+        if hp_max is None and hp_current is not None and hp_ratio is not None:
+            try:
+                est = _infer_max_from_cur_ratio(hp_current, hp_ratio)
+                if est is not None:
+                    hp_max = int(est)
+                    try:
+                        self._last_hp_max = hp_max
+                    except Exception:
+                        pass
+                    if not hp_method or hp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        hp_method = "infer_max_from_bar"
+                    hp_reason = f"infer_max:{hp_reason}" if hp_reason else "infer_max"
+            except Exception:
+                pass
+
+        if mp_max is None and mp_current is not None and mp_ratio is not None:
+            try:
+                est = _infer_max_from_cur_ratio(mp_current, mp_ratio)
+                if est is not None:
+                    mp_max = int(est)
+                    try:
+                        self._last_mp_max = mp_max
+                    except Exception:
+                        pass
+                    if not mp_method or mp_method in {"top_ocr", "top_strip", "rf_box"}:
+                        mp_method = "infer_max_from_bar"
+                    mp_reason = f"infer_max:{mp_reason}" if mp_reason else "infer_max"
+            except Exception:
+                pass
 
         # Attach HUD debug snapshot (before fusion so we keep raw diagnostics).
         try:
@@ -870,6 +1147,24 @@ class GameStateBuilder:
             hp_method = "none"
             hp_reason = "no_ocr_no_bar"
 
+        # Percent outputs (may be filled from OCR/bar/inference).
+        hp_pct: Optional[float] = None
+        mp_pct: Optional[float] = None
+
+        # If OCR returned a single number (no max) and it's in 0..100, treat it
+        # as a percentage rather than an absolute "current". This matches real
+        # HUDs that show percents or OCR misreads that drop the slash.
+        try:
+            if hp_max is None and hp_current is not None:
+                r = str(hp_reason or "")
+                if "single_number" in r and 0 <= int(hp_current) <= 100 and hp_ratio is None:
+                    hp_pct = float(int(hp_current))
+                    hp_current = None
+                    hp_method = "pct_ocr_single"
+                    hp_reason = "single_number_pct"
+        except Exception:
+            pass
+
         if mp_current is None and mp_max is not None and mp_ratio is not None:
             mp_current = int(round(mp_ratio * mp_max))
             mp_method = "bar_low"
@@ -882,9 +1177,18 @@ class GameStateBuilder:
             mp_method = "none"
             mp_reason = "no_ocr_no_bar"
 
+        try:
+            if mp_max is None and mp_current is not None:
+                r = str(mp_reason or "")
+                if "single_number" in r and 0 <= int(mp_current) <= 100 and mp_ratio is None:
+                    mp_pct = float(int(mp_current))
+                    mp_current = None
+                    mp_method = "pct_ocr_single"
+                    mp_reason = "single_number_pct"
+        except Exception:
+            pass
+
         # Crear nuevo estado
-        hp_pct: Optional[float] = None
-        mp_pct: Optional[float] = None
         try:
             if hp_current is not None and hp_max:
                 hp_pct = (float(hp_current) / float(hp_max)) * 100.0
@@ -1184,7 +1488,36 @@ class GameStateBuilder:
             gamestate.battlelist_source = "none"
             gamestate.battlelist_reason = "missing_roi"
 
-            if isinstance(rois, dict) and rois.get("battlelist_rows") is not None:
+            # If throttled, reuse cached output (latest-wins, avoids vision stalls).
+            if not bool(do_battlelist):
+                try:
+                    cache = dict(getattr(self, "_battlelist_cache", {}) or {})
+                    gamestate.battlelist_entries = list(cache.get("entries", []) or [])
+                    gamestate.battlelist_n_rows = int(cache.get("n_rows", 0) or 0)
+                    gamestate.battlelist_n_valid = int(cache.get("n_valid", 0) or 0)
+                    gamestate.battlelist_top_names = list(cache.get("top_names", []) or [])
+                    gamestate.battlelist_confidence = float(cache.get("confidence", 0.0) or 0.0)
+                    gamestate.battlelist_source = str(cache.get("source", "cache") or "cache")
+                    gamestate.battlelist_reason = "throttled"
+                    if isinstance(gamestate.hud_debug, dict):
+                        gamestate.hud_debug["battlelist"] = {
+                            "source": gamestate.battlelist_source,
+                            "reason": gamestate.battlelist_reason,
+                            "roi": cache.get("roi"),
+                            "n_rows": gamestate.battlelist_n_rows,
+                            "n_valid": gamestate.battlelist_n_valid,
+                            "confidence": float(gamestate.battlelist_confidence or 0.0),
+                        }
+                except Exception:
+                    pass
+
+            if do_battlelist and isinstance(rois, dict) and rois.get("battlelist_rows") is not None:
+                # Mark start time early so long OCR work doesn't immediately retrigger.
+                try:
+                    self._battlelist_last_ts = float(now)
+                except Exception:
+                    pass
+
                 rr = roi_to_px_result(
                     frame_shape=(int(frame.shape[0]), int(frame.shape[1])),
                     rois=rois,
@@ -1208,6 +1541,11 @@ class GameStateBuilder:
                     crop = frame[by : by + bh, bx : bx + bw]
 
                     rows = battlelist.extract_rows(crop)
+                    try:
+                        if self._battlelist_parse_max_rows > 0:
+                            rows = list(rows[: int(self._battlelist_parse_max_rows)])
+                    except Exception:
+                        pass
                     parsed = [battlelist.parse_row(rimg, i) for i, rimg in enumerate(rows)]
                     stable = battlelist.stabilize(self._battlelist_buf, parsed, window_n=10)
 
@@ -1256,6 +1594,21 @@ class GameStateBuilder:
                     if n_rows and n_valid == 0:
                         gamestate.battlelist_reason = "no_valid_rows"
 
+                    # Cache for throttled frames.
+                    try:
+                        self._battlelist_cache = {
+                            "entries": stable,
+                            "n_rows": int(n_rows),
+                            "n_valid": int(n_valid),
+                            "top_names": list(top_names[:10]),
+                            "confidence": float(global_conf),
+                            "source": str(gamestate.battlelist_source or ""),
+                            "reason": str(gamestate.battlelist_reason or ""),
+                            "roi": [int(bx), int(by), int(bw), int(bh)],
+                        }
+                    except Exception:
+                        pass
+
                     try:
                         if isinstance(gamestate.hud_debug, dict):
                             gamestate.hud_debug["battlelist"] = {
@@ -1269,6 +1622,7 @@ class GameStateBuilder:
                     except Exception:
                         pass
         except Exception:
+            # Keep previous cache on any failure.
             pass
 
         # Derivar obstáculos dinámicos (tile offsets) desde detecciones Roboflow.
@@ -1294,5 +1648,15 @@ class GameStateBuilder:
 
         # Aquí podríamos implementar lógica adicional para determinar hp_max/mp_max
         # Por ahora, los dejamos como None o podríamos estimarlos
+
+        # Update guard state based on observed duration.
+        try:
+            dt_ms = float((time.time() - float(t0)) * 1000.0)
+            self._vision_last_update_ms = dt_ms
+            if bool(self._vision_guard_enabled) and (not bool(guard_force)):
+                if dt_ms >= float(self._vision_guard_slow_ms):
+                    self._vision_guard_until_ts = float(time.time()) + float(self._vision_guard_cooldown_s)
+        except Exception:
+            pass
 
         return gamestate

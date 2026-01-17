@@ -29,6 +29,260 @@ def _add_src_to_syspath() -> None:
 
 
 class BotUI:
+    _measure_widgets: dict[str, object]
+
+    def _register_measure_widget(self, name: str, widget: object) -> None:
+        """Register a widget for UI layout measurement (best-effort)."""
+
+        try:
+            widgets = getattr(self, "_measure_widgets", None)
+            if not isinstance(widgets, dict):
+                widgets = {}
+                self._measure_widgets = widgets
+            if widget is None:
+                return
+            widgets[str(name)] = widget
+        except Exception:
+            pass
+
+    def _collect_layout_metrics(self) -> dict[str, dict[str, object]]:
+        """Collect widget metrics relative to the root window.
+
+        Notes:
+        - Includes `mapped`/`viewable` flags so callers can ignore widgets from
+          inactive Notebook tabs (their geometry can be stale).
+        """
+
+        out: dict[str, dict[str, object]] = {}
+        try:
+            root = cast(Any, getattr(self, "root", None))
+            if root is None:
+                return out
+            try:
+                root.update_idletasks()
+            except Exception:
+                pass
+
+            try:
+                root_rx = int(root.winfo_rootx())
+                root_ry = int(root.winfo_rooty())
+            except Exception:
+                root_rx = 0
+                root_ry = 0
+
+            widgets = cast(Any, getattr(self, "_measure_widgets", {}) or {})
+            for name in sorted(widgets.keys()):
+                w = widgets.get(name)
+                if w is None:
+                    continue
+                try:
+                    mapped = False
+                    viewable = False
+                    try:
+                        mapped = bool(w.winfo_ismapped())
+                    except Exception:
+                        mapped = False
+                    try:
+                        viewable = bool(w.winfo_viewable())
+                    except Exception:
+                        viewable = False
+
+                    rx = int(w.winfo_rootx()) - root_rx
+                    ry = int(w.winfo_rooty()) - root_ry
+                    ww = int(w.winfo_width())
+                    wh = int(w.winfo_height())
+                    out[str(name)] = {
+                        "x": rx,
+                        "y": ry,
+                        "w": ww,
+                        "h": wh,
+                        "mapped": mapped,
+                        "viewable": viewable,
+                    }
+                except Exception:
+                    continue
+        except Exception:
+            return out
+        return out
+
+    def _export_layout_metrics(self, *, out_file: str, print_lines: bool = True) -> dict[str, dict[str, object]]:
+        """Export layout metrics to JSON (and optionally print human lines)."""
+
+        metrics = {}
+        try:
+            metrics = self._collect_layout_metrics()
+        except Exception:
+            metrics = {}
+
+        if print_lines:
+            try:
+                for name in sorted(metrics.keys()):
+                    m = metrics[name]
+                    print(f"{name}: x={m.get('x', 0)} y={m.get('y', 0)} w={m.get('w', 0)} h={m.get('h', 0)}")
+            except Exception:
+                pass
+
+        try:
+            p = Path(out_file)
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            p.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        return metrics
+
+    def _maybe_measure_layout(self) -> None:
+        """Optional auto-measure hook (controlled by env UI_MEASURE_LAYOUT=1)."""
+
+        try:
+            enabled = (os.getenv("UI_MEASURE_LAYOUT", "") or "").strip().lower() in {"1", "true", "yes"}
+        except Exception:
+            enabled = False
+        if not enabled:
+            return
+
+        # Force a stable window size for reproducible measurements.
+        try:
+            w = int(float((os.getenv("UI_MEASURE_W", "980") or "980").strip() or "980"))
+        except Exception:
+            w = 980
+        try:
+            h = int(float((os.getenv("UI_MEASURE_H", "620") or "620").strip() or "620"))
+        except Exception:
+            h = 620
+        try:
+            self.root.geometry(f"{max(200, w)}x{max(200, h)}")
+        except Exception:
+            pass
+
+        try:
+            self.root.update_idletasks()
+        except Exception:
+            pass
+
+        out_path = str(self._repo_root / "logs" / "layout_metrics.json")
+        try:
+            self._export_layout_metrics(out_file=out_path, print_lines=True)
+        except Exception:
+            pass
+
+    def _apply_classic_styles(self) -> None:
+        """Apply a compact, classic ttk skin.
+
+        Best-effort only: never raises to avoid breaking the bot.
+        """
+
+        ttk = getattr(self, "_ttk", None)
+        if ttk is None:
+            return
+
+        # Font constants (requested look & feel)
+        try:
+            self.FONT_BASE = ("Segoe UI", 9)
+            self.FONT_BOLD = ("Segoe UI", 9, "bold")
+            self.FONT_MONO = ("Consolas", 9)
+        except Exception:
+            pass
+
+        # Theme
+        style = None
+        try:
+            try:
+                style = ttk.Style(master=self.root)
+            except TypeError:
+                style = ttk.Style()
+
+            try:
+                themes = set(style.theme_names() or [])
+            except Exception:
+                themes = set()
+
+            if "clam" in themes:
+                style.theme_use("clam")
+        except Exception:
+            style = None
+
+        # Fonts
+        try:
+            import tkinter.font as tkfont
+
+            df = tkfont.nametofont("TkDefaultFont")
+            df.configure(family="Segoe UI", size=9)
+            tf = tkfont.nametofont("TkTextFont")
+            tf.configure(family="Segoe UI", size=9)
+            ff = tkfont.nametofont("TkFixedFont")
+            ff.configure(family="Consolas", size=9)
+
+            try:
+                bf = tkfont.nametofont("TkHeadingFont")
+                bf.configure(family="Segoe UI", size=9, weight="bold")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        # ttk widget styling
+        try:
+            if style is None:
+                style = ttk.Style()
+
+            style.configure(".", padding=0)
+            style.configure("TNotebook", padding=0)
+            style.configure("TNotebook.Tab", padding=(10, 4))
+
+            # Bot.* styles (used in PASS2 layouts)
+            style.configure("Bot.TButton", padding=(10, 2))
+            style.configure("BotSmall.TButton", padding=(8, 2))
+            style.configure("Bot.TCheckbutton", padding=(6, 2))
+            style.configure("Bot.TNotebook.Tab", padding=(10, 4))
+
+            style.configure("Bot.Treeview", rowheight=18)
+            style.configure("Bot.Treeview.Heading", padding=(0, 0))
+
+            # Keep defaults sensible too
+            style.configure("TButton", padding=(10, 2))
+            style.configure("TCheckbutton", padding=(6, 2))
+            style.configure("Treeview", rowheight=18)
+            style.configure("Treeview.Heading", padding=(6, 2))
+        except Exception:
+            pass
+
+    def _classic_groupbox(self, parent, *, title: str, padx: int = 8, pady: int = 8):
+        """Classic bot groupbox: LabelFrame -> sunken inner -> padded content.
+
+        Returns (outer_label_frame, content_frame).
+        """
+
+        tk = self._tk
+        try:
+            outer = tk.LabelFrame(parent, text=str(title), padx=6, pady=6)
+        except Exception:
+            outer = tk.LabelFrame(parent, text=str(title))
+
+        inner = tk.Frame(outer, bd=1, relief="sunken")
+        inner.pack(fill="both", expand=True)
+
+        content = tk.Frame(inner, padx=int(padx), pady=int(pady))
+        content.pack(fill="both", expand=True)
+
+        try:
+            outer.configure(font=getattr(self, "FONT_BOLD", None) or ("Segoe UI", 9, "bold"))
+        except Exception:
+            pass
+        return outer, content
+
+    def _make_btn(self, parent, text: str, command, *, width: int = 12, small: bool = False):
+        """Create a button with Bot style (best-effort)."""
+
+        ttk = self._ttk
+        try:
+            style = "BotSmall.TButton" if bool(small) else "Bot.TButton"
+            return ttk.Button(parent, text=text, command=command, width=int(width), style=style)
+        except Exception:
+            return self._tk.Button(parent, text=text, command=command, width=int(width))
+
     def __init__(self) -> None:
         _add_src_to_syspath()
 
@@ -84,6 +338,9 @@ class BotUI:
         self._stop_event: threading.Event | None = None
         self._thread: threading.Thread | None = None
 
+        # UI layout measurement registry (optional tooling).
+        self._measure_widgets = {}
+
         # keep helpers reachable in instance
         self._WaypointStep = WaypointStep
         self._SetupConfig = SetupConfig
@@ -101,6 +358,12 @@ class BotUI:
         self.root = tk.Tk()
         self.root.title("Tibia Bot Framework")
         self.root.resizable(False, False)
+
+        # Classic UI skin (best-effort): theme/fonts/ttk styles.
+        try:
+            self._apply_classic_styles()
+        except Exception:
+            pass
 
         # Soak run id (requires a root window)
         self.soak_run_id_var = tk.StringVar(master=self.root, value="-")
@@ -589,6 +852,15 @@ class BotUI:
 
         notebook = ttk.Notebook(container)
         notebook.pack(fill="both", expand=True)
+        # Expose notebook for tests / introspection.
+        self.notebook = notebook
+
+        # Register common top-level widgets for layout measurement.
+        try:
+            self._register_measure_widget("root", self.root)
+            self._register_measure_widget("notebook", notebook)
+        except Exception:
+            pass
 
         tab_control = tk.Frame(notebook)
         tab_healing = tk.Frame(notebook)
@@ -599,49 +871,64 @@ class BotUI:
         tab_routes = tk.Frame(notebook)
 
         notebook.add(tab_control, text="Control")
-        notebook.add(tab_healing, text="Curación")
-        notebook.add(tab_targeting, text="Objetivos")
+        notebook.add(tab_healing, text="Healing")
+        notebook.add(tab_targeting, text="Targeting")
         notebook.add(tab_cavebot, text="Cavebot")
         notebook.add(tab_tools, text="Herramientas")
         notebook.add(tab_config, text="Configuración")
         notebook.add(tab_routes, text="Rutas / Cavebot")
 
         # --- TAB: Control ---
-        tk.Label(tab_control, text="Estado:").grid(row=0, column=0, sticky="w")
-        tk.Label(tab_control, textvariable=self.status_var, width=22, anchor="w").grid(row=0, column=1, sticky="w")
+        ctrl_root = tk.Frame(tab_control, padx=10, pady=10)
+        ctrl_root.pack(fill="both", expand=True)
 
-        self.start_btn = tk.Button(tab_control, text="Iniciar", width=12, command=self.start)
-        self.stop_btn = tk.Button(tab_control, text="Parar", width=12, command=self.stop, state="disabled")
-        self.tray_btn = tk.Button(tab_control, text="Minimizar", width=12, command=self._minimize_to_tray)
+        try:
+            self._register_measure_widget("control.root", ctrl_root)
+        except Exception:
+            pass
 
-        self.start_btn.grid(row=1, column=0, pady=(10, 0), sticky="w")
-        self.stop_btn.grid(row=1, column=1, pady=(10, 0), sticky="e")
-        self.tray_btn.grid(row=1, column=2, pady=(10, 0), sticky="e")
+        top_box, top_in = self._classic_groupbox(ctrl_root, title="Bot")
+        top_box.pack(fill="x")
+        tk.Label(top_in, text="Estado:").grid(row=0, column=0, sticky="w")
+        tk.Label(top_in, textvariable=self.status_var, width=22, anchor="w").grid(row=0, column=1, sticky="w", padx=(6, 0))
 
-        ctrl_info = tk.Frame(tab_control)
-        ctrl_info.grid(row=2, column=0, columnspan=4, sticky="w", pady=(10, 0))
-        ctrl_info_left = tk.Frame(ctrl_info)
-        ctrl_info_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        ctrl_info_right = tk.Frame(ctrl_info)
-        ctrl_info_right.grid(row=0, column=1, sticky="nw")
+        btns = tk.Frame(top_in)
+        btns.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        self.start_btn = self._make_btn(btns, text="Iniciar", width=12, command=self.start)
+        self.stop_btn = self._make_btn(btns, text="Parar", width=12, command=self.stop)
+        try:
+            self.stop_btn.configure(state="disabled")
+        except Exception:
+            pass
+        self.tray_btn = self._make_btn(btns, text="Minimizar", width=12, command=self._minimize_to_tray)
+        self.start_btn.grid(row=0, column=0, sticky="w")
+        self.stop_btn.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.tray_btn.grid(row=0, column=2, sticky="w", padx=(8, 0))
 
-        tk.Label(ctrl_info_left, text="HP:").grid(row=0, column=0, sticky="w")
-        tk.Label(ctrl_info_left, textvariable=self.hp_text, width=22, anchor="w").grid(row=0, column=1, sticky="w")
+        mid = tk.Frame(ctrl_root)
+        mid.pack(fill="x", pady=(10, 0))
+        mid.grid_columnconfigure(0, weight=1)
+        mid.grid_columnconfigure(1, weight=1)
 
-        tk.Label(ctrl_info_left, text="MP:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_left, textvariable=self.mp_text, width=22, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
+        info_box, info_in = self._classic_groupbox(mid, title="Estado")
+        info_box.grid(row=0, column=0, sticky="nw")
+        nav_box, nav_in = self._classic_groupbox(mid, title="Contexto")
+        nav_box.grid(row=0, column=1, sticky="nw", padx=(10, 0))
 
-        tk.Label(ctrl_info_left, text="Cap:").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_left, textvariable=self.cap_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
+        tk.Label(info_in, text="HP:").grid(row=0, column=0, sticky="w")
+        tk.Label(info_in, textvariable=self.hp_text, width=22, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(info_in, text="MP:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.mp_text, width=22, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(info_in, text="Cap:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.cap_text, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
 
         if bool(getattr(self, "_show_hpmp_max_inputs", False)):
-            # HP/MP max inputs (optional, helps bar fallback show cur/max).
-            tk.Label(ctrl_info_left, text="HP Max:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-            _hp_entry = tk.Entry(ctrl_info_left, textvariable=self.hp_max_override, width=8)
+            tk.Label(info_in, text="HP Max:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+            _hp_entry = tk.Entry(info_in, textvariable=self.hp_max_override, width=8)
             _hp_entry.grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-            tk.Label(ctrl_info_left, text="MP Max:").grid(row=4, column=0, sticky="w", pady=(6, 0))
-            _mp_entry = tk.Entry(ctrl_info_left, textvariable=self.mp_max_override, width=8)
+            tk.Label(info_in, text="MP Max:").grid(row=4, column=0, sticky="w", pady=(6, 0))
+            _mp_entry = tk.Entry(info_in, textvariable=self.mp_max_override, width=8)
             _mp_entry.grid(row=4, column=1, sticky="w", pady=(6, 0))
 
             def _on_apply(_evt=None) -> None:
@@ -655,34 +942,29 @@ class BotUI:
             _hp_entry.bind("<FocusOut>", _on_apply)
             _mp_entry.bind("<FocusOut>", _on_apply)
 
-            tk.Button(ctrl_info_left, text="Aplicar", width=10, command=self._apply_hpmp_max_env).grid(
-                row=5, column=1, sticky="w", pady=(6, 0)
-            )
-
+            self._hpmp_apply_btn = self._make_btn(info_in, text="Aplicar", width=10, command=self._apply_hpmp_max_env)
+            self._hpmp_apply_btn.grid(row=5, column=1, sticky="w", pady=(6, 0))
             sig_row = 6
         else:
             sig_row = 3
 
-        tk.Label(ctrl_info_left, text="Señales:").grid(row=sig_row, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_left, textvariable=self.signals_text, width=32, anchor="w").grid(row=sig_row, column=1, sticky="w", pady=(6, 0))
+        tk.Label(info_in, text="Señales:").grid(row=sig_row, column=0, sticky="w", pady=(6, 0))
+        tk.Label(info_in, textvariable=self.signals_text, width=32, anchor="w").grid(row=sig_row, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(ctrl_info_right, text="Objetivo:").grid(row=0, column=0, sticky="w")
-        tk.Label(ctrl_info_right, textvariable=self.target_text, width=36, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(nav_in, text="Objetivo:").grid(row=0, column=0, sticky="w")
+        tk.Label(nav_in, textvariable=self.target_text, width=36, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(nav_in, text="Recomendación:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(nav_in, textvariable=self.reco_text, width=36, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
+        tk.Label(nav_in, text="Waypoint:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Label(nav_in, textvariable=self.cavebot_wp_text, width=36, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
+        tk.Label(nav_in, text="Estado stream:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Label(nav_in, textvariable=self.stale_var, width=36, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(ctrl_info_right, text="Recomendación:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_right, textvariable=self.reco_text, width=36, anchor="w").grid(row=1, column=1, sticky="w", pady=(6, 0))
-
-        tk.Label(ctrl_info_right, text="Waypoint:").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_right, textvariable=self.cavebot_wp_text, width=36, anchor="w").grid(row=2, column=1, sticky="w", pady=(6, 0))
-
-        tk.Label(ctrl_info_right, text="Estado stream:").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Label(ctrl_info_right, textvariable=self.stale_var, width=36, anchor="w").grid(row=3, column=1, sticky="w", pady=(6, 0))
-
-        ctrl_diag = tk.Frame(tab_control)
-        ctrl_diag.grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
-        diag_left = tk.Frame(ctrl_diag)
+        diag_box, diag_in = self._classic_groupbox(ctrl_root, title="Diagnóstico")
+        diag_box.pack(fill="x", pady=(10, 0))
+        diag_left = tk.Frame(diag_in)
         diag_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        diag_right = tk.Frame(ctrl_diag)
+        diag_right = tk.Frame(diag_in)
         diag_right.grid(row=0, column=1, sticky="nw")
 
         tk.Label(diag_left, text="Salud:").grid(row=0, column=0, sticky="w")
@@ -710,7 +992,8 @@ class BotUI:
         self._stuck_detail_label.grid(row=1, column=2, sticky="w", pady=(6, 0))
 
         # Panel operador: ultimos eventos
-        tk.Label(tab_control, text="Eventos (últimos):").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        events_box, events_in = self._classic_groupbox(ctrl_root, title="Eventos")
+        events_box.pack(fill="both", expand=True, pady=(10, 0))
 
         def _copy_inputs_to_clipboard() -> None:
             # Prefer planned inputs; fall back to action_request.
@@ -736,28 +1019,30 @@ class BotUI:
                 except Exception:
                     pass
 
-        tk.Button(tab_control, text="Copiar inputs", width=14, command=_copy_inputs_to_clipboard).grid(
-            row=4, column=1, sticky="w", pady=(6, 0)
-        )
+        self._copy_inputs_btn = self._make_btn(events_in, text="Copiar inputs", width=14, command=_copy_inputs_to_clipboard)
+        self._copy_inputs_btn.grid(row=0, column=0, sticky="w")
 
-        tk.Label(tab_control, text="Inputs / Acciones:").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Label(events_in, text="Inputs / Acciones:").grid(row=0, column=1, sticky="w", padx=(12, 0))
         tk.Label(
-            tab_control,
+            events_in,
             textvariable=self.input_plan_text,
             width=52,
             anchor="nw",
             justify="left",
             font=("Consolas", 9),
-        ).grid(
-            row=4, column=3, sticky="w", pady=(6, 2)
-        )
+        ).grid(row=0, column=2, sticky="w")
 
-        self._events_text = tk.Text(tab_control, height=8, width=80, wrap="none", font=("Consolas", 9))
+        self._events_text = tk.Text(events_in, height=8, width=80, wrap="none", font=("Consolas", 9))
         try:
             self._events_text.configure(state="disabled")
         except Exception:
             pass
-        self._events_text.grid(row=5, column=0, columnspan=5, sticky="w", pady=(4, 0))
+        self._events_text.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
+
+        try:
+            self._register_measure_widget("control.events_text", self._events_text)
+        except Exception:
+            pass
 
         def _monitor_default() -> int:
             raw = os.getenv("FORCE_MONITOR", "2").strip() or "2"
@@ -1206,128 +1491,119 @@ class BotUI:
                 pass
 
         # --- TAB: Herramientas ---
-        tools_grid = tk.Frame(tab_tools)
-        tools_grid.grid(row=0, column=0, sticky="nw")
+        tools_root = tk.Frame(tab_tools, padx=10, pady=10)
+        tools_root.pack(fill="both", expand=True)
 
-        sanity_frame = tk.LabelFrame(tools_grid, text="Chequeos", padx=10, pady=8)
-        sanity_frame.grid(row=0, column=0, sticky="w")
-        tk.Button(sanity_frame, text="Chequeo ROI", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
-        tk.Button(sanity_frame, text="Probar OCR", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Probar coords", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Probar ancla", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Configurar ancla", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
-        tk.Button(sanity_frame, text="Configurar paneles", width=18, command=run_panel_setup_ui).grid(
-            row=1, column=0, sticky="w", pady=(8, 0)
-        )
-        tk.Button(sanity_frame, text="Wizard ROIs (EN)", width=18, command=run_roi_wizard_english_ui).grid(
+        sanity_frame, sanity_in = self._classic_groupbox(tools_root, title="Chequeos")
+        sanity_frame.pack(fill="x")
+        self._make_btn(sanity_in, text="Chequeo ROI", width=14, command=run_roi_sanity_ui).grid(row=0, column=0, sticky="w")
+        self._make_btn(sanity_in, text="Probar OCR", width=14, command=run_ocr_sanity_ui).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self._make_btn(sanity_in, text="Probar coords", width=14, command=run_coords_sanity_ui).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        self._make_btn(sanity_in, text="Probar ancla", width=14, command=run_anchor_sanity_ui).grid(row=0, column=3, sticky="w", padx=(8, 0))
+        self._make_btn(sanity_in, text="Configurar ancla", width=14, command=run_anchor_setup_ui).grid(row=0, column=4, sticky="w", padx=(8, 0))
+        self._make_btn(sanity_in, text="Configurar paneles", width=18, command=run_panel_setup_ui).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        self._make_btn(sanity_in, text="Wizard ROIs (EN)", width=18, command=run_roi_wizard_english_ui).grid(
             row=1, column=1, sticky="w", pady=(8, 0), padx=(8, 0)
         )
 
-        artifacts_frame = tk.LabelFrame(tools_grid, text="Abrir artefactos", padx=10, pady=8)
-        artifacts_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        artifacts_frame, artifacts_in = self._classic_groupbox(tools_root, title="Abrir artefactos")
+        artifacts_frame.pack(fill="x", pady=(10, 0))
 
-        tk.Button(artifacts_frame, text="Overlay ROI", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(
-            row=0, column=0, sticky="w"
-        )
-        tk.Button(artifacts_frame, text="Reporte ROI", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(
-            row=0, column=1, sticky="w", padx=(8, 0)
-        )
-        tk.Button(artifacts_frame, text="Overlay OCR", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(
-            row=0, column=2, sticky="w", padx=(8, 0)
-        )
-        tk.Button(artifacts_frame, text="Reporte OCR", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(
-            row=0, column=3, sticky="w", padx=(8, 0)
-        )
+        self._make_btn(artifacts_in, text="Overlay ROI", width=14, command=lambda: _open_last_artifact("overlay", "roi")).grid(row=0, column=0, sticky="w")
+        self._make_btn(artifacts_in, text="Reporte ROI", width=14, command=lambda: _open_last_artifact("report", "roi")).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self._make_btn(artifacts_in, text="Overlay OCR", width=14, command=lambda: _open_last_artifact("overlay", "ocr")).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        self._make_btn(artifacts_in, text="Reporte OCR", width=14, command=lambda: _open_last_artifact("report", "ocr")).grid(row=0, column=3, sticky="w", padx=(8, 0))
 
-        tk.Button(artifacts_frame, text="Overlay coords", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(
-            row=1, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(artifacts_frame, text="Reporte coords", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(
-            row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
-        )
-        tk.Button(artifacts_frame, text="Overlay ancla", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(
-            row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
-        )
-        tk.Button(artifacts_frame, text="Reporte ancla", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(
-            row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0)
-        )
+        self._make_btn(artifacts_in, text="Overlay coords", width=14, command=lambda: _open_last_artifact("overlay", "coords")).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self._make_btn(artifacts_in, text="Reporte coords", width=14, command=lambda: _open_last_artifact("report", "coords")).grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
+        self._make_btn(artifacts_in, text="Overlay ancla", width=14, command=lambda: _open_last_artifact("overlay", "anchor")).grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        self._make_btn(artifacts_in, text="Reporte ancla", width=14, command=lambda: _open_last_artifact("report", "anchor")).grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
 
-        last_frame = tk.LabelFrame(tools_grid, text="Últimos resultados", padx=10, pady=8)
-        last_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
+        last_frame, last_in = self._classic_groupbox(tools_root, title="Últimos resultados")
+        last_frame.pack(fill="x", pady=(10, 0))
 
-        tk.Label(last_frame, text="ROI:").grid(row=0, column=0, sticky="w")
-        tk.Label(last_frame, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(row=0, column=1, sticky="w")
-        tk.Label(last_frame, textvariable=self.last_roi_dir_var, width=60, anchor="w").grid(row=1, column=1, columnspan=3, sticky="w")
+        tk.Label(last_in, text="ROI:").grid(row=0, column=0, sticky="w")
+        tk.Label(last_in, textvariable=self.last_roi_summary_var, width=22, anchor="w").grid(row=0, column=1, sticky="w")
+        tk.Label(last_in, textvariable=self.last_roi_dir_var, width=60, anchor="w").grid(row=1, column=1, columnspan=3, sticky="w")
 
-        tk.Label(last_frame, text="OCR:").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_ocr_dir_var, width=60, anchor="w").grid(row=3, column=1, columnspan=3, sticky="w")
+        tk.Label(last_in, text="OCR:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_ocr_summary_var, width=22, anchor="w").grid(row=2, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_ocr_dir_var, width=60, anchor="w").grid(row=3, column=1, columnspan=3, sticky="w")
 
-        tk.Label(last_frame, text="Coords:").grid(row=4, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_coords_dir_var, width=60, anchor="w").grid(row=5, column=1, columnspan=3, sticky="w")
+        tk.Label(last_in, text="Coords:").grid(row=4, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_coords_summary_var, width=22, anchor="w").grid(row=4, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_coords_dir_var, width=60, anchor="w").grid(row=5, column=1, columnspan=3, sticky="w")
 
-        tk.Label(last_frame, text="Ancla:").grid(row=6, column=0, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(row=6, column=1, sticky="w", pady=(8, 0))
-        tk.Label(last_frame, textvariable=self.last_anchor_dir_var, width=60, anchor="w").grid(row=7, column=1, columnspan=3, sticky="w")
+        tk.Label(last_in, text="Ancla:").grid(row=6, column=0, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_anchor_summary_var, width=22, anchor="w").grid(row=6, column=1, sticky="w", pady=(8, 0))
+        tk.Label(last_in, textvariable=self.last_anchor_dir_var, width=60, anchor="w").grid(row=7, column=1, columnspan=3, sticky="w")
+
+        try:
+            self._register_measure_widget("tools.sanity", sanity_frame)
+            self._register_measure_widget("tools.artifacts", artifacts_frame)
+            self._register_measure_widget("tools.last", last_frame)
+        except Exception:
+            pass
 
         # --- TAB: Healing ---
-        tk.Checkbutton(tab_healing, text="Habilitar curación", variable=self.healing_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
+        heal_root = tk.Frame(tab_healing, padx=8, pady=8)
+        heal_root.pack(fill="both", expand=True)
 
-        heal_frame = tk.LabelFrame(tab_healing, text="Configuración", padx=10, pady=8)
-        heal_frame.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        heal_left = tk.Frame(heal_frame)
-        heal_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        heal_right = tk.Frame(heal_frame)
-        heal_right.grid(row=0, column=1, sticky="nw")
+        top_box, top_in = self._classic_groupbox(heal_root, title="Healing")
+        top_box.pack(fill="x")
+        tk.Checkbutton(top_in, text="Enable healing", variable=self.healing_enabled).grid(row=0, column=0, sticky="w")
 
-        tk.Label(heal_left, text="Curar si HP < (%)").grid(row=0, column=0, sticky="w")
-        tk.Spinbox(heal_left, from_=1, to=100, textvariable=self.heal_hp_below_pct, width=6).grid(
-            row=0, column=1, sticky="w"
-        )
+        # Inner notebook: keeps the classic feel and reduces clutter.
+        heal_nb = ttk.Notebook(heal_root)
+        try:
+            heal_nb.configure(style="Bot.TNotebook")
+        except Exception:
+            pass
+        heal_nb.pack(fill="both", expand=True, pady=(8, 0))
+        heal_tab_potions = tk.Frame(heal_nb)
+        heal_tab_spells = tk.Frame(heal_nb)
+        heal_nb.add(heal_tab_potions, text="Potions")
+        heal_nb.add(heal_tab_spells, text="Spells")
 
-        tk.Label(heal_left, text="Recuperar HP a (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(heal_left, from_=1, to=100, textvariable=self.heal_hp_recover_pct, width=6).grid(
-            row=1, column=1, sticky="w", pady=(6, 0)
-        )
+        # --- Potions / thresholds ---
+        pot_grid = tk.Frame(heal_tab_potions, padx=8, pady=8)
+        pot_grid.pack(fill="both", expand=True)
+        pot_grid.grid_columnconfigure(0, weight=1)
+        pot_grid.grid_columnconfigure(1, weight=1)
 
-        tk.Label(heal_left, text="Acción HP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         f_keys = [f"F{i}" for i in range(1, 13)]
-        ttk.Combobox(heal_left, textvariable=self.heal_hp_action, values=f_keys, width=8, state="normal").grid(
-            row=2, column=1, sticky="w", pady=(6, 0)
-        )
 
-        tk.Label(heal_left, text="Enfriamiento (s)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(heal_left, textvariable=self.heal_cooldown_s, width=8).grid(row=3, column=1, sticky="w", pady=(6, 0))
+        hp_box, hp_in = self._classic_groupbox(pot_grid, title="HP", padx=10, pady=10)
+        hp_box.grid(row=0, column=0, sticky="nw")
+        mp_box, mp_in = self._classic_groupbox(pot_grid, title="MP", padx=10, pady=10)
+        mp_box.grid(row=0, column=1, sticky="nw", padx=(10, 0))
 
-        tk.Label(heal_right, text="Curar si MP < (%)").grid(row=0, column=0, sticky="w")
-        tk.Spinbox(heal_right, from_=0, to=100, textvariable=self.heal_mp_below_pct, width=6).grid(
-            row=0, column=1, sticky="w"
-        )
+        # HP
+        tk.Label(hp_in, text="Heal if HP < (%)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(hp_in, from_=1, to=100, textvariable=self.heal_hp_below_pct, width=6).grid(row=0, column=1, sticky="w", padx=(6, 0))
+        tk.Label(hp_in, text="Recover HP to (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(hp_in, from_=1, to=100, textvariable=self.heal_hp_recover_pct, width=6).grid(row=1, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        tk.Label(hp_in, text="HP action (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(hp_in, textvariable=self.heal_hp_action, values=f_keys, width=10, state="normal").grid(row=2, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        tk.Label(hp_in, text="Cooldown (s)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(hp_in, textvariable=self.heal_cooldown_s, width=10).grid(row=3, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
 
-        tk.Label(heal_right, text="Recuperar MP a (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(heal_right, from_=0, to=100, textvariable=self.heal_mp_recover_pct, width=6).grid(
-            row=1, column=1, sticky="w", pady=(6, 0)
-        )
+        # MP
+        tk.Label(mp_in, text="Heal if MP < (%)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(mp_in, from_=0, to=100, textvariable=self.heal_mp_below_pct, width=6).grid(row=0, column=1, sticky="w", padx=(6, 0))
+        tk.Label(mp_in, text="Recover MP to (%)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(mp_in, from_=0, to=100, textvariable=self.heal_mp_recover_pct, width=6).grid(row=1, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        tk.Label(mp_in, text="MP action (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(mp_in, textvariable=self.heal_mp_action, values=f_keys, width=10, state="normal").grid(row=2, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        tk.Label(mp_in, text="Generic (fallback)").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(mp_in, textvariable=self.heal_action, values=f_keys, width=10, state="normal").grid(row=3, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
 
-        tk.Label(heal_right, text="Acción MP (F1-F12)").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(heal_right, textvariable=self.heal_mp_action, values=f_keys, width=8, state="normal").grid(
-            row=2, column=1, sticky="w", pady=(6, 0)
-        )
-
-        tk.Label(heal_right, text="Accion generica (fallback)").grid(row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(heal_right, textvariable=self.heal_action, values=f_keys, width=8, state="normal").grid(
-            row=3, column=1, sticky="w", pady=(6, 0)
-        )
-
-        # Spells hotkeys (UI-driven)
-        spells_frame = tk.LabelFrame(tab_healing, text="Spells (Hotkeys)", padx=10, pady=8)
-        spells_frame.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        # --- Spells hotkeys (UI-driven) ---
+        spells_box, spells_in = self._classic_groupbox(heal_tab_spells, title="Spells (Hotkeys)", padx=10, pady=10)
+        spells_box.pack(fill="both", expand=True, padx=8, pady=8)
         tk.Checkbutton(
-            spells_frame,
-            text="Habilitar spells (usa hotkeys configuradas)",
+            spells_in,
+            text="Enable spells (use configured hotkeys)",
             variable=self.heal_spells_enabled,
         ).grid(row=0, column=0, columnspan=4, sticky="w")
 
@@ -1420,15 +1696,13 @@ class BotUI:
                 set_hotkeys({"utani hur": "F2", "exana kor": "F1", "utamo tempo": "F3"})
                 return
 
-        preset_row = tk.Frame(spells_frame)
-        preset_row.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        preset_row = tk.Frame(spells_in)
+        preset_row.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
         tk.Label(preset_row, text="Preset:").grid(row=0, column=0, sticky="w")
         ttk.Combobox(preset_row, textvariable=self.heal_spells_preset, values=preset_choices, width=22, state="readonly").grid(
             row=0, column=1, sticky="w", padx=(6, 0)
         )
-        tk.Button(preset_row, text="Aplicar", width=10, command=_apply_spell_preset).grid(
-            row=0, column=2, sticky="w", padx=(8, 0)
-        )
+        self._make_btn(preset_row, "Apply", _apply_spell_preset, width=10, small=True).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
         def _clear_spell_preset() -> None:
             try:
@@ -1437,9 +1711,7 @@ class BotUI:
                 pass
             _apply_spell_preset()
 
-        tk.Button(preset_row, text="Limpiar", width=10, command=_clear_spell_preset).grid(
-            row=0, column=3, sticky="w", padx=(6, 0)
-        )
+        self._make_btn(preset_row, "Clear", _clear_spell_preset, width=10, small=True).grid(row=0, column=3, sticky="w", padx=(6, 0))
 
         # Allow common hotkeys + free typing (CTRL+F1, ALT+1, etc.)
         hotkey_values = [""] + list(f_keys)
@@ -1455,10 +1727,10 @@ class BotUI:
         except Exception:
             spells = []
         if spells:
-            tk.Label(spells_frame, text="Spell").grid(row=2, column=0, sticky="w", pady=(6, 0))
-            tk.Label(spells_frame, text="Hotkey").grid(row=2, column=1, sticky="w", pady=(6, 0))
-            tk.Label(spells_frame, text="Spell").grid(row=2, column=2, sticky="w", pady=(6, 0), padx=(18, 0))
-            tk.Label(spells_frame, text="Hotkey").grid(row=2, column=3, sticky="w", pady=(6, 0))
+            tk.Label(spells_in, text="Spell").grid(row=2, column=0, sticky="w", pady=(10, 0))
+            tk.Label(spells_in, text="Hotkey").grid(row=2, column=1, sticky="w", pady=(10, 0))
+            tk.Label(spells_in, text="Spell").grid(row=2, column=2, sticky="w", pady=(10, 0), padx=(18, 0))
+            tk.Label(spells_in, text="Hotkey").grid(row=2, column=3, sticky="w", pady=(10, 0))
 
             per_col = (len(spells) + 1) // 2
             for i, spell in enumerate(spells):
@@ -1472,16 +1744,16 @@ class BotUI:
                 except Exception:
                     continue
 
-                tk.Label(spells_frame, text=str(spell)).grid(row=row, column=col, sticky="w")
+                tk.Label(spells_in, text=str(spell)).grid(row=row, column=col, sticky="w")
                 ttk.Combobox(
-                    spells_frame,
+                    spells_in,
                     textvariable=var,
                     values=hotkey_values,
                     width=12,
                     state="normal",
                 ).grid(row=row, column=col + 1, sticky="w", padx=((0, 0) if col == 0 else (0, 0)))
         else:
-            tk.Label(spells_frame, text="(Sin lista de spells disponible)").grid(row=1, column=0, sticky="w")
+            tk.Label(spells_in, text="(No spell list available)").grid(row=2, column=0, sticky="w", pady=(10, 0))
 
         # --- TAB: Cavebot ---
         # Layout inspirado en bots clásicos: sub-tabs para reducir clutter.
@@ -1500,6 +1772,15 @@ class BotUI:
         cb_left.grid(row=0, column=0, sticky="nw", padx=(0, 12))
         cb_right = tk.LabelFrame(cb_top, text="Estado", padx=10, pady=8)
         cb_right.grid(row=0, column=1, sticky="nw")
+
+        # Layout measurement anchors (Cavebot tab)
+        try:
+            self._register_measure_widget("cavebot.nb", cb_nb)
+            self._register_measure_widget("cavebot.top", cb_top)
+            self._register_measure_widget("cavebot.left", cb_left)
+            self._register_measure_widget("cavebot.right", cb_right)
+        except Exception:
+            pass
 
         tk.Checkbutton(cb_left, text="Habilitar cavebot", variable=self.cavebot_enabled).grid(
             row=0, column=0, columnspan=3, sticky="w"
@@ -1810,6 +2091,11 @@ class BotUI:
         self._route_listbox = tk.Listbox(cb_tab_waypoints, height=10, width=60)
         self._route_listbox.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
+        try:
+            self._register_measure_widget("cavebot.checklist", self._route_listbox)
+        except Exception:
+            pass
+
         def request_step_jump_selected() -> None:
             try:
                 sel = self._route_listbox.curselection()
@@ -1945,17 +2231,30 @@ class BotUI:
         tk.Label(inj, textvariable=self.injection_block_reason_var, width=34, anchor="w").grid(row=7, column=1, sticky="w", pady=(2, 0))
 
         # --- TAB: Targeting ---
-        # Layout inspirado en "Monster Targeting" / "AutoTarget" de bots clásicos.
-        tgt_grid = tk.Frame(tab_targeting)
-        tgt_grid.grid(row=0, column=0, sticky="nw")
-        tgt_left = tk.Frame(tgt_grid)
-        tgt_left.grid(row=0, column=0, sticky="nw", padx=(0, 16))
-        tgt_right = tk.Frame(tgt_grid)
-        tgt_right.grid(row=0, column=1, sticky="nw")
+        # Classic-bot style: 2 panels top, 3 panels bottom.
+        tgt_grid = tk.Frame(tab_targeting, padx=8, pady=8)
+        tgt_grid.grid(row=0, column=0, sticky="nsew")
+        try:
+            tab_targeting.grid_rowconfigure(0, weight=1)
+            tab_targeting.grid_columnconfigure(0, weight=1)
+        except Exception:
+            pass
+
+        tgt_grid.grid_rowconfigure(0, weight=1)
+        tgt_grid.grid_rowconfigure(1, weight=1)
+        tgt_grid.grid_columnconfigure(0, weight=1)
+        tgt_grid.grid_columnconfigure(1, weight=1)
+        tgt_grid.grid_columnconfigure(2, weight=1)
 
         # Monster list / behaviors: por ahora se edita en archivo (mejor que duplicar un editor YAML en UI)
-        monsters_frame = tk.LabelFrame(tgt_left, text="Monstruos (bestiary_match.yaml)", padx=10, pady=8)
-        monsters_frame.grid(row=0, column=0, sticky="w")
+        monsters_box, monsters_in = self._classic_groupbox(tgt_grid, title="Monsters")
+        monsters_box.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=(0, 10))
+
+        try:
+            self._register_measure_widget("targeting.grid", tgt_grid)
+            self._register_measure_widget("targeting.monsters", monsters_box)
+        except Exception:
+            pass
 
         def open_bestiary_rules() -> None:
             try:
@@ -1973,17 +2272,23 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Label(monsters_frame, text="Editar reglas/prioridades desde archivo:").grid(row=0, column=0, columnspan=2, sticky="w")
-        tk.Button(monsters_frame, text="Abrir bestiary_match.yaml", width=22, command=open_bestiary_rules).grid(
-            row=1, column=0, sticky="w", pady=(6, 0)
+        tk.Label(monsters_in, text="Edit rules/priorities in files:").grid(row=0, column=0, columnspan=2, sticky="w")
+        self._make_btn(monsters_in, "Open bestiary_match.yaml", open_bestiary_rules, width=22).grid(
+            row=1, column=0, sticky="w", pady=(8, 0)
         )
-        tk.Button(monsters_frame, text="Abrir creatures_registry.json", width=22, command=open_creatures_registry).grid(
-            row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
+        self._make_btn(monsters_in, "Open creatures_registry.json", open_creatures_registry, width=24).grid(
+            row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0)
         )
 
         # Targeting profiles (UI-only). Stored in configs/targeting_profiles/*.json.
-        profiles_frame = tk.LabelFrame(tgt_left, text="Targeting profile", padx=10, pady=8)
-        profiles_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        profiles_box, profiles_in = self._classic_groupbox(tgt_grid, title="Targeting profile")
+        profiles_box.grid(row=0, column=1, columnspan=2, sticky="nsew", pady=(0, 10))
+        try:
+            profiles_in.grid_columnconfigure(0, weight=0)
+            profiles_in.grid_columnconfigure(1, weight=1)
+            profiles_in.grid_columnconfigure(2, weight=0)
+        except Exception:
+            pass
 
         def _profiles_dir() -> Path:
             try:
@@ -2099,30 +2404,42 @@ class BotUI:
             except Exception as e:
                 self.targeting_status_var.set(f"save failed: {e}")
 
-        tk.Label(profiles_frame, text="Perfil").grid(row=0, column=0, sticky="w")
+        tk.Label(profiles_in, text="Profile").grid(row=0, column=0, sticky="w")
         profile_combo = ttk.Combobox(
-            profiles_frame,
+            profiles_in,
             textvariable=self.targeting_profile_name,
             values=_list_profiles(),
             width=22,
         )
-        profile_combo.grid(row=0, column=1, sticky="w")
+        profile_combo.grid(row=0, column=1, sticky="w", padx=(6, 0))
         self._targeting_profile_combo = profile_combo
 
-        btns = tk.Frame(profiles_frame)
-        btns.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        tk.Button(btns, text="Cargar", width=10, command=_load_profile).grid(row=0, column=0)
-        tk.Button(btns, text="Guardar", width=10, command=_save_profile).grid(row=0, column=1, padx=(6, 0))
-        tk.Button(
+        btns = tk.Frame(profiles_in)
+        btns.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self._make_btn(btns, "Load", _load_profile, width=10).grid(row=0, column=0)
+        self._make_btn(btns, "Save", _save_profile, width=10).grid(row=0, column=1, padx=(6, 0))
+        self._make_btn(
             btns,
-            text="Abrir carpeta",
-            width=14,
-            command=lambda: os.startfile(os.path.abspath(str(_profiles_dir()))),
+            "Open folder",
+            lambda: os.startfile(os.path.abspath(str(_profiles_dir()))),
+            width=12,
         ).grid(row=0, column=2, padx=(6, 0))
 
-        tk.Label(profiles_frame, text="Rules (JSON)").grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        rules_box = tk.Text(profiles_frame, width=46, height=8)
-        rules_box.grid(row=3, column=0, columnspan=2, sticky="w")
+        tk.Label(profiles_in, text="Rules (JSON)").grid(row=2, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        rules_box = tk.Text(profiles_in, width=72, height=10, wrap="none", font=("Consolas", 9))
+        rules_box.grid(row=3, column=0, columnspan=3, sticky="nsew")
+        try:
+            sb_rules = tk.Scrollbar(profiles_in, orient="vertical", command=rules_box.yview)
+            rules_box.configure(yscrollcommand=sb_rules.set)
+            sb_rules.grid(row=3, column=3, sticky="ns")
+        except Exception:
+            pass
+        try:
+            sb_rules_x = tk.Scrollbar(profiles_in, orient="horizontal", command=rules_box.xview)
+            rules_box.configure(xscrollcommand=sb_rules_x.set)
+            sb_rules_x.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        except Exception:
+            pass
         self._targeting_rules_box = rules_box
         try:
             rules_box.insert("1.0", _format_rules(self.targeting_rules))
@@ -2133,43 +2450,54 @@ class BotUI:
         except Exception:
             pass
 
-        tk.Label(profiles_frame, textvariable=self.targeting_status_var, fg="#555").grid(
-            row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
+        tk.Label(profiles_in, textvariable=self.targeting_status_var, fg="#555").grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         # AutoTarget controls (assistant-only).
-        at_frame = tk.LabelFrame(tgt_right, text="AutoTarget", padx=10, pady=8)
-        at_frame.grid(row=0, column=0, sticky="w")
+        at_box, at_in = self._classic_groupbox(tgt_grid, title="AutoTarget")
+        at_box.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        try:
+            at_in.grid_columnconfigure(0, weight=1)
+            at_in.grid_columnconfigure(1, weight=0)
+        except Exception:
+            pass
 
-        tk.Checkbutton(at_frame, text="AutoTarget activado", variable=self.autotarget_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Checkbutton(at_frame, text="Follow al activar", variable=self.autotarget_follow_on_enable).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(4, 0)
-        )
-        tk.Label(at_frame, text="Distancia de seguimiento (tiles)").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Checkbutton(at_in, text="Enabled", variable=self.autotarget_enabled).grid(row=0, column=0, columnspan=2, sticky="w")
+        tk.Checkbutton(at_in, text="Follow on enable", variable=self.autotarget_follow_on_enable).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        tk.Label(at_in, text="Follow distance (tiles)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            at_frame,
+            at_in,
             from_=0,
             to=10,
             increment=1,
             textvariable=self.autotarget_follow_distance_tiles,
             width=6,
-        ).grid(row=2, column=1, sticky="w", pady=(6, 0))
+        ).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(at_frame, text="Re-target si se pierde (ms)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Label(at_in, text="Retarget if lost (ms)").grid(row=3, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            at_frame,
+            at_in,
             from_=50,
             to=10000,
             increment=50,
             textvariable=self.autotarget_retarget_lost_ms,
             width=6,
-        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(at_frame, text="Lista blanca (1 por línea)").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        wl_box = tk.Text(at_frame, width=28, height=4)
-        wl_box.grid(row=5, column=0, columnspan=2, sticky="w")
+        tk.Label(at_in, text="Whitelist (1 per line)").grid(row=4, column=0, sticky="w", pady=(10, 0))
+        wl_box = tk.Text(at_in, width=34, height=4, wrap="none", font=("Consolas", 9))
+        wl_box.grid(row=5, column=0, columnspan=2, sticky="nsew")
+        try:
+            sb_wl = tk.Scrollbar(at_in, orient="vertical", command=wl_box.yview)
+            wl_box.configure(yscrollcommand=sb_wl.set)
+            sb_wl.grid(row=5, column=2, sticky="ns")
+        except Exception:
+            pass
+        try:
+            sb_wl_x = tk.Scrollbar(at_in, orient="horizontal", command=wl_box.xview)
+            wl_box.configure(xscrollcommand=sb_wl_x.set)
+            sb_wl_x.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        except Exception:
+            pass
         try:
             init_wl = str(self.autotarget_whitelist_text.get() or "").strip()
             if init_wl:
@@ -2178,9 +2506,21 @@ class BotUI:
             pass
         self._autotarget_whitelist_box = wl_box
 
-        tk.Label(at_frame, text="Lista negra (1 por línea)").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        bl_box = tk.Text(at_frame, width=28, height=4)
-        bl_box.grid(row=7, column=0, columnspan=2, sticky="w")
+        tk.Label(at_in, text="Blacklist (1 per line)").grid(row=7, column=0, sticky="w", pady=(10, 0))
+        bl_box = tk.Text(at_in, width=34, height=4, wrap="none", font=("Consolas", 9))
+        bl_box.grid(row=8, column=0, columnspan=2, sticky="nsew")
+        try:
+            sb_bl = tk.Scrollbar(at_in, orient="vertical", command=bl_box.yview)
+            bl_box.configure(yscrollcommand=sb_bl.set)
+            sb_bl.grid(row=8, column=2, sticky="ns")
+        except Exception:
+            pass
+        try:
+            sb_bl_x = tk.Scrollbar(at_in, orient="horizontal", command=bl_box.xview)
+            bl_box.configure(xscrollcommand=sb_bl_x.set)
+            sb_bl_x.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        except Exception:
+            pass
         try:
             init_bl = str(self.autotarget_blacklist_text.get() or "").strip()
             if init_bl:
@@ -2199,73 +2539,98 @@ class BotUI:
             pass
 
         # Battlelist targeting (vision-based).
-        blt_frame = tk.LabelFrame(tgt_right, text="Selección en battlelist", padx=10, pady=8)
-        blt_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
+        blt_box, blt_in = self._classic_groupbox(tgt_grid, title="Battlelist targeting")
+        blt_box.grid(row=1, column=1, sticky="nsew", padx=(0, 10))
+        try:
+            blt_in.grid_columnconfigure(0, weight=1)
+            blt_in.grid_columnconfigure(1, weight=0)
+        except Exception:
+            pass
 
-        tk.Checkbutton(blt_frame, text="AutoTarget (visión) activado", variable=self.bl_target_enabled).grid(
-            row=0, column=0, columnspan=2, sticky="w"
-        )
-        tk.Label(blt_frame, text="Umbral de vivo").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        tk.Checkbutton(blt_in, text="Enabled", variable=self.bl_target_enabled).grid(row=0, column=0, columnspan=2, sticky="w")
+        tk.Label(blt_in, text="Alive threshold").grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            blt_frame,
+            blt_in,
             from_=0.1,
             to=1.0,
             increment=0.05,
             textvariable=self.bl_target_alive_threshold,
             width=6,
-        ).grid(row=1, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=1, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(blt_frame, text="Debounce muerto (frames)").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Label(blt_in, text="Dead debounce (frames)").grid(row=2, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            blt_frame,
+            blt_in,
             from_=1,
             to=30,
             increment=1,
             textvariable=self.bl_target_dead_debounce,
             width=6,
-        ).grid(row=2, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=2, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(blt_frame, text="Debounce selección (frames)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Label(blt_in, text="Select debounce (frames)").grid(row=3, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            blt_frame,
+            blt_in,
             from_=1,
             to=20,
             increment=1,
             textvariable=self.bl_target_select_debounce,
             width=6,
-        ).grid(row=3, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=3, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(blt_frame, text="Enfriamiento scroll (ms)").grid(row=4, column=0, sticky="w", pady=(4, 0))
+        tk.Label(blt_in, text="Scroll cooldown (ms)").grid(row=4, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            blt_frame,
+            blt_in,
             from_=0,
             to=5000,
             increment=50,
             textvariable=self.bl_target_scroll_cooldown_ms,
             width=6,
-        ).grid(row=4, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=4, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Label(blt_frame, text="Enfriamiento target (ms)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Label(blt_in, text="Target cooldown (ms)").grid(row=5, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            blt_frame,
+            blt_in,
             from_=0,
             to=5000,
             increment=50,
             textvariable=self.bl_target_target_cooldown_ms,
             width=6,
-        ).grid(row=5, column=1, sticky="w", pady=(4, 0))
+        ).grid(row=5, column=1, sticky="w", pady=(6, 0), padx=(6, 0))
 
-        tk.Checkbutton(blt_frame, text="Nombres por OCR", variable=self.bl_target_ocr_names).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(6, 0)
-        )
+        tk.Checkbutton(blt_in, text="Use OCR names", variable=self.bl_target_ocr_names).grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        # Bottom-right: quick hints/status.
+        info_box, info_in = self._classic_groupbox(tgt_grid, title="Notes")
+        info_box.grid(row=1, column=2, sticky="nsew")
+        tk.Label(
+            info_in,
+            text=(
+                "Tips:\n"
+                "- AutoTarget uses whitelist/blacklist names (one per line).\n"
+                "- Battlelist targeting is vision-based (OBS-friendly).\n"
+                "- Profile rules are JSON; changes auto-save on focus-out."
+            ),
+            justify="left",
+            anchor="w",
+        ).pack(fill="x")
 
         # --- TAB: Configuracion --- (dos columnas)
-        cfg_grid = tk.Frame(tab_config)
-        cfg_grid.grid(row=0, column=0, columnspan=4, sticky="nw")
+        cfg_root = tk.Frame(tab_config, padx=10, pady=10)
+        cfg_root.pack(fill="both", expand=True)
+
+        cfg_grid = tk.Frame(cfg_root)
+        cfg_grid.pack(fill="both", expand=True)
         cfg_left = tk.Frame(cfg_grid)
         cfg_left.grid(row=0, column=0, sticky="nw", padx=(0, 16))
         cfg_right = tk.Frame(cfg_grid)
         cfg_right.grid(row=0, column=1, sticky="nw")
+
+        try:
+            self._register_measure_widget("config.left", cfg_left)
+            self._register_measure_widget("config.right", cfg_right)
+        except Exception:
+            pass
 
         # ROIs (izquierda) - lo esencial primero
         tk.Label(cfg_left, text="Config ROIs (override)").grid(row=0, column=0, sticky="w", pady=(4, 0))
@@ -2287,7 +2652,7 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_left, text="Examinar", width=10, command=browse_rois).grid(
+        self._make_btn(cfg_left, text="Examinar", width=10, command=browse_rois).grid(
             row=0, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
@@ -2354,7 +2719,7 @@ class BotUI:
             ]
             _run_tool_async(cmd, title="Selector de ROI (ring/amulet)")
 
-        tk.Button(cfg_left, text="Ajustar interface", width=14, command=pick_one_roi).grid(
+        self._make_btn(cfg_left, text="Ajustar interface", width=14, command=pick_one_roi).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(8, 0)
         )
 
@@ -2362,7 +2727,7 @@ class BotUI:
         tk.Spinbox(cfg_left, from_=0, to=9, increment=1, textvariable=self.roi_pick_monitor, width=6).grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Button(cfg_left, text="Ajustar ring/amulet", width=14, command=pick_ring_amulet).grid(
+        self._make_btn(cfg_left, text="Ajustar ring/amulet", width=14, command=pick_ring_amulet).grid(
             row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
@@ -2372,24 +2737,24 @@ class BotUI:
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
         # Debug (opcional): simulación de señales
-        sim_frame = tk.LabelFrame(cfg_left, text="Simulación (debug)", padx=8, pady=6)
+        sim_frame, sim_in = self._classic_groupbox(cfg_left, title="Simulación (debug)", padx=8, pady=6)
         sim_frame.grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
-        tk.Checkbutton(sim_frame, text="Habilitar", variable=self.sim_enabled).grid(row=0, column=0, sticky="w")
-        tk.Checkbutton(sim_frame, text="Paralizado", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Checkbutton(sim_frame, text="Haste", variable=self.sim_haste_active).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(6, 0))
-        tk.Checkbutton(sim_frame, text="Utamo", variable=self.sim_utamo_active).grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Checkbutton(sim_frame, text="Hambriento", variable=self.sim_hungry).grid(row=2, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
+        tk.Checkbutton(sim_in, text="Habilitar", variable=self.sim_enabled).grid(row=0, column=0, sticky="w")
+        tk.Checkbutton(sim_in, text="Paralizado", variable=self.sim_paralyzed).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Checkbutton(sim_in, text="Haste", variable=self.sim_haste_active).grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(6, 0))
+        tk.Checkbutton(sim_in, text="Utamo", variable=self.sim_utamo_active).grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Checkbutton(sim_in, text="Hambriento", variable=self.sim_hungry).grid(row=2, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
 
         # Telemetría / Replay / Logs / Overlay (derecha) - agrupado estilo "HUD"
-        telemetry_frame = tk.LabelFrame(cfg_right, text="Telemetría", padx=10, pady=8)
+        telemetry_frame, telemetry_in = self._classic_groupbox(cfg_right, title="Telemetría", padx=10, pady=8)
         telemetry_frame.grid(row=0, column=0, sticky="w")
 
-        tk.Checkbutton(telemetry_frame, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
+        tk.Checkbutton(telemetry_in, text="Guardar replays (ROI+JSON)", variable=self.replay_enabled).grid(
             row=0, column=0, columnspan=3, sticky="w"
         )
-        tk.Label(telemetry_frame, text="Intervalo replay (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(telemetry_in, text="Intervalo replay (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            telemetry_frame,
+            telemetry_in,
             from_=100,
             to=60000,
             increment=100,
@@ -2397,8 +2762,8 @@ class BotUI:
             width=8,
         ).grid(row=1, column=1, sticky="w", pady=(6, 0))
 
-        tk.Label(telemetry_frame, text="Carpeta replay").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(telemetry_frame, textvariable=self.replay_out_dir, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
+        tk.Label(telemetry_in, text="Carpeta replay").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(telemetry_in, textvariable=self.replay_out_dir, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
 
         def open_replay_dir() -> None:
             try:
@@ -2414,47 +2779,47 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(telemetry_frame, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
+        self._make_btn(telemetry_in, text="Snapshot ahora", width=12, command=force_replay_snapshot).grid(
             row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
-        tk.Button(telemetry_frame, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
+        self._make_btn(telemetry_in, text="Abrir carpeta", width=12, command=open_replay_dir).grid(
             row=2, column=2, sticky="w", padx=(8, 0), pady=(4, 0)
         )
 
-        preset_frame = tk.LabelFrame(cfg_right, text="Presets", padx=10, pady=8)
+        preset_frame, preset_in = self._classic_groupbox(cfg_right, title="Presets", padx=10, pady=8)
         preset_frame.grid(row=1, column=0, sticky="w", pady=(10, 0))
-        tk.Label(preset_frame, text="Preset (replay/log)").grid(row=0, column=0, sticky="w")
+        tk.Label(preset_in, text="Preset (replay/log)").grid(row=0, column=0, sticky="w")
         tel_presets = ["Custom", "Off", "Debug", "Soak", "Soak Full"]
         ttk.Combobox(
-            preset_frame,
+            preset_in,
             textvariable=self.telemetry_preset,
             values=tel_presets,
             width=16,
             state="readonly",
         ).grid(row=0, column=1, sticky="w")
-        tk.Button(
-            preset_frame,
+        self._make_btn(
+            preset_in,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_telemetry_preset(str(self.telemetry_preset.get())),
         ).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
-        log_frame = tk.LabelFrame(cfg_right, text="JSONL", padx=10, pady=8)
+        log_frame, log_in = self._classic_groupbox(cfg_right, title="JSONL", padx=10, pady=8)
         log_frame.grid(row=2, column=0, sticky="w", pady=(10, 0))
-        tk.Checkbutton(log_frame, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
+        tk.Checkbutton(log_in, text="Exportar telemetria JSONL", variable=self.log_enabled).grid(
             row=0, column=0, columnspan=3, sticky="w"
         )
-        tk.Label(log_frame, text="Intervalo log (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Label(log_in, text="Intervalo log (ms)").grid(row=1, column=0, sticky="w", pady=(6, 0))
         tk.Spinbox(
-            log_frame,
+            log_in,
             from_=100,
             to=60000,
             increment=50,
             textvariable=self.log_interval_ms,
             width=8,
         ).grid(row=1, column=1, sticky="w", pady=(6, 0))
-        tk.Label(log_frame, text="Archivo log").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(log_frame, textvariable=self.log_out_file, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
+        tk.Label(log_in, text="Archivo log").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(log_in, textvariable=self.log_out_file, width=28).grid(row=2, column=1, sticky="w", pady=(4, 0))
 
         def open_log_parent() -> None:
             try:
@@ -2477,57 +2842,57 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(log_frame, text="Abrir carpeta", width=12, command=open_log_parent).grid(
+        self._make_btn(log_in, text="Abrir carpeta", width=12, command=open_log_parent).grid(
             row=2, column=2, sticky="w", padx=(8, 0)
         )
-        tk.Button(log_frame, text="Abrir archivo", width=12, command=open_log_file).grid(
+        self._make_btn(log_in, text="Abrir archivo", width=12, command=open_log_file).grid(
             row=3, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
         # --- TAB: Rutas / Cavebot ---
         self._build_routes_tab(tab_routes)
 
-        idle_frame = tk.LabelFrame(cfg_right, text="Idle (alerta / anti-stuck)", padx=10, pady=8)
+        idle_frame, idle_in = self._classic_groupbox(cfg_right, title="Idle (alerta / anti-stuck)", padx=10, pady=8)
         idle_frame.grid(row=3, column=0, sticky="w", pady=(10, 0))
-        tk.Label(idle_frame, text="WARN si idle >= (s)").grid(row=0, column=0, sticky="w")
-        tk.Spinbox(idle_frame, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
+        tk.Label(idle_in, text="WARN si idle >= (s)").grid(row=0, column=0, sticky="w")
+        tk.Spinbox(idle_in, from_=0, to=3600, increment=5, textvariable=self.idle_alert_s, width=8).grid(
             row=0, column=1, sticky="w"
         )
-        tk.Label(idle_frame, text="FAIL si idle >= (s)").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Spinbox(idle_frame, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
+        tk.Label(idle_in, text="FAIL si idle >= (s)").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Spinbox(idle_in, from_=0, to=7200, increment=10, textvariable=self.ui_idle_fail_s, width=8).grid(
             row=1, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Label(idle_frame, text="Repetir alerta cada (s)").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Spinbox(idle_frame, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
+        tk.Label(idle_in, text="Repetir alerta cada (s)").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        tk.Spinbox(idle_in, from_=1, to=600, increment=1, textvariable=self.idle_repeat_s, width=8).grid(
             row=2, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(idle_frame, text="(0 desactiva. Requiere reinicio)").grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        tk.Label(idle_in, text="(0 desactiva. Requiere reinicio)").grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        overlay_frame = tk.LabelFrame(cfg_right, text="Overlay (frames anotados)", padx=10, pady=8)
+        overlay_frame, overlay_in = self._classic_groupbox(cfg_right, title="Overlay (frames anotados)", padx=10, pady=8)
         overlay_frame.grid(row=4, column=0, sticky="w", pady=(10, 0))
 
-        tk.Label(overlay_frame, text="Preset").grid(row=0, column=0, sticky="w")
+        tk.Label(overlay_in, text="Preset").grid(row=0, column=0, sticky="w")
         overlay_presets = ["Custom", "Minimal", "Debug HUD", "Full HUD"]
         ttk.Combobox(
-            overlay_frame,
+            overlay_in,
             textvariable=self.overlay_preset,
             values=overlay_presets,
             width=16,
             state="readonly",
         ).grid(row=0, column=1, sticky="w")
-        tk.Button(
-            overlay_frame,
+        self._make_btn(
+            overlay_in,
             text="Aplicar",
             width=12,
             command=lambda: self._apply_overlay_preset(str(self.overlay_preset.get())),
         ).grid(row=0, column=2, sticky="w", padx=(8, 0))
 
-        tk.Checkbutton(overlay_frame, text="Habilitar overlay", variable=self.overlay_enabled).grid(
+        tk.Checkbutton(overlay_in, text="Habilitar overlay", variable=self.overlay_enabled).grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(overlay_frame, text="Carpeta overlay").grid(row=2, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(overlay_frame, textvariable=self.overlay_out_dir, width=28).grid(
+        tk.Label(overlay_in, text="Carpeta overlay").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(overlay_in, textvariable=self.overlay_out_dir, width=28).grid(
             row=2, column=1, sticky="w", pady=(6, 0)
         )
 
@@ -2539,13 +2904,13 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(overlay_frame, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
+        self._make_btn(overlay_in, text="Abrir carpeta", width=12, command=open_overlay_dir).grid(
             row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
-        tk.Label(overlay_frame, text="Intervalo (s)").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        tk.Label(overlay_in, text="Intervalo (s)").grid(row=3, column=0, sticky="w", pady=(4, 0))
         tk.Spinbox(
-            overlay_frame,
+            overlay_in,
             from_=0.1,
             to=60.0,
             increment=0.1,
@@ -2553,19 +2918,19 @@ class BotUI:
             width=8,
         ).grid(row=3, column=1, sticky="w", pady=(4, 0))
 
-        tk.Checkbutton(overlay_frame, text="Grilla de tiles", variable=self.overlay_tile_grid).grid(
+        tk.Checkbutton(overlay_in, text="Grilla de tiles", variable=self.overlay_tile_grid).grid(
             row=4, column=0, columnspan=2, sticky="w", pady=(6, 0)
         )
-        tk.Label(overlay_frame, text="Tile px").grid(row=4, column=2, sticky="w", pady=(6, 0))
-        tk.Spinbox(overlay_frame, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
+        tk.Label(overlay_in, text="Tile px").grid(row=4, column=2, sticky="w", pady=(6, 0))
+        tk.Spinbox(overlay_in, from_=4, to=128, increment=1, textvariable=self.overlay_tile_px, width=8).grid(
             row=4, column=3, sticky="w", pady=(6, 0)
         )
 
-        tk.Label(overlay_frame, text="OVERLAY_ROIS (CSV)").grid(row=5, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(overlay_frame, textvariable=self.overlay_rois, width=28).grid(
+        tk.Label(overlay_in, text="OVERLAY_ROIS (CSV)").grid(row=5, column=0, sticky="w", pady=(4, 0))
+        tk.Entry(overlay_in, textvariable=self.overlay_rois, width=28).grid(
             row=5, column=1, sticky="w", pady=(4, 0)
         )
-        tk.Label(overlay_frame, text="(Se aplica al iniciar el bot; requiere reinicio)").grid(
+        tk.Label(overlay_in, text="(Se aplica al iniciar el bot; requiere reinicio)").grid(
             row=6, column=0, columnspan=3, sticky="w", pady=(6, 0)
         )
 
@@ -2586,10 +2951,10 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Restaurar valores", width=18, command=self._reset_ui_defaults).grid(
+        self._make_btn(cfg_right, text="Restaurar valores", width=18, command=self._reset_ui_defaults).grid(
             row=24, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(cfg_right, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
+        self._make_btn(cfg_right, text="Abrir ui_settings.json", width=18, command=open_ui_settings_file).grid(
             row=24, column=1, sticky="w", pady=(6, 0)
         )
         tk.Checkbutton(
@@ -2644,13 +3009,13 @@ class BotUI:
             except Exception:
                 pass
 
-        tk.Button(cfg_right, text="Abrir ultimo soak", width=18, command=open_latest_soak).grid(
+        self._make_btn(cfg_right, text="Abrir ultimo soak", width=18, command=open_latest_soak).grid(
             row=25, column=0, sticky="w", pady=(6, 0)
         )
-        tk.Button(cfg_right, text="Abrir JSONL soak", width=18, command=open_latest_soak_jsonl).grid(
+        self._make_btn(cfg_right, text="Abrir JSONL soak", width=18, command=open_latest_soak_jsonl).grid(
             row=25, column=1, sticky="w", pady=(6, 0)
         )
-        tk.Button(cfg_right, text="Abrir TODO soak", width=18, command=open_latest_soak_all).grid(
+        self._make_btn(cfg_right, text="Abrir TODO soak", width=18, command=open_latest_soak_all).grid(
             row=25, column=2, sticky="w", padx=(8, 0), pady=(6, 0)
         )
 
@@ -2786,12 +3151,10 @@ class BotUI:
                 except Exception:
                     pass
 
-        tk.Button(tab_config, text="Soak timeline (HTML)", width=18, command=generate_soak_timeline_html).grid(
-            row=40, column=0, sticky="w", pady=(6, 0)
-        )
-        tk.Button(tab_config, text="Abrir timeline", width=18, command=open_soak_timeline_html).grid(
-            row=40, column=1, sticky="w", pady=(6, 0)
-        )
+        timeline_row = tk.Frame(cfg_root)
+        timeline_row.pack(fill="x", pady=(8, 0))
+        self._make_btn(timeline_row, text="Soak timeline (HTML)", width=18, command=generate_soak_timeline_html).grid(row=0, column=0, sticky="w")
+        self._make_btn(timeline_row, text="Abrir timeline", width=18, command=open_soak_timeline_html).grid(row=0, column=1, sticky="w", padx=(8, 0))
 
         # Aplicacion en tiempo real: cada cambio de UI actualiza el RuntimeConfig.
         def sync_healing(*_args):
@@ -3220,20 +3583,98 @@ class BotUI:
                         self.injection_block_reason_var.set(br)
                 except Exception:
                     pass
-                hp_str = "?"
-                mp_str = "?"
-                cap_str = "?"
-                if tel.hp_current is not None and tel.hp_max is not None:
-                    hp_str = f"{tel.hp_current}/{tel.hp_max}"
-                if tel.mp_current is not None and tel.mp_max is not None:
-                    mp_str = f"{tel.mp_current}/{tel.mp_max}"
 
-                if tel.cap_current is not None:
-                    cap_str = f"{tel.cap_current}"
+                def _safe_int(v) -> int | None:
+                    try:
+                        if v is None:
+                            return None
+                        if isinstance(v, bool):
+                            return None
+                        if isinstance(v, (int, float)):
+                            if v != v:  # NaN
+                                return None
+                            return int(v)
+                        s = str(v).strip()
+                        if not s:
+                            return None
+                        return int(float(s))
+                    except Exception:
+                        return None
 
-                self.hp_text.set(hp_str)
-                self.mp_text.set(mp_str)
-                self.cap_text.set(cap_str)
+                def _safe_pct(v) -> float | None:
+                    try:
+                        if v is None:
+                            return None
+                        if isinstance(v, bool):
+                            return None
+                        if isinstance(v, (int, float)):
+                            f = float(v)
+                        else:
+                            s = str(v).strip()
+                            if not s:
+                                return None
+                            f = float(s)
+                        if f != f:  # NaN
+                            return None
+                        # Clamp to sane bounds so UI never shows weird stuff.
+                        if f < 0.0:
+                            f = 0.0
+                        if f > 100.0:
+                            f = 100.0
+                        return float(f)
+                    except Exception:
+                        return None
+
+                def _fmt_vital(cur, mx, pct) -> str:
+                    c = _safe_int(cur)
+                    m = _safe_int(mx)
+                    p = _safe_pct(pct)
+
+                    # If we have absolute numbers, show them even if pct is missing.
+                    if c is not None and m is not None:
+                        base = f"{c}/{m}"
+                        if p is not None:
+                            return f"{base} ({p:.1f}%)"
+                        # If pct missing but we can compute safely, do it.
+                        try:
+                            if m > 0:
+                                return f"{base} ({(float(c) / float(m)) * 100.0:.1f}%)"
+                        except Exception:
+                            pass
+                        return base
+
+                    # Otherwise fall back to pct only.
+                    if p is not None:
+                        return f"{p:.1f}%"
+                    return "?"
+
+                # Defaults always set (never leave stale values on exceptions).
+                try:
+                    hp_str = _fmt_vital(getattr(tel, "hp_current", None), getattr(tel, "hp_max", None), getattr(tel, "hp_pct", None))
+                except Exception:
+                    hp_str = "?"
+                try:
+                    mp_str = _fmt_vital(getattr(tel, "mp_current", None), getattr(tel, "mp_max", None), getattr(tel, "mp_pct", None))
+                except Exception:
+                    mp_str = "?"
+                try:
+                    cap_v = _safe_int(getattr(tel, "cap_current", None))
+                    cap_str = "?" if cap_v is None else f"{cap_v}"
+                except Exception:
+                    cap_str = "?"
+
+                try:
+                    self.hp_text.set(hp_str)
+                except Exception:
+                    pass
+                try:
+                    self.mp_text.set(mp_str)
+                except Exception:
+                    pass
+                try:
+                    self.cap_text.set(cap_str)
+                except Exception:
+                    pass
 
                 # Coords provider status (selection + readiness)
                 try:
@@ -4029,9 +4470,19 @@ class BotUI:
                         pass
             except Exception:
                 pass
-            self.root.after(250, poll_telemetry)
+            try:
+                self.root.after(250, poll_telemetry)
+            except Exception:
+                # Last resort: don't crash the UI loop.
+                pass
 
         poll_telemetry()
+
+        # Optional auto-measurement hook (UI_MEASURE_LAYOUT=1)
+        try:
+            self.root.after(50, self._maybe_measure_layout)
+        except Exception:
+            pass
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
         try:
@@ -4629,40 +5080,83 @@ class BotUI:
         tk = self._tk
         ttk = self._ttk
 
-        main = tk.Frame(tab, padx=10, pady=10)
+        main = tk.Frame(tab, padx=8, pady=8)
         main.pack(fill="both", expand=True)
         main.grid_columnconfigure(0, weight=3)
         main.grid_columnconfigure(1, weight=2)
+        main.grid_rowconfigure(1, weight=1)
 
-        path_row = tk.Frame(main)
-        path_row.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        tk.Label(path_row, text="Ruta carpeta:").grid(row=0, column=0, sticky="w")
-        tk.Entry(path_row, textvariable=self.route_path_var, width=48).grid(row=0, column=1, sticky="ew", padx=(6, 6))
-        tk.Button(path_row, text="Nueva", width=8, command=self._route_new).grid(row=0, column=2, padx=(0, 4))
-        tk.Button(path_row, text="Abrir", width=8, command=self._route_open).grid(row=0, column=3, padx=(0, 4))
-        tk.Button(path_row, text="Guardar", width=8, command=self._route_save).grid(row=0, column=4, padx=(0, 4))
-        tk.Button(path_row, text="Validar", width=8, command=self._route_validate).grid(row=0, column=5)
+        # --- Route bar (top) ---
+        route_box, route_in = self._classic_groupbox(main, title="Route")
+        route_box.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        route_in.grid_columnconfigure(1, weight=1)
 
-        # Steps editor (left)
-        steps_frame = tk.Frame(main)
-        steps_frame.grid(row=1, column=0, sticky="nsew")
-        steps_frame.grid_rowconfigure(1, weight=1)
-        steps_frame.grid_columnconfigure(0, weight=1)
+        try:
+            self._register_measure_widget("routes.main", main)
+            self._register_measure_widget("routes.route_box", route_box)
+        except Exception:
+            pass
 
-        columns = ("#", "Tipo", "X", "Y", "Z", "Nombre/Acción", "Parámetros", "Comentario", "Habilitado")
-        self.route_tree = ttk.Treeview(steps_frame, columns=columns, show="headings", height=14)
-        for col, w in zip(columns, [40, 90, 70, 70, 50, 140, 120, 120, 70]):
-            self.route_tree.heading(col, text=col)
-            self.route_tree.column(col, width=w, anchor="w")
-        vsb = ttk.Scrollbar(steps_frame, orient="vertical", command=self.route_tree.yview)
+        tk.Label(route_in, text="Folder").grid(row=0, column=0, sticky="w")
+        tk.Entry(route_in, textvariable=self.route_path_var).grid(row=0, column=1, sticky="ew", padx=(6, 6))
+        self._make_btn(route_in, "New", self._route_new, width=10).grid(row=0, column=2, padx=(0, 4))
+        self._make_btn(route_in, "Open", self._route_open, width=10).grid(row=0, column=3, padx=(0, 4))
+        self._make_btn(route_in, "Save", self._route_save, width=10).grid(row=0, column=4, padx=(0, 4))
+        self._make_btn(route_in, "Validate", self._route_validate, width=10).grid(row=0, column=5)
+
+        # --- Steps editor (left) ---
+        steps_box, steps_in = self._classic_groupbox(main, title="Steps")
+        steps_box.grid(row=1, column=0, sticky="nsew")
+        steps_in.grid_rowconfigure(1, weight=1)
+        steps_in.grid_columnconfigure(0, weight=1)
+
+        btn_row = tk.Frame(steps_in)
+        btn_row.grid(row=0, column=0, sticky="w", pady=(0, 6))
+        self._make_btn(btn_row, "Add", self._route_add_step, width=10).grid(row=0, column=0, padx=(0, 4))
+        self._make_btn(btn_row, "Insert", lambda: self._route_add_step(insert=True), width=10).grid(row=0, column=1, padx=(0, 4))
+        self._make_btn(btn_row, "Duplicate", self._route_duplicate_step, width=10).grid(row=0, column=2, padx=(0, 4))
+        self._make_btn(btn_row, "Up", lambda: self._route_move_step(-1), width=8).grid(row=0, column=3, padx=(0, 4))
+        self._make_btn(btn_row, "Down", lambda: self._route_move_step(1), width=8).grid(row=0, column=4, padx=(0, 4))
+        self._make_btn(btn_row, "Delete", self._route_delete_step, width=10).grid(row=0, column=5, padx=(0, 4))
+        self._make_btn(btn_row, "Apply", self._route_apply_form, width=10).grid(row=0, column=6, padx=(0, 4))
+
+        # Single-column list (no headings) for classic feel.
+        self.route_tree = ttk.Treeview(
+            steps_in,
+            show="tree",
+            selectmode="browse",
+            height=16,
+            style="Bot.Treeview",
+        )
+
+        try:
+            self._register_measure_widget("routes.steps_box", steps_box)
+            self._register_measure_widget("routes.steps_tree", self.route_tree)
+        except Exception:
+            pass
+        try:
+            self.route_tree.column("#0", width=640, minwidth=240, stretch=True, anchor="w")
+        except Exception:
+            pass
+        vsb = ttk.Scrollbar(steps_in, orient="vertical", command=self.route_tree.yview)
         self.route_tree.configure(yscrollcommand=vsb.set)
         self.route_tree.grid(row=1, column=0, sticky="nsew")
         vsb.grid(row=1, column=1, sticky="ns")
         self.route_tree.bind("<<TreeviewSelect>>", lambda _e: self._route_on_select())
 
-        # Form
-        form = tk.Frame(steps_frame)
-        form.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        # --- Edit form (compact) ---
+        edit_box, edit_in = self._classic_groupbox(steps_in, title="Edit step", padx=8, pady=8)
+        edit_box.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        try:
+            self._register_measure_widget("routes.edit_box", edit_box)
+        except Exception:
+            pass
+        edit_in.grid_columnconfigure(1, weight=1)
+        edit_in.grid_columnconfigure(3, weight=1)
+        edit_in.grid_columnconfigure(5, weight=1)
+
+        form = edit_in
         self.route_kind_var = tk.StringVar(value="node")
         self.route_x_var = tk.StringVar(value="")
         self.route_y_var = tk.StringVar(value="")
@@ -4672,77 +5166,98 @@ class BotUI:
         self.route_comment_var = tk.StringVar(value="")
         self.route_enabled_var = tk.BooleanVar(value=True)
 
-        tk.Label(form, text="Tipo").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(form, values=["label", "action", "node", "stand", "rope", "ladder", "move", "custom"], textvariable=self.route_kind_var, width=10, state="readonly").grid(row=0, column=1, sticky="w")
+        tk.Label(form, text="Type").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(
+            form,
+            values=["label", "action", "node", "stand", "rope", "ladder", "move", "custom"],
+            textvariable=self.route_kind_var,
+            width=12,
+            state="readonly",
+        ).grid(row=0, column=1, sticky="w", padx=(6, 12))
         tk.Label(form, text="X").grid(row=0, column=2, sticky="w")
-        tk.Entry(form, textvariable=self.route_x_var, width=8).grid(row=0, column=3, sticky="w")
+        tk.Entry(form, textvariable=self.route_x_var, width=8).grid(row=0, column=3, sticky="w", padx=(6, 12))
         tk.Label(form, text="Y").grid(row=0, column=4, sticky="w")
-        tk.Entry(form, textvariable=self.route_y_var, width=8).grid(row=0, column=5, sticky="w")
+        tk.Entry(form, textvariable=self.route_y_var, width=8).grid(row=0, column=5, sticky="w", padx=(6, 12))
         tk.Label(form, text="Z").grid(row=0, column=6, sticky="w")
-        tk.Entry(form, textvariable=self.route_z_var, width=5).grid(row=0, column=7, sticky="w")
+        tk.Entry(form, textvariable=self.route_z_var, width=6).grid(row=0, column=7, sticky="w", padx=(6, 0))
 
-        tk.Label(form, text="Nombre/Acción").grid(row=1, column=0, sticky="w")
-        tk.Entry(form, textvariable=self.route_name_var, width=28).grid(row=1, column=1, columnspan=3, sticky="w")
-        tk.Label(form, text="Parámetros").grid(row=1, column=4, sticky="w")
-        tk.Entry(form, textvariable=self.route_params_var, width=18).grid(row=1, column=5, columnspan=2, sticky="w")
-        tk.Label(form, text="Comentario").grid(row=2, column=0, sticky="w")
-        tk.Entry(form, textvariable=self.route_comment_var, width=46).grid(row=2, column=1, columnspan=5, sticky="w")
-        tk.Checkbutton(form, text="Habilitado", variable=self.route_enabled_var).grid(row=2, column=6, sticky="w")
+        tk.Label(form, text="Name / Action").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(form, textvariable=self.route_name_var).grid(row=1, column=1, columnspan=3, sticky="ew", padx=(6, 12), pady=(6, 0))
+        tk.Label(form, text="Params").grid(row=1, column=4, sticky="w", pady=(6, 0))
+        tk.Entry(form, textvariable=self.route_params_var).grid(row=1, column=5, columnspan=3, sticky="ew", padx=(6, 0), pady=(6, 0))
 
-        btn_row = tk.Frame(steps_frame)
-        btn_row.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        tk.Button(btn_row, text="Agregar", width=10, command=self._route_add_step).grid(row=0, column=0, padx=(0, 4))
-        tk.Button(btn_row, text="Insertar", width=10, command=lambda: self._route_add_step(insert=True)).grid(row=0, column=1, padx=(0, 4))
-        tk.Button(btn_row, text="Duplicar", width=10, command=self._route_duplicate_step).grid(row=0, column=2, padx=(0, 4))
-        tk.Button(btn_row, text="Subir", width=8, command=lambda: self._route_move_step(-1)).grid(row=0, column=3, padx=(0, 4))
-        tk.Button(btn_row, text="Bajar", width=8, command=lambda: self._route_move_step(1)).grid(row=0, column=4, padx=(0, 4))
-        tk.Button(btn_row, text="Eliminar", width=10, command=self._route_delete_step).grid(row=0, column=5, padx=(0, 4))
-        tk.Button(btn_row, text="Aplicar cambios", width=14, command=self._route_apply_form).grid(row=0, column=6, padx=(0, 4))
+        tk.Label(form, text="Comment").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(form, textvariable=self.route_comment_var).grid(row=2, column=1, columnspan=5, sticky="ew", padx=(6, 12), pady=(6, 0))
+        tk.Checkbutton(form, text="Enabled", variable=self.route_enabled_var).grid(row=2, column=6, columnspan=2, sticky="w", padx=(6, 0), pady=(6, 0))
 
-        tpl_row = tk.Frame(steps_frame)
-        tpl_row.grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        tk.Button(tpl_row, text="Desde posición", width=14, command=self._route_add_from_position).grid(row=0, column=0, padx=(0, 4))
-        tk.Button(tpl_row, text="Agregar MOVE", width=12, command=self._route_add_move).grid(row=0, column=1, padx=(0, 4))
-        tk.Button(tpl_row, text="action=rope", width=12, command=lambda: self._route_template_action("rope")).grid(row=0, column=2, padx=(0, 4))
-        tk.Button(tpl_row, text="action=abre_puerta", width=16, command=lambda: self._route_template_action("abre_puerta")).grid(row=0, column=3, padx=(0, 4))
+        tpl_row = tk.Frame(steps_in)
+        tpl_row.grid(row=3, column=0, sticky="w", pady=(8, 0))
+        self._make_btn(tpl_row, "From position", self._route_add_from_position, width=14, small=True).grid(
+            row=0, column=0, padx=(0, 4)
+        )
+        self._make_btn(tpl_row, "Add MOVE", self._route_add_move, width=12, small=True).grid(row=0, column=1, padx=(0, 4))
+        self._make_btn(tpl_row, "action=rope", lambda: self._route_template_action("rope"), width=12, small=True).grid(
+            row=0, column=2, padx=(0, 4)
+        )
+        self._make_btn(
+            tpl_row,
+            "action=abre_puerta",
+            lambda: self._route_template_action("abre_puerta"),
+            width=16,
+            small=True,
+        ).grid(row=0, column=3, padx=(0, 4))
 
-        tk.Label(main, textvariable=self.route_status_var, fg="gray25").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        # Status
+        tk.Label(main, textvariable=self.route_status_var, fg="gray25").grid(row=2, column=0, sticky="w", pady=(6, 0))
 
-        # Supplies editor (right)
-        sup_frame = tk.LabelFrame(main, text="Supplies / setup_*.json", padx=8, pady=8)
-        sup_frame.grid(row=1, column=1, rowspan=4, sticky="nsew", padx=(10, 0))
+        # --- Supplies editor (right) ---
+        sup_box, sup_in = self._classic_groupbox(main, title="Supplies / setup_*.json")
+        sup_box.grid(row=1, column=1, sticky="nsew", padx=(10, 0))
+        sup_in.grid_columnconfigure(1, weight=1)
 
-        tk.Label(sup_frame, text="Setup path").grid(row=0, column=0, sticky="w")
-        tk.Entry(sup_frame, textvariable=self.route_setup_path_var, width=36).grid(row=0, column=1, sticky="w")
-        tk.Button(sup_frame, text="Cargar", width=8, command=self._route_load_setup).grid(row=0, column=2, padx=(4, 0))
-        tk.Button(sup_frame, text="Guardar", width=8, command=self._route_save_setup).grid(row=0, column=3, padx=(4, 0))
+        try:
+            self._register_measure_widget("routes.supplies_box", sup_box)
+        except Exception:
+            pass
 
-        tk.Label(sup_frame, text="mana_name").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(sup_frame, textvariable=self.hc_mana_name, width=18).grid(row=1, column=1, sticky="w", pady=(6, 0))
-        tk.Label(sup_frame, text="take_mana").grid(row=1, column=2, sticky="w", pady=(6, 0))
-        tk.Entry(sup_frame, textvariable=self.hc_take_mana, width=8).grid(row=1, column=3, sticky="w", pady=(6, 0))
+        tk.Label(sup_in, text="Setup path").grid(row=0, column=0, sticky="w")
+        tk.Entry(sup_in, textvariable=self.route_setup_path_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=(6, 6))
+        self._make_btn(sup_in, "Load", self._route_load_setup, width=10, small=True).grid(row=0, column=3, padx=(0, 4))
+        self._make_btn(sup_in, "Save", self._route_save_setup, width=10, small=True).grid(row=0, column=4)
 
-        tk.Label(sup_frame, text="mana_leave").grid(row=2, column=0, sticky="w", pady=(4, 0))
-        tk.Entry(sup_frame, textvariable=self.hc_mana_leave, width=8).grid(row=2, column=1, sticky="w", pady=(4, 0))
-        tk.Label(sup_frame, text="cap_leave").grid(row=2, column=2, sticky="w", pady=(4, 0))
-        tk.Entry(sup_frame, textvariable=self.hc_cap_leave, width=8).grid(row=2, column=3, sticky="w", pady=(4, 0))
+        tk.Label(sup_in, text="mana_name").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        tk.Entry(sup_in, textvariable=self.hc_mana_name, width=18).grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(8, 0))
+        tk.Label(sup_in, text="take_mana").grid(row=1, column=2, sticky="w", pady=(8, 0))
+        tk.Entry(sup_in, textvariable=self.hc_take_mana, width=8).grid(row=1, column=3, sticky="w", pady=(8, 0))
 
-        tk.Label(sup_frame, text="Items (pociones/consumibles)").grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
-        self.route_items_list = tk.Listbox(sup_frame, height=8, width=28)
-        self.route_items_list.grid(row=4, column=0, columnspan=2, sticky="nw")
+        tk.Label(sup_in, text="mana_leave").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        tk.Entry(sup_in, textvariable=self.hc_mana_leave, width=8).grid(row=2, column=1, sticky="w", padx=(6, 12), pady=(6, 0))
+        tk.Label(sup_in, text="cap_leave").grid(row=2, column=2, sticky="w", pady=(6, 0))
+        tk.Entry(sup_in, textvariable=self.hc_cap_leave, width=8).grid(row=2, column=3, sticky="w", pady=(6, 0))
+
+        tk.Label(sup_in, text="Items (pociones/consumibles)").grid(row=3, column=0, columnspan=5, sticky="w", pady=(10, 0))
+        self.route_items_list = tk.Listbox(sup_in, height=8, width=30)
+        self.route_items_list.grid(row=4, column=0, columnspan=2, sticky="nw", pady=(4, 0))
+
+        try:
+            self._register_measure_widget("routes.supplies_items", self.route_items_list)
+        except Exception:
+            pass
         self.route_items_list.bind("<<ListboxSelect>>", lambda _e: self._route_on_item_select())
-        btn_items = tk.Frame(sup_frame)
-        btn_items.grid(row=4, column=2, columnspan=2, sticky="nw", padx=(6, 0))
-        tk.Button(btn_items, text="Agregar/Actualizar", width=16, command=self._route_add_update_item).grid(row=0, column=0, pady=(0, 4))
-        tk.Button(btn_items, text="Eliminar", width=10, command=self._route_delete_item).grid(row=1, column=0)
+        btn_items = tk.Frame(sup_in)
+        btn_items.grid(row=4, column=2, columnspan=3, sticky="nw", padx=(10, 0), pady=(4, 0))
+        self._make_btn(btn_items, "Add/Update", self._route_add_update_item, width=12, small=True).grid(
+            row=0, column=0, pady=(0, 4)
+        )
+        self._make_btn(btn_items, "Delete", self._route_delete_item, width=12, small=True).grid(row=1, column=0)
 
-        tk.Label(sup_frame, text="item_name").grid(row=5, column=0, sticky="w", pady=(6, 0))
-        tk.Entry(sup_frame, textvariable=self.item_name_var, width=20).grid(row=5, column=1, sticky="w", pady=(6, 0))
-        tk.Label(sup_frame, text="hotkey").grid(row=5, column=2, sticky="w", pady=(6, 0))
-        tk.Entry(sup_frame, textvariable=self.item_hotkey_var, width=8).grid(row=5, column=3, sticky="w", pady=(6, 0))
+        tk.Label(sup_in, text="item_name").grid(row=5, column=0, sticky="w", pady=(10, 0))
+        tk.Entry(sup_in, textvariable=self.item_name_var, width=22).grid(row=5, column=1, sticky="w", padx=(6, 12), pady=(10, 0))
+        tk.Label(sup_in, text="hotkey").grid(row=5, column=2, sticky="w", pady=(10, 0))
+        tk.Entry(sup_in, textvariable=self.item_hotkey_var, width=8).grid(row=5, column=3, sticky="w", pady=(10, 0))
 
-        tk.Label(sup_frame, text="use").grid(row=6, column=0, sticky="w", pady=(4, 0))
-        ttk.Combobox(sup_frame, values=["self", "use", "target", "tile"], textvariable=self.item_use_var, width=10, state="readonly").grid(
+        tk.Label(sup_in, text="use").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ttk.Combobox(sup_in, values=["self", "use", "target", "tile"], textvariable=self.item_use_var, width=10, state="readonly").grid(
             row=6, column=1, sticky="w"
         )
 
@@ -4818,12 +5333,84 @@ class BotUI:
         tree = getattr(self, "route_tree", None)
         if tree is None:
             return
-        tree.delete(*tree.get_children())
+        try:
+            tree.delete(*tree.get_children())
+        except Exception:
+            pass
+
+        # Classic single-line formatting for each step.
+        try:
+            tree.tag_configure("disabled", foreground="gray55")
+        except Exception:
+            pass
+
         for idx, s in enumerate(self.route_steps, start=1):
+            try:
+                kind = str(getattr(s, "kind", "") or "")
+            except Exception:
+                kind = ""
+
+            x = getattr(s, "x", None)
+            y = getattr(s, "y", None)
+            z = getattr(s, "z", None)
+            coord = ""
+            try:
+                if x is not None and y is not None:
+                    if z is None:
+                        coord = f"({int(x)},{int(y)})"
+                    else:
+                        coord = f"({int(x)},{int(y)},{int(z)})"
+            except Exception:
+                coord = ""
+
+            name = ""
+            try:
+                name = str(getattr(s, "name", "") or "")
+            except Exception:
+                name = ""
+
+            comment = ""
+            try:
+                comment = str(getattr(s, "comment", "") or "")
+            except Exception:
+                comment = ""
+
             params = ""
-            if s.params:
-                params = ",".join(f"{k}={v}" for k, v in s.params.items())
-            tree.insert("", "end", iid=str(idx - 1), values=(idx, s.kind, s.x or "", s.y or "", s.z or "", s.name, params, s.comment, "sí" if s.enabled else "no"))
+            try:
+                raw_params = getattr(s, "params", None)
+                if isinstance(raw_params, dict) and raw_params:
+                    params = ",".join(f"{k}={raw_params[k]}" for k in sorted(raw_params.keys()))
+            except Exception:
+                params = ""
+
+            enabled = True
+            try:
+                enabled = bool(getattr(s, "enabled", True))
+            except Exception:
+                enabled = True
+
+            # Compose a compact line.
+            parts: list[str] = [f"{idx:03d}", kind]
+            if coord:
+                parts.append(coord)
+            if name:
+                parts.append(name)
+            if params:
+                parts.append(params)
+            if comment:
+                c = comment.strip().replace("\n", " ")
+                if len(c) > 60:
+                    c = c[:57] + "..."
+                parts.append(f"// {c}")
+            if not enabled:
+                parts.append("[off]")
+            line = " ".join([p for p in parts if p])
+
+            tags = () if enabled else ("disabled",)
+            try:
+                tree.insert("", "end", iid=str(idx - 1), text=line, tags=tags)
+            except Exception:
+                continue
 
     def _route_get_selected_index(self) -> int | None:
         tree = getattr(self, "route_tree", None)
@@ -5931,6 +6518,43 @@ class BotUI:
 
         self.root.destroy()
 
+    def _auto_exit_no_prompt(self) -> None:
+        """Exit UI without prompting (for automated smoke runs).
+
+        Controlled by env vars in `run()`. Never used for manual window close.
+        """
+
+        try:
+            self._allow_close = True
+        except Exception:
+            pass
+        try:
+            self._stop_tray_icon()
+        except Exception:
+            pass
+
+        try:
+            if self._is_running():
+                try:
+                    self.stop()
+                except Exception:
+                    pass
+                try:
+                    self.root.after(300, self.root.destroy)
+                except Exception:
+                    try:
+                        self.root.destroy()
+                    except Exception:
+                        pass
+                return
+        except Exception:
+            pass
+
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
     def run(self) -> None:
         try:
             try:
@@ -5942,6 +6566,22 @@ class BotUI:
                     self.root.after(200, self.start)
                 except Exception:
                     pass
+
+            # Optional: auto-close UI after N seconds (useful for automated smoke runs).
+            # Example:
+            #   set UI_AUTO_START=1
+            #   set UI_EXIT_AFTER_S=15
+            try:
+                raw_exit = (os.getenv("UI_EXIT_AFTER_S", "") or "").strip()
+                exit_after_s = float(raw_exit) if raw_exit else 0.0
+            except Exception:
+                exit_after_s = 0.0
+            if exit_after_s and exit_after_s > 0.0:
+                try:
+                    self.root.after(int(exit_after_s * 1000), self._auto_exit_no_prompt)
+                except Exception:
+                    pass
+
             self.root.mainloop()
         except KeyboardInterrupt:
             # Permite cerrar la UI desde consola sin traceback ruidoso
