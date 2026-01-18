@@ -27,6 +27,16 @@ class OCRProcessor:
         ocr_enabled_raw = (os.getenv("OCR_ENABLED", "1") or "1").strip().lower()
         self._ocr_enabled = ocr_enabled_raw in {"1", "true", "yes", "y", "on"}
 
+        # Optional: run EasyOCR in a separate process with hard timeouts.
+        # This prevents the vision thread from freezing if Torch/EasyOCR blocks.
+        try:
+            iso_raw = (os.getenv("OCR_ISOLATE_PROCESS", "0") or "0").strip().lower()
+            self._ocr_isolate_process = bool(self._ocr_enabled) and iso_raw in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            self._ocr_isolate_process = False
+        self._ocr_isolate_fail_until_ts = 0.0
+        self._ocr_isolate_client = None
+
         self._last_cap_debug_ts = 0.0
 
         # Último debug de CAP (para observabilidad y tuning).
@@ -51,6 +61,15 @@ class OCRProcessor:
             try:
                 if self._log_init:
                     print("OCR deshabilitado (OCR_ENABLED=0)")
+            except Exception:
+                pass
+        elif bool(self._ocr_isolate_process):
+            # In isolate mode, we intentionally do NOT import/initialize EasyOCR
+            # in the main process; it runs in a worker process.
+            self.reader = None
+            try:
+                if self._log_init:
+                    print("OCR en proceso aislado (OCR_ISOLATE_PROCESS=1)")
             except Exception:
                 pass
         else:
@@ -95,6 +114,126 @@ class OCRProcessor:
         self.last_hp_ocr_reason = ""
         self.last_mp_ocr_source = ""
         self.last_mp_ocr_reason = ""
+
+    def _ocr_available(self) -> bool:
+        try:
+            if not bool(getattr(self, "_ocr_enabled", True)):
+                return False
+            if bool(getattr(self, "_ocr_isolate_process", False)):
+                return True
+            return self.reader is not None
+        except Exception:
+            return self.reader is not None
+
+    def _ocr_isolate_timeout_s(self) -> float:
+        # Default is conservative: keep the vision thread realtime.
+        try:
+            raw = (os.getenv("OCR_READTEXT_TIMEOUT_MS", "250") or "250").strip()
+            ms = float(raw) if raw else 250.0
+        except Exception:
+            ms = 250.0
+        ms = max(10.0, float(ms))
+        return float(ms) / 1000.0
+
+    def _get_ocr_isolate_client(self):
+        try:
+            if self._ocr_isolate_client is not None:
+                return self._ocr_isolate_client
+            from vision.ocr_isolate import get_ocr_isolate_client
+
+            self._ocr_isolate_client = get_ocr_isolate_client()
+            return self._ocr_isolate_client
+        except Exception:
+            self._ocr_isolate_client = None
+            return None
+
+    def _readtext_detail0(
+        self,
+        image: np.ndarray,
+        *,
+        allowlist: Optional[str],
+        deadline_ts: float | None = None,
+    ) -> List[str]:
+        if image is None or getattr(image, "size", 0) == 0:
+            return []
+
+        if not bool(self._ocr_available()):
+            return []
+
+        # Respect shared deadline when provided.
+        try:
+            if deadline_ts is not None and float(time.time()) >= float(deadline_ts):
+                return []
+        except Exception:
+            pass
+
+        if bool(getattr(self, "_ocr_isolate_process", False)):
+            try:
+                now = float(time.time())
+                if now < float(getattr(self, "_ocr_isolate_fail_until_ts", 0.0) or 0.0):
+                    return []
+            except Exception:
+                pass
+            client = self._get_ocr_isolate_client()
+            if client is None:
+                return []
+            try:
+                strings = client.readtext_strings(
+                    image,
+                    allowlist=allowlist,
+                    timeout_s=float(self._ocr_isolate_timeout_s()),
+                )
+                return list(strings or [])
+            except Exception:
+                try:
+                    self._ocr_isolate_fail_until_ts = float(time.time()) + 0.5
+                except Exception:
+                    pass
+                return []
+
+        # Non-isolated (direct) OCR.
+        if self.reader is None:
+            return []
+        try:
+            res = self.reader.readtext(image, detail=0, allowlist=allowlist)
+        except Exception:
+            res = []
+        out: List[str] = []
+        for r in res or []:
+            try:
+                s = str(r).strip()
+            except Exception:
+                continue
+            if s:
+                out.append(s)
+        return out
+
+    def _readtext_detail1(
+        self,
+        image: np.ndarray,
+        *,
+        allowlist: Optional[str],
+        deadline_ts: float | None = None,
+    ) -> list:
+        if image is None or getattr(image, "size", 0) == 0:
+            return []
+        if not bool(self._ocr_available()):
+            return []
+        try:
+            if deadline_ts is not None and float(time.time()) >= float(deadline_ts):
+                return []
+        except Exception:
+            pass
+        # In isolate mode we intentionally avoid detail=1 paths (bbox/conf),
+        # because they increase payload size and complexity.
+        if bool(getattr(self, "_ocr_isolate_process", False)):
+            return []
+        if self.reader is None:
+            return []
+        try:
+            return list(self.reader.readtext(image, detail=1, allowlist=allowlist) or [])
+        except Exception:
+            return []
 
     def _load_corrections(self) -> Dict[str, str]:
         """Carga las correcciones OCR desde el archivo de configuración"""
@@ -240,23 +379,24 @@ class OCRProcessor:
         if image is None or getattr(image, "size", 0) == 0:
             return image
 
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        hsv = cast("cv2.Mat", cv2.cvtColor(image, cv2.COLOR_BGR2HSV))
 
         # White-ish: low saturation, high value.
         # Keep conservative to avoid pulling in colorful HUD elements.
-        lower = np.array([0, 0, 160], dtype=np.uint8)
-        upper = np.array([180, 60, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
+        # OpenCV typing stubs expect Mat for bounds as well.
+        lower = cast("cv2.Mat", np.array([0, 0, 160], dtype=np.uint8))
+        upper = cast("cv2.Mat", np.array([180, 60, 255], dtype=np.uint8))
+        mask = cast("cv2.Mat", cv2.inRange(hsv, lower, upper))
 
         try:
             k = np.ones((2, 2), np.uint8)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k)
-            mask = cv2.dilate(mask, k, iterations=1)
+            mask = cast("cv2.Mat", cv2.morphologyEx(mask, cv2.MORPH_OPEN, k))
+            mask = cast("cv2.Mat", cv2.dilate(mask, k, iterations=1))
         except Exception:
             pass
 
         # EasyOCR tends to like dark text on light background.
-        img = 255 - mask
+        img = cast(np.ndarray, 255 - cast(np.ndarray, mask))
 
         try:
             h, w = img.shape[:2]
@@ -278,7 +418,7 @@ class OCRProcessor:
             return ""
 
         # Global OCR disabled / reader not available.
-        if self.reader is None:
+        if not bool(self._ocr_available()):
             return ""
 
         best_text = ""
@@ -286,9 +426,33 @@ class OCRProcessor:
 
         for _name, img in self._preprocess_variants(image):
             try:
-                results = self.reader.readtext(img, detail=1, allowlist=allowlist)
+                results = self._readtext_detail1(img, allowlist=allowlist)
             except Exception:
                 results = []
+
+            # Isolated OCR path: no bbox/conf, so score based on string heuristics.
+            if not results and bool(getattr(self, "_ocr_isolate_process", False)):
+                try:
+                    strings = self._readtext_detail0(img, allowlist=allowlist)
+                except Exception:
+                    strings = []
+                for s0 in strings or []:
+                    try:
+                        raw = str(s0 or "")
+                    except Exception:
+                        raw = ""
+                    cleaned = re.sub(r"[^0-9/|]", "", raw).replace("|", "/")
+                    cleaned = str(self.corrections.get(cleaned, cleaned))
+                    if not cleaned:
+                        continue
+                    digits = len(re.findall(r"\d", cleaned))
+                    has_sep = 1 if "/" in cleaned else 0
+                    looks_cur_max = 1 if re.search(r"\d{1,7}\s*/\s*\d{1,7}", cleaned) else 0
+                    score = (looks_cur_max * 10.0) + (has_sep * 2.0) + (digits * 0.1)
+                    if score > best_score:
+                        best_score = score
+                        best_text = cleaned
+                continue
 
             for item in results or []:
                 try:
@@ -355,7 +519,7 @@ class OCRProcessor:
             return []
 
         # Global OCR disabled / reader not available.
-        if self.reader is None:
+        if not bool(self._ocr_available()):
             return []
 
         out: List[str] = []
@@ -367,10 +531,7 @@ class OCRProcessor:
                     break
             except Exception:
                 pass
-            try:
-                res = self.reader.readtext(img, detail=0, allowlist=allowlist)
-            except Exception:
-                res = []
+            res = self._readtext_detail0(img, allowlist=allowlist, deadline_ts=deadline_ts)
             for r in res or []:
                 try:
                     s = str(r).strip()
@@ -499,23 +660,17 @@ class OCRProcessor:
         # many unrelated numbers (level, skills, timers), which can create large
         # false positives.
         #
-        # OCR sometimes misreads letters as digits (e.g. "C4p"). We normalize a
-        # small set of common substitutions before regex.
+        # OCR sometimes misreads letters as digits (e.g. "C4p").
+        # IMPORTANT: do NOT normalize digits into letters globally because that
+        # would corrupt the numeric payload (e.g. "Cap: 2800" -> "Cap: 2boo").
         try:
             s2 = s.lower()
-            s2 = (
-                s2.replace("4", "a")
-                .replace("0", "o")
-                .replace("1", "i")
-                .replace("5", "s")
-                .replace("8", "b")
-            )
         except Exception:
             s2 = s
 
         try:
             m = re.search(
-                r"(?:\bcap\b|\bcapac(?:ity)?\b|\bcapacity\b|\bcap\s*:)\D{0,12}(\d{1,6})",
+                r"(?:\bcap\b|\bc[a4]p\b|\bcapacity\b|\bcapac(?:ity)?\b)\D{0,12}(\d{1,6})",
                 s2,
                 flags=re.IGNORECASE,
             )
@@ -621,30 +776,14 @@ class OCRProcessor:
             # Try raw OCR first (some fonts break with heavy thresholding).
             candidates: List[str] = []
             try:
-                res = self.reader.readtext(
-                    crop,
-                    detail=0,
-                    allowlist="0123456789XYZxyz:,- ",
-                )
-                for r in res or []:
-                    s = str(r).strip()
-                    if s:
-                        candidates.append(s)
+                candidates.extend(self._readtext_detail0(crop, allowlist="0123456789XYZxyz:,- "))
             except Exception:
                 pass
 
             # Then try preprocessed OCR.
             try:
                 processed = self.preprocess_image(crop)
-                res2 = self.reader.readtext(
-                    processed,
-                    detail=0,
-                    allowlist="0123456789XYZxyz:,- ",
-                )
-                for r in res2 or []:
-                    s = str(r).strip()
-                    if s:
-                        candidates.append(s)
+                candidates.extend(self._readtext_detail0(processed, allowlist="0123456789XYZxyz:,- "))
             except Exception:
                 pass
 
@@ -747,7 +886,7 @@ class OCRProcessor:
             return None
 
         # Global OCR disabled / reader not available.
-        if self.reader is None:
+        if not bool(self._ocr_available()):
             try:
                 self.last_cap_debug = {
                     "roi": None,
@@ -912,7 +1051,7 @@ class OCRProcessor:
                     return int(best[2]) if best is not None else None
 
                 try:
-                    raw_res = self.reader.readtext(crop, detail=1, allowlist="0123456789")
+                    raw_res = self._readtext_detail1(crop, allowlist="0123456789")
                     v_raw = _best_single_box_number(raw_res)
                     if v_raw is not None:
                         cap_from_roi = int(v_raw)
@@ -983,7 +1122,7 @@ class OCRProcessor:
                 if cap_from_roi is None:
                     try:
                         processed = self.preprocess_image(crop)
-                        res = self.reader.readtext(processed, detail=1, allowlist="0123456789")
+                        res = self._readtext_detail1(processed, allowlist="0123456789")
                         v = _read_number_from_digit_boxes(res)
                         if v is not None:
                             cap_from_roi = int(v)
@@ -994,7 +1133,7 @@ class OCRProcessor:
                     try:
                         processed = self.preprocess_image(crop)
                         inv = cv2.bitwise_not(processed)
-                        res = self.reader.readtext(inv, detail=1, allowlist="0123456789")
+                        res = self._readtext_detail1(inv, allowlist="0123456789")
                         v = _read_number_from_digit_boxes(res)
                         if v is not None:
                             cap_from_roi = int(v)
@@ -1132,14 +1271,14 @@ class OCRProcessor:
                     # detail=1: [ (bbox, text, conf), ... ] where bbox has 4 points
                     cap_candidates: list[tuple[int | None, float, str]] = []
                     try:
-                        res_raw = self.reader.readtext(crop, detail=1, allowlist=None)
+                        res_raw = self._readtext_detail1(crop, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_raw)
                         cap_candidates.append((v, lc, "raw"))
                     except Exception:
                         pass
                     try:
                         processed = self.preprocess_image(crop)
-                        res_proc = self.reader.readtext(processed, detail=1, allowlist=None)
+                        res_proc = self._readtext_detail1(processed, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_proc)
                         cap_candidates.append((v, lc, "proc"))
                     except Exception:
@@ -1147,7 +1286,7 @@ class OCRProcessor:
                     try:
                         processed = self.preprocess_image(crop)
                         inv = cv2.bitwise_not(processed)
-                        res_inv = self.reader.readtext(inv, detail=1, allowlist=None)
+                        res_inv = self._readtext_detail1(inv, allowlist=None)
                         v, lc = _extract_bbox_row_cap(res_inv)
                         cap_candidates.append((v, lc, "inv"))
                     except Exception:
@@ -1221,7 +1360,7 @@ class OCRProcessor:
 
         if not bool(getattr(self, "_ocr_enabled", True)):
             return None
-        if self.reader is None:
+        if not bool(self._ocr_available()):
             return None
 
         def normalize_to_px(roi_def: Dict[str, Any]) -> Tuple[int, int, int, int]:
@@ -1306,7 +1445,7 @@ class OCRProcessor:
                     return int(best[2]) if best is not None else None
 
                 try:
-                    res = self.reader.readtext(crop_up, detail=1, allowlist="0123456789")
+                    res = self._readtext_detail1(crop_up, allowlist="0123456789")
                     soul_from_roi = _best_single_box_number(res)
                 except Exception:
                     soul_from_roi = None
@@ -1314,7 +1453,7 @@ class OCRProcessor:
                 if soul_from_roi is None:
                     try:
                         processed = self.preprocess_image(crop_up)
-                        res = self.reader.readtext(processed, detail=1, allowlist="0123456789")
+                        res = self._readtext_detail1(processed, allowlist="0123456789")
                         soul_from_roi = _best_single_box_number(res)
                     except Exception:
                         soul_from_roi = None
@@ -1323,7 +1462,7 @@ class OCRProcessor:
                     try:
                         processed = self.preprocess_image(crop_up)
                         inv = cv2.bitwise_not(processed)
-                        res = self.reader.readtext(inv, detail=1, allowlist="0123456789")
+                        res = self._readtext_detail1(inv, allowlist="0123456789")
                         soul_from_roi = _best_single_box_number(res)
                     except Exception:
                         soul_from_roi = None
@@ -1432,14 +1571,14 @@ class OCRProcessor:
 
                     soul_candidates: list[tuple[int | None, float, str]] = []
                     try:
-                        res_raw = self.reader.readtext(crop, detail=1, allowlist=None)
+                        res_raw = self._readtext_detail1(crop, allowlist=None)
                         v0, lc0 = _extract_bbox_row_soul(res_raw)
                         soul_candidates.append((v0, lc0, "raw"))
                     except Exception:
                         pass
                     try:
                         processed = self.preprocess_image(crop)
-                        res_proc = self.reader.readtext(processed, detail=1, allowlist=None)
+                        res_proc = self._readtext_detail1(processed, allowlist=None)
                         v0, lc0 = _extract_bbox_row_soul(res_proc)
                         soul_candidates.append((v0, lc0, "proc"))
                     except Exception:
@@ -1447,7 +1586,7 @@ class OCRProcessor:
                     try:
                         processed = self.preprocess_image(crop)
                         inv = cv2.bitwise_not(processed)
-                        res_inv = self.reader.readtext(inv, detail=1, allowlist=None)
+                        res_inv = self._readtext_detail1(inv, allowlist=None)
                         v0, lc0 = _extract_bbox_row_soul(res_inv)
                         soul_candidates.append((v0, lc0, "inv"))
                     except Exception:
@@ -2021,7 +2160,7 @@ class OCRProcessor:
                                     return None
 
                             processed = self.preprocess_image(strip_crop)
-                            results = self.reader.readtext(processed, detail=1, allowlist="0123456789/|")
+                            results = self._readtext_detail1(processed, allowlist="0123456789/|")
 
                             parsed = []
                             for item in results or []:

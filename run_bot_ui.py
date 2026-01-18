@@ -9,6 +9,22 @@ import subprocess
 from pathlib import Path
 from typing import Any, Literal, cast
 
+# Safe-by-default OCR: isolate EasyOCR into a subprocess with hard timeout.
+# This prevents common EasyOCR/Torch hangs from stalling the vision thread.
+# Users can override any of these via env.
+os.environ.setdefault("OCR_ENABLED", "1")
+os.environ.setdefault("OCR_ISOLATE_PROCESS", "1")
+os.environ.setdefault("OCR_READTEXT_TIMEOUT_MS", "250")
+os.environ.setdefault("HPMP_OCR_ENABLED", "1")
+# Keep CAP OCR off by default (more fragile + detail=1 heavy).
+os.environ.setdefault("CAP_OCR_ENABLED", "0")
+
+# Safe-by-default capture: prefer real client window (avoid OBS projector).
+os.environ.setdefault("CAPTURE_BACKEND", "dxgi")
+os.environ.setdefault("CAPTURE_TARGET", "client")
+os.environ.setdefault("CAPTURE_TITLE_INCLUDE", "Tibia")
+os.environ.setdefault("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS")
+
 
 def _merge_keep_unknown(dst: dict[str, Any], src: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge src into dst, preserving unknown keys in dst."""
@@ -3854,6 +3870,29 @@ class BotUI:
                 tel = self._config.telemetry_snapshot()
                 health = self._config.health_snapshot()
 
+                # UI poll + staleness policy (fail-safe):
+                # - poll frequently (default 100ms)
+                # - treat telemetry older than 0.5s as stale
+                try:
+                    ui_poll_ms = int(float((os.getenv("UI_TELEMETRY_POLL_MS", "100") or "100").strip() or "100"))
+                except Exception:
+                    ui_poll_ms = 100
+                ui_poll_ms = max(50, int(ui_poll_ms))
+                try:
+                    ui_stale_s = float((os.getenv("UI_TELEMETRY_STALE_S", "0.5") or "0.5").strip() or "0.5")
+                except Exception:
+                    ui_stale_s = 0.5
+                ui_stale_s = max(0.05, float(ui_stale_s))
+
+                now_ts = time.time()
+                age_s: float | None = None
+                try:
+                    if getattr(tel, "ts", 0) and float(getattr(tel, "ts", 0.0)) > 0.0:
+                        age_s = max(0.0, float(now_ts) - float(getattr(tel, "ts", 0.0)))
+                except Exception:
+                    age_s = None
+                is_stale = bool(age_s is None or float(age_s) >= float(ui_stale_s))
+
                 # Macro Recorder tick (best-effort; never break UI).
                 try:
                     mr = getattr(self, "_macro_recorder", None)
@@ -4066,32 +4105,41 @@ class BotUI:
                 except Exception:
                     soul_str = "?"
 
-                # Ring/Amulet/Hungry: Y SOLO si realmente es True; si es False o None => N.
+                # Ring/Amulet/Hungry: Y SOLO si realmente es True; si es False/None/stale => N.
                 try:
-                    ring_present, ring_val = _get_attr_if_present(tel, ["ring", "ring_equipped"])
-                    if not ring_present:
-                        ring_val = _get_presence_from_signals("ring")
-                    self.ring_text.set(_yn(ring_val))
+                    if is_stale:
+                        self.ring_text.set("N")
+                    else:
+                        ring_present, ring_val = _get_attr_if_present(tel, ["ring", "ring_equipped"])
+                        if not ring_present:
+                            ring_val = _get_presence_from_signals("ring")
+                        self.ring_text.set(_yn(ring_val))
                 except Exception:
                     try:
                         self.ring_text.set("N")
                     except Exception:
                         pass
                 try:
-                    amulet_present, amulet_val = _get_attr_if_present(tel, ["amulet", "amulet_equipped"])
-                    if not amulet_present:
-                        amulet_val = _get_presence_from_signals("amulet")
-                    self.amulet_text.set(_yn(amulet_val))
+                    if is_stale:
+                        self.amulet_text.set("N")
+                    else:
+                        amulet_present, amulet_val = _get_attr_if_present(tel, ["amulet", "amulet_equipped"])
+                        if not amulet_present:
+                            amulet_val = _get_presence_from_signals("amulet")
+                        self.amulet_text.set(_yn(amulet_val))
                 except Exception:
                     try:
                         self.amulet_text.set("N")
                     except Exception:
                         pass
                 try:
-                    hungry_present, hungry_val = _get_attr_if_present(tel, ["hungry", "is_hungry"])
-                    if not hungry_present:
-                        hungry_val = _get_presence_from_signals("hungry")
-                    self.hungry_text.set(_yn(hungry_val))
+                    if is_stale:
+                        self.hungry_text.set("N")
+                    else:
+                        hungry_present, hungry_val = _get_attr_if_present(tel, ["hungry", "is_hungry"])
+                        if not hungry_present:
+                            hungry_val = _get_presence_from_signals("hungry")
+                        self.hungry_text.set(_yn(hungry_val))
                 except Exception:
                     try:
                         self.hungry_text.set("N")
@@ -4263,15 +4311,13 @@ class BotUI:
                 except Exception:
                     self.cavebot_step_text.set("-")
 
-                now = time.time()
-                if tel.ts and tel.ts > 0:
-                    age = max(0.0, now - float(tel.ts))
-                    if age >= 2.0:
-                        self.stale_var.set(f"stale {age:.1f}s")
+                if age_s is not None:
+                    if is_stale:
+                        self.stale_var.set(f"stale {float(age_s):.1f}s")
                     else:
                         self.stale_var.set("OK")
                 else:
-                    self.stale_var.set("-")
+                    self.stale_var.set("stale")
 
                 # Health line (watchdog snapshot)
                 try:
@@ -4487,6 +4533,7 @@ class BotUI:
                                 except Exception:
                                     pass
                             else:
+                                now = time.time()
                                 try:
                                     key = (int(gx), int(gy), int(gz) if gz is not None else None)
                                 except Exception:
@@ -4911,7 +4958,7 @@ class BotUI:
             except Exception:
                 pass
             try:
-                self.root.after(250, poll_telemetry)
+                self.root.after(int(ui_poll_ms) if "ui_poll_ms" in locals() else 100, poll_telemetry)
             except Exception:
                 # Last resort: don't crash the UI loop.
                 pass
@@ -6895,19 +6942,13 @@ class BotUI:
         self._reset_idle_ui()
         self._reset_cavebot_ui()
 
-        # Capture defaults for dual-monitor setup (OBS on monitor 1, Tibia on monitor 2).
-        # User requested forcing monitor 1 and OBS source name Tibia_Fuente.
+        # Capture defaults: safe-by-default and compatible with multi-monitor.
+        # OBS monitor pinning is auto-detected inside src.main (unless FORCE_MONITOR is set).
         try:
-            if not (os.getenv("CAPTURE_TARGET", "") or "").strip():
-                os.environ["CAPTURE_TARGET"] = "obs_projector"
-        except Exception:
-            pass
-        try:
-            os.environ["CAPTURE_TITLE_HINTS"] = "Tibia_Fuente"
-        except Exception:
-            pass
-        try:
-            os.environ["FORCE_MONITOR"] = "1"
+            os.environ.setdefault("CAPTURE_BACKEND", "dxgi")
+            os.environ.setdefault("CAPTURE_TARGET", "client")
+            os.environ.setdefault("CAPTURE_TITLE_INCLUDE", "Tibia")
+            os.environ.setdefault("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS")
         except Exception:
             pass
 

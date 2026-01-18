@@ -88,11 +88,17 @@ class AnchorTracker:
 
         # Auto anchor is opt-in: template matching on full frames can be
         # ambiguous and applying a global offset can break all ROIs.
+        #
+        # Opt-in signals:
+        # - ANCHOR_AUTO=1 (explicit)
+        # - OR providing a concrete ANCHOR_TEMPLATE_PATH (explicit intent)
         try:
             auto_on = os.getenv("ANCHOR_AUTO", "0").strip().lower() in {"1", "true", "yes", "y", "on"}
         except Exception:
             auto_on = False
-        if not auto_on:
+
+        tmpl_env = (os.getenv("ANCHOR_TEMPLATE_PATH", "") or "").strip()
+        if not auto_on and not tmpl_env:
             return None
 
         # No explicit _anchor config: try an automatic anchor based on a *real* template file.

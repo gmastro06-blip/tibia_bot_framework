@@ -25,6 +25,13 @@ def test_is_hungry_hsv_runs_without_cv2() -> None:
     assert out in (True, False)
 
 
+def test_is_hungry_hsv_invalid_input_returns_none() -> None:
+    from src.vision.presence import is_hungry_hsv
+
+    assert is_hungry_hsv(None) is None
+    assert is_hungry_hsv(np.zeros((0, 0, 3), dtype=np.uint8)) is None
+
+
 def test_is_hungry_hsv_detects_orange_blob() -> None:
     # Synthetic positive: a centered orange/yellow blob should be detected.
     # If OpenCV isn't installed in this environment, skip (function returns False).

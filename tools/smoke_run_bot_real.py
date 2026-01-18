@@ -94,6 +94,15 @@ def main() -> int:
     os.environ["FORCE_MONITOR"] = str(int(args.monitor))
     os.environ["CAPTURE_FPS"] = str(float(args.capture_fps))
 
+    # Safe OCR defaults: isolate EasyOCR into a subprocess with a hard timeout.
+    # This prevents the vision thread from stalling on EasyOCR/Torch hangs.
+    os.environ.setdefault("OCR_ENABLED", "1")
+    os.environ.setdefault("OCR_ISOLATE_PROCESS", "1")
+    os.environ.setdefault("OCR_READTEXT_TIMEOUT_MS", "250")
+    os.environ.setdefault("HPMP_OCR_ENABLED", "1")
+    # Keep CAP OCR off by default (more fragile + detail=1 heavy).
+    os.environ.setdefault("CAP_OCR_ENABLED", "0")
+
     if args.disable_roboflow:
         # Disable hosted models.
         os.environ["ROBOFLOW_API_KEY"] = ""

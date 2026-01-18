@@ -1,12 +1,14 @@
 from typing import Optional, Sequence, Union
+import re
+import os
 import cv2
 import win32api
 import win32gui
 import win32ui
 import win32con
+import win32process
 import numpy as np
 import time
-import os
 from mss import mss
 
 try:
@@ -99,22 +101,33 @@ class DXGICapture:
         self.hwnd = self.find_window()
         # Client discovery (hwnd can exist even when background/maximized).
         self.client_hwnd: int = int(self.hwnd or 0)
-        self.client_title: str = ""
+        try:
+            self.client_title = str(win32gui.GetWindowText(int(self.client_hwnd)) or "") if self.client_hwnd else ""
+        except Exception:
+            self.client_title = ""
         self.target_found: bool = False
         self.target_reason: str = ""
         self.capture_target: str = "auto"
         self.capture_backend: str = "dxgi"
         self.capture_bounds: Optional[tuple[int, int, int, int]] = None
-        self.capture_state: str = ""
+        self.capture_state: str = "init"
         # Best-effort: which monitor we believe we captured from.
         # (MSS indexes: 1..n for individual monitors, 0 is the combined virtual screen)
         self.capture_monitor_index: Optional[int] = None
         self.force_monitor = force_monitor
-        # Si el caller fuerza un monitor, por defecto permitimos fallback (útil para el bot).
-        # Herramientas de calibración suelen preferir "estricto" para no cambiar de monitor
-        # y producir ROIs incorrectas. En el bot (runtime), NO activamos esto por env
-        # para evitar quedarnos sin captura si el índice forzado no existe.
-        self.strict_force_monitor = bool(strict_force_monitor)
+        # Strict forced monitor policy:
+        # - When enabled and `force_monitor` is set, the backend will NOT fall back
+        #   to other monitors / window-crops if the forced monitor fails.
+        # - This is useful for OBS-pinned workflows (avoid black crops on the wrong
+        #   monitor), and ROI calibration tools.
+        strict_env = False
+        try:
+            raw = (os.getenv("CAPTURE_STRICT_FORCE_MONITOR", "") or "").strip().lower()
+            if raw:
+                strict_env = raw in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            strict_env = False
+        self.strict_force_monitor = bool(strict_force_monitor) or bool(strict_env)
         self.fps = 0.0
         self.latency_ms = 0.0
         self.dropped = 0
@@ -136,6 +149,190 @@ class DXGICapture:
             "no",
         }
 
+        # Robust capture target selection (defaults are safe for real client capture).
+        self._cfg_target = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
+        self._cfg_title_include = (os.getenv("CAPTURE_TITLE_INCLUDE", "Tibia") or "Tibia").strip()
+        self._cfg_title_exclude = (
+            os.getenv("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS") or "Proyector|Projector|OBS"
+        ).strip()
+        self._cfg_process_name = (os.getenv("CAPTURE_PROCESS_NAME", "") or "").strip()
+
+        # Capture health counters (main will also track these, but having them here
+        # makes the backend self-describing and testable).
+        self.fail_count: int = 0
+        self.reacquire_count: int = 0
+        self.last_error: str = ""
+
+        # Rate-limit console warnings (capture can transiently fail when minimized).
+        self._warn_last: dict[str, float] = {}
+        try:
+            self._warn_every_s = max(0.0, float((os.getenv("CAPTURE_WARN_EVERY_S", "1.0") or "1.0").strip() or "1.0"))
+        except Exception:
+            self._warn_every_s = 1.0
+
+    def _warn(self, key: str, msg: str) -> None:
+        """Print a warning message at most once per `CAPTURE_WARN_EVERY_S` per key."""
+
+        try:
+            every = float(getattr(self, "_warn_every_s", 1.0) or 0.0)
+        except Exception:
+            every = 1.0
+
+        try:
+            now = float(time.time())
+            last = float(self._warn_last.get(str(key), 0.0) or 0.0)
+            if (now - last) >= float(every):
+                self._warn_last[str(key)] = now
+                print(str(msg))
+        except Exception:
+            pass
+
+    def _compile_regex(self, pat: str) -> Optional[re.Pattern[str]]:
+        try:
+            s = str(pat or "").strip()
+            if not s:
+                return None
+            return re.compile(s, re.IGNORECASE)
+        except Exception:
+            return None
+
+    def _window_title_ok(self, title: str) -> bool:
+        t = str(title or "").strip()
+        if not t:
+            return False
+        inc = self._compile_regex(self._cfg_title_include)
+        exc = self._compile_regex(self._cfg_title_exclude)
+        try:
+            if inc is not None and inc.search(t) is None:
+                return False
+        except Exception:
+            pass
+        try:
+            if exc is not None and exc.search(t) is not None:
+                return False
+        except Exception:
+            pass
+        return True
+
+    def _is_obs_like_title(self, title: str) -> bool:
+        t = str(title or "")
+        exc = self._compile_regex(self._cfg_title_exclude)
+        try:
+            return bool(exc is not None and exc.search(t) is not None)
+        except Exception:
+            return False
+
+    def _get_process_name_by_pid(self, pid: int) -> str:
+        """Best-effort process name resolution (no psutil dependency)."""
+        try:
+            h = win32api.OpenProcess(win32con.PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        except Exception:
+            try:
+                h = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION | win32con.PROCESS_VM_READ, False, int(pid))
+            except Exception:
+                return ""
+        try:
+            # GetModuleFileNameEx is available in pywin32's win32process.
+            path = ""
+            try:
+                path = str(win32process.GetModuleFileNameEx(h, 0) or "")
+            except Exception:
+                path = ""
+            base = os.path.basename(path) if path else ""
+            return str(base or "")
+        except Exception:
+            return ""
+        finally:
+            try:
+                win32api.CloseHandle(h)
+            except Exception:
+                pass
+
+    def _list_visible_windows(self) -> list[tuple[int, str, int]]:
+        """Return [(hwnd, title, pid)] for visible top-level windows."""
+
+        out: list[tuple[int, str, int]] = []
+
+        def enum_handler(hwnd, ctx):
+            try:
+                if not win32gui.IsWindowVisible(hwnd):
+                    return
+                title = win32gui.GetWindowText(hwnd) or ""
+                try:
+                    _tid, pid = win32process.GetWindowThreadProcessId(hwnd)
+                except Exception:
+                    pid = 0
+                ctx.append((int(hwnd), str(title), int(pid)))
+            except Exception:
+                return
+
+        try:
+            win32gui.EnumWindows(enum_handler, out)
+        except Exception:
+            return []
+        return out
+
+    def _pick_target_window(self) -> tuple[int, str, str]:
+        """Pick a stable client window according to env policy.
+
+        Returns: (hwnd, title, reason)
+        """
+
+        # If user explicitly wants OBS/projector, allow excluded titles.
+        want_obs = str(self._cfg_target or "client").strip().lower() in {"obs", "projector", "obs_projector"}
+
+        proc_name = str(self._cfg_process_name or "").strip().lower()
+        inc = self._compile_regex(self._cfg_title_include)
+        exc = self._compile_regex(self._cfg_title_exclude)
+
+        candidates = self._list_visible_windows()
+
+        def _title_matches(t: str) -> bool:
+            if not t:
+                return False
+            try:
+                if inc is not None and inc.search(t) is None:
+                    return False
+            except Exception:
+                pass
+            if not want_obs:
+                try:
+                    if exc is not None and exc.search(t) is not None:
+                        return False
+                except Exception:
+                    pass
+            return True
+
+        # 1) process_name priority (if set)
+        if proc_name:
+            for hwnd, title, pid in candidates:
+                try:
+                    pn = self._get_process_name_by_pid(int(pid)).lower()
+                except Exception:
+                    pn = ""
+                if pn and pn == proc_name:
+                    # Optionally also enforce include/exclude for extra safety.
+                    if _title_matches(str(title)) or want_obs:
+                        return int(hwnd), str(title), "client_process_name"
+
+        # 2) include/exclude title policy (client)
+        for hwnd, title, _pid in candidates:
+            if _title_matches(str(title)):
+                return int(hwnd), str(title), "client_title"
+
+        # 3) If user explicitly asked for OBS, allow projector-ish titles.
+        if want_obs:
+            for hwnd, title, _pid in candidates:
+                try:
+                    if inc is not None and inc.search(str(title)) is None:
+                        continue
+                except Exception:
+                    pass
+                # In OBS mode we *allow* exclude matches.
+                return int(hwnd), str(title), "obs_title"
+
+        return 0, "", "not_found"
+
     def _log_ok(self, msg: str) -> None:
         if not self._verbose:
             return
@@ -150,17 +347,97 @@ class DXGICapture:
             pass
 
     def find_window(self) -> int:
+        # Legacy matching (kept for compatibility) now defers to the robust
+        # policy when available.
+        try:
+            hwnd, _title, _reason = self._pick_target_window()
+            return int(hwnd or 0)
+        except Exception:
+            pass
+
         def enum_handler(hwnd, ctx):
-            if win32gui.IsWindowVisible(hwnd):
-                title = win32gui.GetWindowText(hwnd)
-                title_l = title.lower()
-                for partial in self.title_partials:
-                    if partial.lower() in title_l:
-                        ctx.append(hwnd)
-                        break
+            try:
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd)
+                    title_l = str(title or "").lower()
+                    for partial in self.title_partials:
+                        if partial.lower() in title_l:
+                            ctx.append(int(hwnd))
+                            break
+            except Exception:
+                return
+
         hwnds: list[int] = []
-        win32gui.EnumWindows(enum_handler, hwnds)
-        return hwnds[0] if hwnds else 0
+        try:
+            win32gui.EnumWindows(enum_handler, hwnds)
+        except Exception:
+            return 0
+        return int(hwnds[0]) if hwnds else 0
+
+    def reacquire_target(self) -> bool:
+        """Try to (re)select the capture target window.
+
+        - Never clears capture_backend.
+        - Sets capture_state='reacquiring' when not found.
+        - Updates client_hwnd/title/bounds on success.
+        """
+
+        try:
+            # Refresh env live (so UI/scripts can change policy without restart).
+            self._cfg_target = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
+            self._cfg_title_include = (os.getenv("CAPTURE_TITLE_INCLUDE", "Tibia") or "Tibia").strip()
+            self._cfg_title_exclude = (
+                os.getenv("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS") or "Proyector|Projector|OBS"
+            ).strip()
+            self._cfg_process_name = (os.getenv("CAPTURE_PROCESS_NAME", "") or "").strip()
+        except Exception:
+            pass
+
+        try:
+            hwnd, title, reason = self._pick_target_window()
+        except Exception as e:
+            self.last_error = f"pick_target_error:{e}"
+            self.fail_count += 1
+            self.capture_state = "reacquiring"
+            self.target_found = False
+            self.target_reason = "reacquire_exception"
+            return False
+
+        if not hwnd:
+            self.fail_count += 1
+            self.target_found = False
+            self.target_reason = str(reason or "not_found")
+            self.capture_state = "reacquiring"
+            return False
+
+        try:
+            # Validate hwnd still exists.
+            if not bool(win32gui.IsWindow(int(hwnd))):
+                self.fail_count += 1
+                self.target_found = False
+                self.target_reason = "hwnd_invalid"
+                self.capture_state = "reacquiring"
+                return False
+        except Exception:
+            pass
+
+        self.client_hwnd = int(hwnd)
+        self.client_title = str(title or "")
+        self.target_found = True
+        self.target_reason = str(reason or "reacquired")
+        self.reacquire_count += 1
+
+        # Best-effort bounds for window crop.
+        try:
+            l, t, r, b = win32gui.GetWindowRect(int(hwnd))
+            self.capture_bounds = (int(l), int(t), int(r), int(b))
+        except Exception:
+            # Keep existing bounds if any.
+            pass
+
+        self.capture_state = "reacquired"
+        self.last_error = ""
+        return True
 
     def capture_fullscreen(self, preferred_monitor: Optional[int] = None) -> Optional[np.ndarray]:
         """Captura toda la pantalla usando MSS como fallback.
@@ -485,11 +762,161 @@ class DXGICapture:
         except Exception:
             pass
 
+        # Enforce robust target selection: prefer real client window by default.
+        try:
+            want_obs = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() in {
+                "obs",
+                "projector",
+                "obs_projector",
+            }
+        except Exception:
+            want_obs = False
+
+        try:
+            # If current selection looks like OBS/projector but user didn't ask
+            # for it, override with client window selection.
+            if (not bool(want_obs)) and self._is_obs_like_title(self.client_title):
+                self.reacquire_target()
+        except Exception:
+            pass
+
+        try:
+            # If hwnd is missing/invalid, reacquire.
+            h = int(self.client_hwnd or 0)
+            if (not h) or (not bool(win32gui.IsWindow(h))):
+                self.reacquire_target()
+        except Exception:
+            pass
+
         # Best-effort: infer monitor index from current client hwnd.
         try:
             self.capture_monitor_index = self.find_window_monitor(self.client_hwnd)
         except Exception:
             self.capture_monitor_index = None
+
+        # Policy option: when a monitor is forced (e.g. OBS monitor pinning),
+        # capture that monitor *first*. This avoids black captures that can
+        # happen on some systems when cropping a window on another monitor.
+        force_first = False
+        try:
+            raw = (os.getenv("CAPTURE_FORCE_MONITOR_FIRST", "") or "").strip().lower()
+            if raw:
+                force_first = raw in {"1", "true", "yes", "y", "on"}
+        except Exception:
+            force_first = False
+        if self.force_monitor is not None and (force_first or bool(self.strict_force_monitor)):
+            try:
+                fm = int(self.force_monitor)
+            except Exception:
+                fm = None
+            if fm is not None:
+                try:
+                    mon = self.capture_specific_monitor(fm)
+                    if mon is not None and self.validate_capture(mon):
+                        self.capture_monitor_index = int(fm)
+                        self.capture_state = f"monitor_forced_first@mon{int(fm)}"
+                        return mon
+                except Exception:
+                    pass
+
+                if bool(self.strict_force_monitor):
+                    # Optional failover when strict forced monitor fails.
+                    # This keeps strict-by-default safety but allows explicit
+                    # workflows:
+                    #   - CAPTURE_FAILOVER_MODE=scan_monitors
+                    #   - CAPTURE_FAILOVER_MODE=projector (CAPTURE_PROJECTOR_TITLE)
+                    try:
+                        failover = (os.getenv("CAPTURE_FAILOVER_MODE", "") or "").strip().lower()
+                    except Exception:
+                        failover = ""
+
+                    if failover in {"scan", "scan_monitors", "monitors"}:
+                        try:
+                            fr = self.capture_fullscreen(preferred_monitor=None)
+                            if fr is not None and self.validate_capture(fr, min_width=800, min_height=600):
+                                # capture_fullscreen sets capture_monitor_index.
+                                mi = getattr(self, "capture_monitor_index", None)
+                                self.capture_state = (
+                                    f"monitor_forced_failed_scan@mon{int(mi)}" if mi is not None else "monitor_forced_failed_scan"
+                                )
+                                return fr
+                        except Exception:
+                            pass
+
+                    if failover in {"projector", "obs_projector", "window", "source"}:
+                        try:
+                            title_hint = (os.getenv("CAPTURE_PROJECTOR_TITLE", "Tibia_Fuente") or "Tibia_Fuente").strip()
+                        except Exception:
+                            title_hint = "Tibia_Fuente"
+
+                        try:
+                            # Find a visible window matching the hint (substring/regex).
+                            hwnd_p = 0
+                            title_p = ""
+                            try:
+                                pat = self._compile_regex(title_hint)
+                            except Exception:
+                                pat = None
+
+                            for hwnd0, t0, _pid0 in (self._list_visible_windows() or []):
+                                tt = str(t0 or "")
+                                if not tt:
+                                    continue
+                                ok = False
+                                try:
+                                    if pat is not None:
+                                        ok = pat.search(tt) is not None
+                                    else:
+                                        ok = title_hint.lower() in tt.lower()
+                                except Exception:
+                                    ok = False
+                                if ok:
+                                    hwnd_p = int(hwnd0)
+                                    title_p = tt
+                                    break
+
+                            if hwnd_p:
+                                # Update target snapshot for diagnostics.
+                                self.client_hwnd = int(hwnd_p)
+                                self.client_title = str(title_p or "")
+                                self.target_found = True
+                                self.target_reason = "projector_failover"
+                                self.capture_target = "obs_projector"
+                                try:
+                                    self.capture_monitor_index = self.find_window_monitor(int(hwnd_p))
+                                except Exception:
+                                    pass
+                                try:
+                                    l, t, r, b = win32gui.GetWindowRect(int(hwnd_p))
+                                    self.capture_bounds = (int(l), int(t), int(r), int(b))
+                                except Exception:
+                                    self.capture_bounds = None
+
+                                # Try BitBlt first (often works even when MSS crop is black).
+                                try:
+                                    bb = self.capture_window(hwnd=int(hwnd_p))
+                                    if bb is not None and self.validate_capture(bb, min_width=80, min_height=80):
+                                        self.capture_state = "projector_bitblt"
+                                        return bb
+                                except Exception:
+                                    pass
+
+                                # Then try desktop crop using window bounds.
+                                try:
+                                    if self.capture_bounds is not None:
+                                        l, t, r, b = self.capture_bounds
+                                        sc = self.capture_screen_crop(bounds=(int(l), int(t), int(r), int(b)))
+                                        if sc is not None and self.validate_capture(sc, min_width=80, min_height=80):
+                                            self.capture_state = "projector_screen_crop"
+                                            return sc
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+
+                    self.capture_monitor_index = int(fm)
+                    self.capture_state = "monitor_forced_failed"
+                    return None
 
         # Prefer window-crop capture when we have bounds.
         try:
@@ -604,7 +1031,7 @@ class DXGICapture:
             img.shape = (height, width, 4)
             frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         except Exception as e:
-            print(f"BitBlt failed: {e}")
+            self._warn("bitblt_failed", f"BitBlt failed: {e}")
         finally:
             try:
                 if wDC is not None and (hwnd or self.client_hwnd or self.hwnd):
@@ -723,12 +1150,12 @@ class DXGICapture:
 
         # Verificar que no es una imagen completamente negra
         if np.all(frame == 0):
-            print("Warning: Captura completamente negra detectada")
+            self._warn("black_frame", "Warning: Captura completamente negra detectada")
             return False
 
         # Verificar que no es una imagen uniforme (todos los píxeles iguales)
         if np.all(frame == frame[0, 0]):
-            print("Warning: Captura uniforme detectada (todos los píxeles iguales)")
+            self._warn("uniform_frame", "Warning: Captura uniforme detectada (todos los píxeles iguales)")
             return False
 
         # Verificar que tiene variación de color (no es monocromática)
@@ -736,12 +1163,12 @@ class DXGICapture:
             # Para imágenes RGB/BGR
             std_per_channel = [np.std(frame[:, :, i]) for i in range(3)]
             if all(std < 1.0 for std in std_per_channel):  # Muy poca variación
-                print("Warning: Captura con muy poca variación de color")
+                self._warn("low_variation", "Warning: Captura con muy poca variación de color")
                 return False
 
         # Verificar resolución mínima
         if frame.shape[1] < min_width or frame.shape[0] < min_height:
-            print(f"Warning: Resolución demasiado baja: {frame.shape}")
+            self._warn("low_resolution", f"Warning: Resolución demasiado baja: {frame.shape}")
             return False
 
         return True

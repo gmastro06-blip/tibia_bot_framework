@@ -185,8 +185,17 @@ def build_capture_backend(*, force_monitor: int | None):
         return False
 
     capture_backend_raw = (os.getenv("CAPTURE_BACKEND", "") or "").strip().lower()
+
+    # Default policy: prefer DXGI unless the user explicitly asked for OBS.
+    # This avoids surprising "auto" selection of OBS projector windows.
+    try:
+        capture_target = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
+    except Exception:
+        capture_target = "client"
+    want_obs = capture_target in {"obs", "projector", "obs_projector"}
+
     if capture_backend_raw in {"", "auto"}:
-        capture_backend = "obs_websocket" if _has_obs_env() else "dxgi"
+        capture_backend = "obs_websocket" if (want_obs and _has_obs_env()) else "dxgi"
     else:
         capture_backend = capture_backend_raw
     if capture_backend in {"", "default", "dxgi", "win", "window"}:
@@ -238,6 +247,193 @@ def build_capture_backend(*, force_monitor: int | None):
 
     print(f"⚠️  CAPTURE_BACKEND desconocido '{capture_backend}'; usando DXGI")
     return DXGICapture(force_monitor=(int(force_monitor) if force_monitor is not None else None))
+
+
+def _detect_obs_monitor_index() -> int | None:
+    """Best-effort: detect which MSS monitor index OBS is on.
+
+    Returns MSS monitor index (1..n), or None when unavailable.
+    Never throws.
+    """
+
+    # Explicit override always wins.
+    try:
+        raw = (
+            (os.getenv("CAPTURE_OBS_MONITOR", "") or "").strip()
+            or (os.getenv("OBS_MONITOR_INDEX", "") or "").strip()
+        )
+        if raw:
+            return int(float(raw))
+    except Exception:
+        pass
+
+    # Auto-detect OBS monitor from OBS window position (Windows-only).
+    try:
+        import win32api  # type: ignore
+        import win32con  # type: ignore
+        import win32gui  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        candidates: list[tuple[int, int]] = []  # (area, hwnd)
+
+        def enum_handler(hwnd: int, out: list[tuple[int, int]]) -> None:
+            try:
+                if not win32gui.IsWindowVisible(hwnd):
+                    return
+                title = str(win32gui.GetWindowText(hwnd) or "").strip()
+                if not title:
+                    return
+                tl = title.lower()
+                if "obs" not in tl:
+                    return
+                # Prefer the main OBS window; avoid picking random tiny tool windows.
+                try:
+                    l, t, r, b = win32gui.GetWindowRect(hwnd)
+                    area = max(0, int(r) - int(l)) * max(0, int(b) - int(t))
+                except Exception:
+                    area = 0
+                if area <= 0:
+                    return
+                out.append((int(area), int(hwnd)))
+            except Exception:
+                return
+
+        win32gui.EnumWindows(enum_handler, candidates)
+        if not candidates:
+            return None
+        # Pick the largest OBS-ish window (usually the main window).
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        hwnd = int(candidates[0][1])
+
+        hmon = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+        info = win32api.GetMonitorInfo(hmon)
+        rect = info.get("Monitor") if isinstance(info, dict) else None
+        if not (isinstance(rect, (list, tuple)) and len(rect) == 4):
+            return None
+        l, t, r, b = [int(x) for x in rect]
+        obs_rect = (l, t, r, b)
+    except Exception:
+        return None
+
+    # Map Win32 monitor rect -> MSS monitor index by geometry.
+    try:
+        from mss import mss
+
+        with mss() as sct:
+            mons = list(getattr(sct, "monitors", []) or [])
+            best_idx = None
+            best_score = -1
+            for idx in range(1, len(mons)):
+                m = mons[idx]
+                try:
+                    ml = int(m.get("left", 0))
+                    mt = int(m.get("top", 0))
+                    mr = ml + int(m.get("width", 0))
+                    mb = mt + int(m.get("height", 0))
+                except Exception:
+                    continue
+                mrect = (ml, mt, mr, mb)
+
+                # Exact match is ideal.
+                if mrect == obs_rect:
+                    return int(idx)
+
+                # Otherwise: pick the monitor with the largest overlap.
+                ol = max(obs_rect[0], mrect[0])
+                ot = max(obs_rect[1], mrect[1])
+                orr = min(obs_rect[2], mrect[2])
+                ob = min(obs_rect[3], mrect[3])
+                ow = max(0, int(orr) - int(ol))
+                oh = max(0, int(ob) - int(ot))
+                overlap = int(ow * oh)
+                if overlap > best_score:
+                    best_score = overlap
+                    best_idx = int(idx)
+            return best_idx
+    except Exception:
+        return None
+
+
+def _capture_reinit_needed(
+    *,
+    exc_streak: int,
+    last_ok_age_s: float | None,
+    max_exc_streak: int = 3,
+    stale_s: float = 0.5,
+) -> bool:
+    """Pure helper to decide if capture backend should be rebuilt."""
+
+    try:
+        if int(exc_streak) >= int(max_exc_streak):
+            return True
+    except Exception:
+        pass
+
+    try:
+        if last_ok_age_s is not None and float(last_ok_age_s) >= float(stale_s):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _capture_trace_snapshot(capture: object, *, is_foreground: bool) -> dict[str, object]:
+    """Best-effort capture snapshot for DecisionTrace (never returns null-ish keys)."""
+
+    def _s(x: object, default: str = "") -> str:
+        try:
+            s = str(x or "").strip()
+            return s if s else default
+        except Exception:
+            return default
+
+    def _i(x: object, default: int = 0) -> int:
+        try:
+            if x is None:
+                return int(default)
+            if isinstance(x, bool):
+                return int(x)
+            if isinstance(x, (int, float)):
+                return int(x)
+            return int(str(x).strip() or str(default))
+        except Exception:
+            return int(default)
+
+    backend = _s(getattr(capture, "capture_backend", None), default=_s(type(capture).__name__, default="capture"))
+    state = _s(getattr(capture, "capture_state", None), default="unknown")
+    title = _s(getattr(capture, "client_title", None), default="")
+    hwnd = _i(getattr(capture, "client_hwnd", None), default=_i(getattr(capture, "hwnd", 0), default=0))
+
+    try:
+        mon_raw = getattr(capture, "capture_monitor_index", None)
+        monitor_index = (_i(mon_raw, default=0) if mon_raw is not None else None)
+    except Exception:
+        monitor_index = None
+
+    target_found = None
+    try:
+        tf = getattr(capture, "target_found", None)
+        target_found = (bool(tf) if tf is not None else None)
+    except Exception:
+        target_found = None
+
+    out: dict[str, object] = {
+        "backend": backend,
+        "capture_target": _s(getattr(capture, "capture_target", None), default=_s(os.getenv("CAPTURE_TARGET", "client"), default="client")),
+        "target_title": title,
+        "target_hwnd": hwnd if hwnd else None,
+        "state": state,
+        "monitor_index": monitor_index,
+        "target_found": (target_found if target_found is not None else bool(hwnd)),
+        "reason": _s(getattr(capture, "target_reason", None), default=""),
+        "fail_count": _i(getattr(capture, "fail_count", 0), default=0),
+        "reacquire_count": _i(getattr(capture, "reacquire_count", 0), default=0),
+        "last_error": _s(getattr(capture, "last_error", None), default=""),
+        "is_foreground": bool(is_foreground),
+    }
+    return out
 
 
 def main() -> None:
@@ -546,6 +742,33 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
     else:
         print("🖥️  FORCE_MONITOR no configurado; usando auto-detección")
 
+    # Policy: prefer capturing from the monitor where OBS is.
+    # If an explicit monitor is provided (FORCE_MONITOR/OBS_MONITOR_INDEX/CAPTURE_OBS_MONITOR), we use it.
+    # Otherwise we attempt to auto-detect OBS's monitor by locating the OBS window.
+    if force_monitor is None:
+        obs_mon = _detect_obs_monitor_index()
+        if obs_mon is not None:
+            force_monitor = int(obs_mon)
+            # Keep legacy naming in sync for capture backends that read this.
+            os.environ.setdefault("CAPTURE_OBS_FALLBACK_MONITOR", str(obs_mon))
+            # Prefer capturing from the pinned monitor first to avoid black
+            # window crops on multi-monitor setups.
+            os.environ.setdefault("CAPTURE_FORCE_MONITOR_FIRST", "1")
+            # Strict mode: do not fall back to other monitors when a forced
+            # monitor is pinned (prevents black/wrong-monitor captures).
+            os.environ.setdefault("CAPTURE_STRICT_FORCE_MONITOR", "1")
+
+            # If the forced monitor is black (common when Tibia is on another
+            # monitor), allow an explicit failover policy. Default: capture an
+            # OBS projector/source window (often titled like the OBS source).
+            os.environ.setdefault("CAPTURE_FAILOVER_MODE", "projector")
+            os.environ.setdefault(
+                "CAPTURE_PROJECTOR_TITLE",
+                (os.getenv("CAPTURE_PROJECTOR_TITLE", "") or os.getenv("OBS_SOURCE_NAME", "Tibia_Fuente") or "Tibia_Fuente").strip()
+                or "Tibia_Fuente",
+            )
+            print(f"🖥️  OBS monitor activo: {obs_mon} (pin de captura)")
+
     capture = build_capture_backend(force_monitor=force_monitor)
     gamestate_builder = GameStateBuilder()
 
@@ -614,7 +837,7 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
 
     # Thread de captura
     def capture_thread():
-        nonlocal rois, resolution
+        nonlocal rois, resolution, capture
         target_fps = 10.0
         fps_raw = os.getenv("CAPTURE_FPS", "").strip()
         if fps_raw:
@@ -630,6 +853,16 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
         cap_ms_sum = 0.0
 
         target_period = 1.0 / max(1.0, target_fps)
+        # Capture resiliency state.
+        last_ok_ts = 0.0
+        last_reacquire_ts = 0.0
+        last_reinit_ts = 0.0
+        exc_streak = 0
+        last_good_frame = None
+        # One-shot (or change) log: which monitor are we actually capturing.
+        last_logged_mon = None
+        last_logged_backend = ""
+        last_logged_target = ""
         try:
             print("📸 Thread de captura iniciado")
         except Exception:
@@ -638,9 +871,17 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             t0 = time.time()
             try:
                 frame = capture.capture()
+                exc_streak = 0
             except Exception:
                 frame = None
                 _h_inc("capture_ex")
+                exc_streak = int(exc_streak) + 1
+                try:
+                    # Best-effort diagnostics on the capture backend.
+                    if hasattr(capture, "last_error"):
+                        setattr(capture, "last_error", "exception")
+                except Exception:
+                    pass
                 # Backoff to avoid a tight crash-loop if capture repeatedly errors.
                 try:
                     time.sleep(0.05)
@@ -651,9 +892,135 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 cap_ms_sum += (time.time() - t0) * 1000.0
                 n_cap += 1
 
+            now = time.time()
+            got_real = frame is not None
+
+            # Fast reacquire loop when failing (independent of CAPTURE_FPS).
+            try:
+                if frame is None and hasattr(capture, "reacquire_target"):
+                    if (now - float(last_reacquire_ts or 0.0)) >= 0.25:
+                        last_reacquire_ts = float(now)
+                        try:
+                            getattr(capture, "reacquire_target")()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Re-init capture backend if it's repeatedly crashing or stale.
+            try:
+                age_s = (now - float(last_ok_ts)) if float(last_ok_ts) > 0.0 else None
+            except Exception:
+                age_s = None
+            try:
+                if _capture_reinit_needed(exc_streak=exc_streak, last_ok_age_s=age_s):
+                    # Rate-limit rebuilds to avoid thrashing.
+                    if (now - float(last_reinit_ts or 0.0)) >= 1.0:
+                        last_reinit_ts = float(now)
+                        try:
+                            print("🔁 Rebuilding capture backend (stale/exception)")
+                        except Exception:
+                            pass
+                        try:
+                            capture = build_capture_backend(force_monitor=force_monitor)
+                        except Exception:
+                            pass
+                        exc_streak = 0
+            except Exception:
+                pass
+
+            # If capture is stale for long enough, surface an explicit state.
+            try:
+                if frame is None and age_s is not None and float(age_s) >= 0.7:
+                    if hasattr(capture, "capture_state"):
+                        try:
+                            setattr(capture, "capture_state", "stale_capture")
+                        except Exception:
+                            pass
+                    if hasattr(capture, "last_error"):
+                        try:
+                            setattr(capture, "last_error", "stale_capture")
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Latest-wins enqueue: prefer real frames; optionally keep the
+            # pipeline alive with the last good frame for a short window.
+            if frame is None and last_good_frame is not None:
+                try:
+                    age = (now - float(last_ok_ts)) if float(last_ok_ts) > 0.0 else 1e9
+                except Exception:
+                    age = 1e9
+                if float(age) <= 0.5:
+                    frame = last_good_frame
+
             if frame is not None:
-                _h_inc("capture_ok")
-                _h_set("last_frame_ts", time.time())
+                if got_real:
+                    _h_inc("capture_ok")
+                    last_ok_ts = float(now)
+                    last_good_frame = frame
+                    _h_set("last_frame_ts", float(now))
+
+                    # Log captured monitor index as soon as it's known.
+                    # MSS monitor indices: 1..n, 0 = virtual combined.
+                    try:
+                        mon = getattr(capture, "capture_monitor_index", None)
+                        if mon is not None:
+                            mon_i = int(mon)
+                        else:
+                            mon_i = None
+                    except Exception:
+                        mon_i = None
+                    try:
+                        backend_s = str(getattr(capture, "capture_backend", "") or "")
+                    except Exception:
+                        backend_s = ""
+                    try:
+                        target_s = str(getattr(capture, "capture_target", "") or "")
+                    except Exception:
+                        target_s = ""
+
+                    try:
+                        should_log = False
+                        if mon_i != last_logged_mon:
+                            should_log = True
+                        if backend_s and backend_s != last_logged_backend:
+                            should_log = True
+                        if target_s and target_s != last_logged_target:
+                            should_log = True
+
+                        if should_log:
+                            last_logged_mon = mon_i
+                            last_logged_backend = backend_s
+                            last_logged_target = target_s
+                            fm = getattr(capture, "force_monitor", None)
+                            strict = bool(getattr(capture, "strict_force_monitor", False))
+                            state = str(getattr(capture, "capture_state", "") or "")
+                            extra = ""
+                            try:
+                                if fm is not None:
+                                    extra = f" forced={int(fm)} strict={int(strict)}"
+                            except Exception:
+                                extra = f" forced={fm} strict={int(strict)}"
+
+                            mon_s = "?" if mon_i is None else str(int(mon_i))
+                            print(
+                                f"🖥️  Captura monitor MSS={mon_s} backend={backend_s or '?'} target={target_s or '?'} state={state or '?'}{extra}"
+                            )
+                    except Exception:
+                        pass
+
+                    # Publish capture freshness to UI telemetry (optional).
+                    try:
+                        if runtime_config is not None:
+                            runtime_config.update_telemetry(ts_frame=float(now))
+                    except Exception:
+                        pass
+                else:
+                    # Real capture failed, but we keep the pipeline alive using
+                    # a short-lived cached frame.
+                    _h_inc("capture_none")
                 if rois is None or resolution is None:
                     resolution = (int(frame.shape[1]), int(frame.shape[0]))
                     rois_loaded, source_resolution, used_path = load_roi_config(resolution)
@@ -1234,6 +1601,8 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                                     if c is None and mc is None:
                                         return ""
                                     if c is None:
+                                        if mc is None:
+                                            return ""
                                         return f"(min={float(mc):.2f})"
                                     if mc is None:
                                         return f"({float(c):.2f})"
@@ -2120,43 +2489,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 # DecisionTrace (always-on): also log ticks when no GameState is
                 # available, to aid real-world debugging of stale pipelines.
                 try:
-                    cap_backend = None
-                    cap_title = None
-                    cap_hwnd = None
-                    cap_state = None
-                    cap_mon = None
-                    try:
-                        cap_backend = str(getattr(capture, "capture_backend", "") or "")
-                    except Exception:
-                        cap_backend = None
-                    try:
-                        cap_title = str(getattr(capture, "client_title", "") or "")
-                    except Exception:
-                        cap_title = None
-                    try:
-                        cap_hwnd = int(getattr(capture, "client_hwnd", 0) or 0)
-                    except Exception:
-                        cap_hwnd = None
-                    try:
-                        cap_state = str(getattr(capture, "capture_state", "") or "")
-                    except Exception:
-                        cap_state = None
-                    try:
-                        raw_mon = getattr(capture, "capture_monitor_index", None)
-                        cap_mon = (int(raw_mon) if raw_mon is not None else None)
-                    except Exception:
-                        cap_mon = None
+                    cap_snap = _capture_trace_snapshot(capture, is_foreground=bool(target_window_active))
 
                     evt = {
                         "ts": float(time.time()),
-                        "capture": {
-                            "backend": cap_backend or None,
-                            "target_title": cap_title or None,
-                            "target_hwnd": cap_hwnd,
-                            "state": cap_state or None,
-                            "monitor_index": cap_mon,
-                            "is_foreground": bool(target_window_active),
-                        },
+                        "capture": cap_snap,
                         "healing": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
                         "targeting": {"eligible": False, "emitted": False, "reason": "no_gamestate", "request": None},
                         "cavebot": {
@@ -2561,6 +2898,36 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                         extras.append(f"Amulet {'Y' if bool(amulet_equipped) else 'N'}")
                     if sig is not None and getattr(sig, "hungry", None) is not None:
                         extras.append(f"Hungry {'Y' if bool(sig.hungry) else 'N'}")
+
+                    # Quick OCR/vision diagnostics to explain '?' values.
+                    try:
+                        ocr_on = (os.getenv("OCR_ENABLED", "1") or "1").strip().lower() in {"1", "true", "yes", "y", "on"}
+                    except Exception:
+                        ocr_on = True
+                    if not ocr_on:
+                        extras.append("OCR OFF")
+                    else:
+                        try:
+                            hpmp_on = (os.getenv("HPMP_OCR_ENABLED", "1") or "1").strip().lower() in {"1", "true", "yes", "y", "on"}
+                        except Exception:
+                            hpmp_on = True
+                        try:
+                            cap_on = (os.getenv("CAP_OCR_ENABLED", "1") or "1").strip().lower() in {"1", "true", "yes", "y", "on"}
+                        except Exception:
+                            cap_on = True
+                        if not hpmp_on:
+                            extras.append("HPMP_OCR OFF")
+                        if not cap_on:
+                            extras.append("CAP_OCR OFF")
+
+                    try:
+                        hm = str(getattr(gamestate, "hp_method", "") or "")
+                        mm = str(getattr(gamestate, "mp_method", "") or "")
+                        cm = str(getattr(gamestate, "cap_method", "") or "")
+                        if hm or mm or cm:
+                            extras.append(f"src hp={hm or '-'} mp={mm or '-'} cap={cm or '-'}")
+                    except Exception:
+                        pass
                 except Exception:
                     extras = []
                 extra_str = (", " + ", ".join(extras)) if extras else ""
@@ -3898,16 +4265,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
                 except Exception:
                     drv_name = ""
 
+                cap_snap = _capture_trace_snapshot(capture, is_foreground=bool(target_window_active))
+
                 evt = {
                     "ts": float(time.time()),
-                    "capture": {
-                        "backend": cap_backend or None,
-                        "target_title": cap_title or None,
-                        "target_hwnd": cap_hwnd,
-                        "state": cap_state or None,
-                        "monitor_index": cap_mon,
-                        "is_foreground": bool(target_window_active),
-                    },
+                    "capture": cap_snap,
                     "healing": {
                         "eligible": bool(healing_eligible),
                         "emitted": bool(healing_emitted),

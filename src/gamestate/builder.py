@@ -96,6 +96,55 @@ def _sanitize_current_max(
 
 
 @dataclass
+class DebouncedBoolean:
+    """Debounce a boolean signal with tri-state inputs.
+
+    - `observed=True/False`: updates streaks and may toggle stable state.
+    - `observed=None`: no new info; stable state may decay from True to None
+      after `max_hold_ms` to avoid stickiness.
+    """
+
+    on_frames: int = 2
+    off_frames: int = 2
+    max_hold_ms: int = 700
+    stable: bool | None = None
+    on_streak: int = 0
+    off_streak: int = 0
+    last_true_ts: float = 0.0
+    last_observed: bool | None = None
+
+    def _apply_hold_decay(self, *, now_ts: float) -> None:
+        try:
+            if self.stable is True and int(self.max_hold_ms) > 0 and float(self.last_true_ts) > 0.0:
+                if (float(now_ts) - float(self.last_true_ts)) * 1000.0 >= float(self.max_hold_ms):
+                    self.stable = None
+        except Exception:
+            pass
+
+    def update(self, observed: bool | None, *, now_ts: float) -> bool | None:
+        self.last_observed = observed
+        if observed is None:
+            self._apply_hold_decay(now_ts=float(now_ts))
+            return self.stable
+
+        try:
+            if bool(observed):
+                self.on_streak = int(self.on_streak) + 1
+                self.off_streak = 0
+                if int(self.on_streak) >= int(max(1, self.on_frames)):
+                    self.stable = True
+                    self.last_true_ts = float(now_ts)
+            else:
+                self.off_streak = int(self.off_streak) + 1
+                self.on_streak = 0
+                if int(self.off_streak) >= int(max(1, self.off_frames)):
+                    self.stable = False
+        except Exception:
+            pass
+        return self.stable
+
+
+@dataclass
 class GameState:
     """Estado actual del juego"""
     hp_current: Optional[int] = None
@@ -276,15 +325,47 @@ class GameStateBuilder:
         self._status_on_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
         self._status_off_streak: Dict[str, int] = {"paralyzed": 0, "haste_active": 0, "utamo_active": 0}
 
-        # Presence flags (ring/amulet/hungry): debounce across K frames.
+        # Presence flags (ring/amulet/hungry): real-time debounce + anti-stickiness.
+        # Defaults are chosen to meet the UI latency target (<200ms @ ~10fps).
         try:
-            self._presence_persist_k = int(float(os.getenv("PRESENCE_PERSIST_K", "3").strip() or "3"))
+            self._presence_persist_k = int(float(os.getenv("PRESENCE_PERSIST_K", "0").strip() or "0"))
         except Exception:
-            self._presence_persist_k = 3
-        self._presence_persist_k = max(1, min(20, int(self._presence_persist_k)))
-        self._presence_state: Dict[str, bool] = {"ring_equipped": False, "amulet_equipped": False, "hungry": False}
-        self._presence_on_streak: Dict[str, int] = {"ring_equipped": 0, "amulet_equipped": 0, "hungry": 0}
-        self._presence_off_streak: Dict[str, int] = {"ring_equipped": 0, "amulet_equipped": 0, "hungry": 0}
+            self._presence_persist_k = 0
+        self._presence_persist_k = max(0, min(20, int(self._presence_persist_k)))
+
+        def _env_int(name: str, default: int) -> int:
+            raw = (os.getenv(name, "") or "").strip()
+            if raw:
+                try:
+                    return int(float(raw))
+                except Exception:
+                    return int(default)
+            return int(default)
+
+        def _env_ms(name: str, default: int) -> int:
+            try:
+                return int(float((os.getenv(name, str(default)) or str(default)).strip() or str(default)))
+            except Exception:
+                return int(default)
+
+        # Back-compat: if PRESENCE_PERSIST_K was used previously, map it to
+        # on/off frames only when explicit PRESENCE_ON_FRAMES/OFF_FRAMES are unset.
+        on_frames = _env_int("PRESENCE_ON_FRAMES", 2)
+        off_frames = _env_int("PRESENCE_OFF_FRAMES", 2)
+        if int(self._presence_persist_k) > 0:
+            if (os.getenv("PRESENCE_ON_FRAMES", "") or "").strip() == "":
+                on_frames = int(self._presence_persist_k)
+            if (os.getenv("PRESENCE_OFF_FRAMES", "") or "").strip() == "":
+                off_frames = int(self._presence_persist_k)
+        on_frames = max(1, min(20, int(on_frames)))
+        off_frames = max(1, min(20, int(off_frames)))
+        max_hold_ms = max(0, min(5000, int(_env_ms("PRESENCE_MAX_HOLD_MS", 700))))
+
+        self._presence_debouncers: Dict[str, DebouncedBoolean] = {
+            "ring_equipped": DebouncedBoolean(on_frames=on_frames, off_frames=off_frames, max_hold_ms=max_hold_ms),
+            "amulet_equipped": DebouncedBoolean(on_frames=on_frames, off_frames=off_frames, max_hold_ms=max_hold_ms),
+            "hungry": DebouncedBoolean(on_frames=on_frames, off_frames=off_frames, max_hold_ms=max_hold_ms),
+        }
 
         # Vision real-time guard: if a vision update becomes too slow (often due to
         # OCR/EasyOCR or Roboflow inference), the pipeline can effectively stall and
@@ -1696,6 +1777,7 @@ class GameStateBuilder:
         # (C) Equipment + status icons (best-effort, depends on calibrated ROIs)
         try:
             presence_dbg: Dict[str, Any] = {}
+            now_p = time.time()
             try:
                 if isinstance(gamestate.hud_debug, dict):
                     presence_dbg["rois_px"] = LayoutTracker.apply_layout(
@@ -1800,31 +1882,26 @@ class GameStateBuilder:
                             pass
 
                         # Debounce to reduce flicker / rare false positives.
-                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
                         key = "ring_equipped"
-                        if detected is None:
-                            # Unknown: keep showing True if we were already stable True.
-                            gamestate.ring_equipped = True if bool(self._presence_state.get(key, False)) else None
-                        else:
-                            if bool(detected):
-                                self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
-                                self._presence_off_streak[key] = 0
-                                if int(self._presence_on_streak[key]) >= int(k):
-                                    self._presence_state[key] = True
-                            else:
-                                self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
-                                self._presence_on_streak[key] = 0
-                                if int(self._presence_off_streak[key]) >= int(k):
-                                    self._presence_state[key] = False
-
-                            gamestate.ring_equipped = bool(self._presence_state.get(key, False))
+                        try:
+                            deb = self._presence_debouncers.get(key)
+                            if deb is not None:
+                                gamestate.ring_equipped = deb.update(detected, now_ts=float(now_p))
+                        except Exception:
+                            pass
 
                         try:
                             if "ring" in presence_dbg:
                                 presence_dbg["ring"]["state"] = gamestate.ring_equipped
-                                presence_dbg["ring"]["stable_state"] = bool(self._presence_state.get(key, False))
-                                presence_dbg["ring"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
-                                presence_dbg["ring"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                                try:
+                                    deb = self._presence_debouncers.get(key)
+                                    if deb is not None:
+                                        presence_dbg["ring"]["stable_state"] = deb.stable
+                                        presence_dbg["ring"]["on_streak"] = int(deb.on_streak)
+                                        presence_dbg["ring"]["off_streak"] = int(deb.off_streak)
+                                        presence_dbg["ring"]["max_hold_ms"] = int(deb.max_hold_ms)
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
                 if rois.get("amulet_slot") is not None:
@@ -1900,30 +1977,26 @@ class GameStateBuilder:
                         except Exception:
                             pass
 
-                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
                         key = "amulet_equipped"
-                        if detected is None:
-                            gamestate.amulet_equipped = True if bool(self._presence_state.get(key, False)) else None
-                        else:
-                            if bool(detected):
-                                self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
-                                self._presence_off_streak[key] = 0
-                                if int(self._presence_on_streak[key]) >= int(k):
-                                    self._presence_state[key] = True
-                            else:
-                                self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
-                                self._presence_on_streak[key] = 0
-                                if int(self._presence_off_streak[key]) >= int(k):
-                                    self._presence_state[key] = False
-
-                            gamestate.amulet_equipped = bool(self._presence_state.get(key, False))
+                        try:
+                            deb = self._presence_debouncers.get(key)
+                            if deb is not None:
+                                gamestate.amulet_equipped = deb.update(detected, now_ts=float(now_p))
+                        except Exception:
+                            pass
 
                         try:
                             if "amulet" in presence_dbg:
                                 presence_dbg["amulet"]["state"] = gamestate.amulet_equipped
-                                presence_dbg["amulet"]["stable_state"] = bool(self._presence_state.get(key, False))
-                                presence_dbg["amulet"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
-                                presence_dbg["amulet"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                                try:
+                                    deb = self._presence_debouncers.get(key)
+                                    if deb is not None:
+                                        presence_dbg["amulet"]["stable_state"] = deb.stable
+                                        presence_dbg["amulet"]["on_streak"] = int(deb.on_streak)
+                                        presence_dbg["amulet"]["off_streak"] = int(deb.off_streak)
+                                        presence_dbg["amulet"]["max_hold_ms"] = int(deb.max_hold_ms)
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
 
@@ -1952,21 +2025,19 @@ class GameStateBuilder:
                             high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
                         except Exception:
                             high_h = 35
-                        detected = bool(
-                            is_hungry_hsv(
-                                frame[hy : hy + hh, hx : hx + hw],
-                                min_pct=min_pct,
-                                min_component_pct=min_comp,
-                                strip_border_frac=border_frac,
-                                low_h=low_h,
-                                high_h=high_h,
-                            )
+                        detected = is_hungry_hsv(
+                            frame[hy : hy + hh, hx : hx + hw],
+                            min_pct=min_pct,
+                            min_component_pct=min_comp,
+                            strip_border_frac=border_frac,
+                            low_h=low_h,
+                            high_h=high_h,
                         )
 
                         try:
                             presence_dbg["hungry"] = {
                                 "roi": [int(hx), int(hy), int(hw), int(hh)],
-                                "detected_raw": bool(detected),
+                                "detected_raw": (None if detected is None else bool(detected)),
                                 "min_pct": float(min_pct),
                                 "min_component_pct": float(min_comp),
                                 "border_frac": float(border_frac),
@@ -1977,27 +2048,26 @@ class GameStateBuilder:
                         except Exception:
                             pass
 
-                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
                         key = "hungry"
-                        if detected:
-                            self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
-                            self._presence_off_streak[key] = 0
-                            if int(self._presence_on_streak[key]) >= int(k):
-                                self._presence_state[key] = True
-                        else:
-                            self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
-                            self._presence_on_streak[key] = 0
-                            if int(self._presence_off_streak[key]) >= int(k):
-                                self._presence_state[key] = False
-
-                        gamestate.hungry = bool(self._presence_state.get(key, False))
+                        try:
+                            deb = self._presence_debouncers.get(key)
+                            if deb is not None:
+                                gamestate.hungry = deb.update(detected, now_ts=float(now_p))
+                        except Exception:
+                            pass
 
                         try:
                             if "hungry" in presence_dbg:
                                 presence_dbg["hungry"]["state"] = gamestate.hungry
-                                presence_dbg["hungry"]["stable_state"] = bool(self._presence_state.get(key, False))
-                                presence_dbg["hungry"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
-                                presence_dbg["hungry"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
+                                try:
+                                    deb = self._presence_debouncers.get(key)
+                                    if deb is not None:
+                                        presence_dbg["hungry"]["stable_state"] = deb.stable
+                                        presence_dbg["hungry"]["on_streak"] = int(deb.on_streak)
+                                        presence_dbg["hungry"]["off_streak"] = int(deb.off_streak)
+                                        presence_dbg["hungry"]["max_hold_ms"] = int(deb.max_hold_ms)
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
                 elif rois.get("states_icons") is not None:
@@ -2061,16 +2131,23 @@ class GameStateBuilder:
                         border_frac = 0.10
                     low_h = int(float(os.getenv("HUNGRY_H_LOW", "8")))
                     high_h = int(float(os.getenv("HUNGRY_H_HIGH", "35")))
-                    gamestate.hungry = bool(
-                        is_hungry_hsv(
-                            crop,
-                            min_pct=min_pct,
-                            min_component_pct=min_comp,
-                            strip_border_frac=border_frac,
-                            low_h=low_h,
-                            high_h=high_h,
-                        )
+                    detected = is_hungry_hsv(
+                        crop,
+                        min_pct=min_pct,
+                        min_component_pct=min_comp,
+                        strip_border_frac=border_frac,
+                        low_h=low_h,
+                        high_h=high_h,
                     )
+                    key = "hungry"
+                    try:
+                        deb = self._presence_debouncers.get(key)
+                        if deb is not None:
+                            gamestate.hungry = deb.update(detected, now_ts=float(now_p))
+                        else:
+                            gamestate.hungry = detected
+                    except Exception:
+                        gamestate.hungry = detected
 
                     try:
                         # If hungry_icon ROI is missing, this is the fallback source.
@@ -2079,7 +2156,7 @@ class GameStateBuilder:
                             presence_dbg["hungry"].update(
                                 {
                                     "roi": [int(sx), int(sy), int(sw), int(sh)],
-                                    "detected_raw": bool(gamestate.hungry),
+                                    "detected_raw": (None if detected is None else bool(detected)),
                                     "min_pct": float(min_pct),
                                     "min_component_pct": float(min_comp),
                                     "border_frac": float(border_frac),
@@ -2091,30 +2168,18 @@ class GameStateBuilder:
                     except Exception:
                         pass
 
-                    # Debounce hungry from broad ROI too (reduces random orange pixels).
                     try:
-                        detected = bool(gamestate.hungry)
-                        k = int(getattr(self, "_presence_persist_k", 3) or 3)
-                        key = "hungry"
-                        if detected:
-                            self._presence_on_streak[key] = int(self._presence_on_streak.get(key, 0) or 0) + 1
-                            self._presence_off_streak[key] = 0
-                            if int(self._presence_on_streak[key]) >= int(k):
-                                self._presence_state[key] = True
-                        else:
-                            self._presence_off_streak[key] = int(self._presence_off_streak.get(key, 0) or 0) + 1
-                            self._presence_on_streak[key] = 0
-                            if int(self._presence_off_streak[key]) >= int(k):
-                                self._presence_state[key] = False
-                        gamestate.hungry = bool(self._presence_state.get(key, False))
-                        try:
-                            if isinstance(presence_dbg.get("hungry"), dict):
-                                presence_dbg["hungry"]["state"] = gamestate.hungry
-                                presence_dbg["hungry"]["stable_state"] = bool(self._presence_state.get(key, False))
-                                presence_dbg["hungry"]["on_streak"] = int(self._presence_on_streak.get(key, 0) or 0)
-                                presence_dbg["hungry"]["off_streak"] = int(self._presence_off_streak.get(key, 0) or 0)
-                        except Exception:
-                            pass
+                        if isinstance(presence_dbg.get("hungry"), dict):
+                            presence_dbg["hungry"]["state"] = gamestate.hungry
+                            try:
+                                deb = self._presence_debouncers.get(key)
+                                if deb is not None:
+                                    presence_dbg["hungry"]["stable_state"] = deb.stable
+                                    presence_dbg["hungry"]["on_streak"] = int(deb.on_streak)
+                                    presence_dbg["hungry"]["off_streak"] = int(deb.off_streak)
+                                    presence_dbg["hungry"]["max_hold_ms"] = int(deb.max_hold_ms)
+                            except Exception:
+                                pass
                     except Exception:
                         pass
 

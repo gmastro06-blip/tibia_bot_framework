@@ -353,17 +353,21 @@ def is_hungry_hsv(
     high_h: int = 35,
     high_s: int = 255,
     high_v: int = 255,
-) -> bool:
+) -> bool | None:
     """Heuristic hunger-icon detector using an HSV color band.
 
-    This is a fallback when a dedicated `hungry_icon` ROI isn't available.
-    It flags True when the crop contains a noticeable amount of orange/yellow.
+    Tri-state semantics:
+    - True: hungry icon present.
+    - False: hungry icon NOT present.
+    - None: crop invalid/unusable.
 
-    Returns False if OpenCV isn't available.
+    Notes:
+    - This is used as a fallback when a dedicated `hungry_icon` ROI isn't available.
+    - If OpenCV isn't available, this returns False for valid crops.
     """
 
     if crop is None or not isinstance(crop, np.ndarray) or crop.size == 0:
-        return False
+        return None
 
     try:
         import cv2

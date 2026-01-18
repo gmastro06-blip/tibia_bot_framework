@@ -42,14 +42,14 @@ def _set_common_env(env: dict[str, str], *, monitor: int, capture_fps: float) ->
     env.setdefault("LOG_JSONL_ENABLED", "1")
     env.setdefault("LOG_JSONL_INTERVAL_MS", "250")
 
-    # Stability/observability for HP/MP debugging.
-    # If HP/MP OCR is slow or stalls on this machine, keep the vision thread alive
-    # by relying on bars (GameStateBuilder fallback) during trials.
-    env.setdefault("HPMP_OCR_ENABLED", "0")
+    # OCR defaults (safe): enable OCR in an isolated subprocess with a hard timeout.
+    # This keeps the vision thread responsive even if EasyOCR/Torch hangs.
+    env.setdefault("OCR_ENABLED", "1")
+    env.setdefault("OCR_ISOLATE_PROCESS", "1")
+    env.setdefault("OCR_READTEXT_TIMEOUT_MS", "250")
 
-    # Global OCR kill-switch (EasyOCR/Torch) for stability during trials.
-    # This prevents *any* OCR path (e.g., CAP OCR) from stalling the vision thread.
-    env.setdefault("OCR_ENABLED", "0")
+    # Default OCR surface area: HP/MP only (most useful + least risky).
+    env.setdefault("HPMP_OCR_ENABLED", "1")
     env.setdefault("CAP_OCR_ENABLED", "0")
 
     # Emit bar diagnostics (top strip vs legacy low bars) in console and JSONL.
@@ -128,6 +128,35 @@ def main() -> int:
     ap.add_argument("--capture-fps", type=float, default=float(os.getenv("CAPTURE_FPS", "10") or 10))
     ap.add_argument("--route", type=str, default=os.getenv("CAVEBOT_ROUTE_PATH", "configs/route.json") or "configs/route.json")
     ap.add_argument("--cavebot-mode", type=str, default=os.getenv("CAVEBOT_MODE", "pos") or "pos")
+    ap.add_argument(
+        "--roboflow",
+        choices=["off", "on"],
+        default=(os.getenv("TRIAL_ROBOFLOW", "off") or "off").strip().lower(),
+        help=(
+            "Roboflow mode: off (default, avoids hosted inference stalls), on (enable Roboflow if configured). "
+            "If you see STALE_GS, try --roboflow off."
+        ),
+    )
+    ap.add_argument(
+        "--ocr",
+        choices=["off", "hpmp", "all"],
+        default=(os.getenv("TRIAL_OCR", "hpmp") or "hpmp").strip().lower(),
+        help=(
+            "OCR mode: off (most stable), hpmp (enable HP/MP OCR only), "
+            "all (enable HP/MP + CAP OCR)."
+        ),
+    )
+    ap.add_argument(
+        "--ocr-gpu",
+        choices=["auto", "0", "1"],
+        default=(os.getenv("OCR_GPU", "0") or "0").strip().lower(),
+        help="OCR GPU mode: auto (don't set OCR_GPU), 0 (force CPU), 1 (force GPU)",
+    )
+    ap.add_argument(
+        "--ocr-init-log",
+        action="store_true",
+        help="Print OCR init diagnostics (sets OCR_INIT_LOG=1).",
+    )
     ap.add_argument("--out-dir", type=str, default="logs/trials")
     ap.add_argument("--live", action="store_true", help="Run the live injection phase (sends OS input).")
     ap.add_argument(
@@ -147,19 +176,48 @@ def main() -> int:
     phase1 = out_base / "dry_run"
     phase1.mkdir(parents=True, exist_ok=True)
 
+    # Optional OCR override (default remains stable/off).
+    ocr_env: dict[str, str] = {}
+    try:
+        mode = str(getattr(args, "ocr", "off") or "off").strip().lower()
+    except Exception:
+        mode = "off"
+
+    if mode in {"hpmp", "all"}:
+        ocr_env["OCR_ENABLED"] = "1"
+        ocr_env["OCR_ISOLATE_PROCESS"] = "1"
+        ocr_env["OCR_READTEXT_TIMEOUT_MS"] = os.getenv("OCR_READTEXT_TIMEOUT_MS", "250") or "250"
+        ocr_env["HPMP_OCR_ENABLED"] = "1"
+        ocr_env["CAP_OCR_ENABLED"] = "1" if mode == "all" else "0"
+    elif mode == "off":
+        # Keep defaults from _set_common_env (OCR disabled).
+        pass
+
+    try:
+        ocr_gpu = str(getattr(args, "ocr_gpu", "auto") or "auto").strip().lower()
+    except Exception:
+        ocr_gpu = "auto"
+    if ocr_gpu in {"0", "1"}:
+        ocr_env["OCR_GPU"] = ocr_gpu
+
+    if bool(getattr(args, "ocr_init_log", False)):
+        ocr_env["OCR_INIT_LOG"] = "1"
+
     print(f"▶ Phase 1/2: dry-run (no OS input) | seconds={args.seconds_dry} | out={phase1}")
+    use_roboflow = str(getattr(args, "roboflow", "off") or "off").strip().lower() in {"on", "1", "true", "yes"}
     rc1 = _run_smoke_subprocess(
         seconds=float(args.seconds_dry),
         monitor=int(args.monitor),
         capture_fps=float(args.capture_fps),
         out_base=phase1,
-        disable_roboflow=False,
+        disable_roboflow=(not bool(use_roboflow)),
         confirm_actions=False,
         extra_env={
             "ASSIST_DRY_RUN": "1",
             "ASSIST_AUTO_COMMIT_WHEN_ARMED": "0",
             "CAVEBOT_ROUTE_PATH": str(args.route),
             "CAVEBOT_MODE": str(args.cavebot_mode),
+            **ocr_env,
         },
     )
     if rc1 != 0:
@@ -192,7 +250,7 @@ def main() -> int:
         monitor=int(args.monitor),
         capture_fps=float(args.capture_fps),
         out_base=phase2,
-        disable_roboflow=False,
+        disable_roboflow=(not bool(use_roboflow)),
         confirm_actions=False,
         extra_env={
             "ASSIST_DRY_RUN": "0",
@@ -201,6 +259,7 @@ def main() -> int:
             "ALLOWED_WINDOW_TITLES": os.getenv("ALLOWED_WINDOW_TITLES", "Tibia") or "Tibia",
             "CAVEBOT_ROUTE_PATH": str(args.route),
             "CAVEBOT_MODE": str(args.cavebot_mode),
+            **ocr_env,
         },
     )
     if rc2 != 0:

@@ -5,6 +5,9 @@ import threading
 import time
 
 
+_UNSET = object()
+
+
 def compute_injection_state(
     *,
     input_mode: str,
@@ -174,6 +177,9 @@ class TelemetrySnapshot:
     """Telemetría mínima para UI (solo lectura)."""
 
     ts: float = 0.0
+    # Timestamp of the last *real* captured frame (capture thread).
+    # This is intentionally separate from `ts` (which is updated by telemetry updates).
+    ts_frame: float = 0.0
     hp_current: int | None = None
     hp_max: int | None = None
     hp_pct: float | None = None
@@ -478,6 +484,7 @@ class RuntimeConfig:
                 ars = []
             return TelemetrySnapshot(
                 ts=float(self.telemetry.ts),
+                ts_frame=float(getattr(self.telemetry, "ts_frame", 0.0) or 0.0),
                 hp_current=self.telemetry.hp_current,
                 hp_max=self.telemetry.hp_max,
                 hp_pct=self.telemetry.hp_pct,
@@ -1008,6 +1015,7 @@ class RuntimeConfig:
     def update_telemetry(
         self,
         *,
+        ts_frame: float | None = None,
         hp_current: int | None = None,
         hp_max: int | None = None,
         hp_pct: float | None = None,
@@ -1045,8 +1053,8 @@ class RuntimeConfig:
         minimap_acc_dy: float | None = None,
         minimap_marker_dpx_dx: float | None = None,
         minimap_marker_dpx_dy: float | None = None,
-        ring_equipped: bool | None = None,
-        amulet_equipped: bool | None = None,
+        ring_equipped: bool | None | object = _UNSET,
+        amulet_equipped: bool | None | object = _UNSET,
         low_hp: bool | None = None,
         low_mp: bool | None = None,
         low_cap: bool | None = None,
@@ -1056,7 +1064,7 @@ class RuntimeConfig:
         paralyzed: bool | None = None,
         haste_active: bool | None = None,
         utamo_active: bool | None = None,
-        hungry: bool | None = None,
+        hungry: bool | None | object = _UNSET,
         battlelist_n_rows: int | None = None,
         battlelist_n_valid: int | None = None,
         battlelist_top_names: list[str] | None = None,
@@ -1121,6 +1129,11 @@ class RuntimeConfig:
         input_bridge_last_error: str | None = None,
     ) -> None:
         with self._lock:
+            if ts_frame is not None:
+                try:
+                    self.telemetry.ts_frame = float(ts_frame)
+                except Exception:
+                    self.telemetry.ts_frame = 0.0
             self.telemetry.ts = time.time()
             if hp_current is not None:
                 self.telemetry.hp_current = int(hp_current)
@@ -1236,10 +1249,13 @@ class RuntimeConfig:
                     self.telemetry.minimap_marker_dpx_dy = float(minimap_marker_dpx_dy)
                 except Exception:
                     self.telemetry.minimap_marker_dpx_dy = None
-            if ring_equipped is not None:
-                self.telemetry.ring_equipped = bool(ring_equipped)
-            if amulet_equipped is not None:
-                self.telemetry.amulet_equipped = bool(amulet_equipped)
+            # Presence flags (ring/amulet/hungry) are tri-state.
+            # IMPORTANT: allow explicit clearing to None (no-stickiness) while
+            # still supporting partial update calls (sentinel means "no update").
+            if ring_equipped is not _UNSET:
+                self.telemetry.ring_equipped = None if ring_equipped is None else bool(ring_equipped)
+            if amulet_equipped is not _UNSET:
+                self.telemetry.amulet_equipped = None if amulet_equipped is None else bool(amulet_equipped)
             if low_hp is not None:
                 self.telemetry.low_hp = bool(low_hp)
             if low_mp is not None:
@@ -1264,8 +1280,8 @@ class RuntimeConfig:
                 self.telemetry.haste_active = bool(haste_active)
             if utamo_active is not None:
                 self.telemetry.utamo_active = bool(utamo_active)
-            if hungry is not None:
-                self.telemetry.hungry = bool(hungry)
+            if hungry is not _UNSET:
+                self.telemetry.hungry = None if hungry is None else bool(hungry)
             if battlelist_n_rows is not None:
                 try:
                     self.telemetry.battlelist_n_rows = int(battlelist_n_rows)

@@ -12,4 +12,17 @@ if src_dir not in sys.path:
 from main import run_bot
 
 if __name__ == "__main__":
+    # Safe-by-default OCR: isolate EasyOCR into a subprocess with hard timeout.
+    # Users can override any of these via env.
+    os.environ.setdefault("OCR_ENABLED", "1")
+    os.environ.setdefault("OCR_ISOLATE_PROCESS", "1")
+    os.environ.setdefault("OCR_READTEXT_TIMEOUT_MS", "250")
+    os.environ.setdefault("HPMP_OCR_ENABLED", "1")
+    os.environ.setdefault("CAP_OCR_ENABLED", "0")
+
+    # Safe-by-default capture: prefer real client window (avoid OBS projector).
+    os.environ.setdefault("CAPTURE_BACKEND", "dxgi")
+    os.environ.setdefault("CAPTURE_TARGET", "client")
+    os.environ.setdefault("CAPTURE_TITLE_INCLUDE", "Tibia")
+    os.environ.setdefault("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS")
     run_bot()
