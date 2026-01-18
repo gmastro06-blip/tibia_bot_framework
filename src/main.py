@@ -192,7 +192,9 @@ def build_capture_backend(*, force_monitor: int | None):
         capture_target = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
     except Exception:
         capture_target = "client"
-    want_obs = capture_target in {"obs", "projector", "obs_projector"}
+    # CAPTURE_TARGET=projector captura una ventana (OBS projector) vía DXGI/BitBlt/MSS.
+    # Solo CAPTURE_TARGET=obs implica OBS WebSocket.
+    want_obs = capture_target in {"obs"}
 
     if capture_backend_raw in {"", "auto"}:
         capture_backend = "obs_websocket" if (want_obs and _has_obs_env()) else "dxgi"
@@ -737,6 +739,11 @@ def run_bot(stop_event: threading.Event | None = None, runtime_config: RuntimeCo
             force_monitor = None
         if force_monitor is not None:
             print(f"🖥️  FORCE_MONITOR activo: {force_monitor}")
+            # If the operator explicitly pins a monitor, default to the safe
+            # behavior: always capture that monitor first and do not fall back
+            # silently to other monitors.
+            os.environ.setdefault("CAPTURE_FORCE_MONITOR_FIRST", "1")
+            os.environ.setdefault("CAPTURE_STRICT_FORCE_MONITOR", "1")
         else:
             print("🖥️  FORCE_MONITOR inválido; usando auto-detección")
     else:

@@ -128,6 +128,7 @@ class DXGICapture:
         except Exception:
             strict_env = False
         self.strict_force_monitor = bool(strict_force_monitor) or bool(strict_env)
+        # Optional explicit failover modes can still be used (projector/scan).
         self.fps = 0.0
         self.latency_ms = 0.0
         self.dropped = 0
@@ -151,11 +152,27 @@ class DXGICapture:
 
         # Robust capture target selection (defaults are safe for real client capture).
         self._cfg_target = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
+        # Projector capture: OBS "Proyector en ventana (Fuente) - <SourceName>".
+        # This is intentionally independent from the real client title ("Tibia - ...").
+        self._cfg_projector_title = (
+            os.getenv("CAPTURE_PROJECTOR_TITLE", "Proyector en ventana (Fuente) - Tibia_Fuente")
+            or "Proyector en ventana (Fuente) - Tibia_Fuente"
+        ).strip()
         self._cfg_title_include = (os.getenv("CAPTURE_TITLE_INCLUDE", "Tibia") or "Tibia").strip()
         self._cfg_title_exclude = (
             os.getenv("CAPTURE_TITLE_EXCLUDE", "Proyector|Projector|OBS") or "Proyector|Projector|OBS"
         ).strip()
         self._cfg_process_name = (os.getenv("CAPTURE_PROCESS_NAME", "") or "").strip()
+
+        # Last-frame diagnostics (used by smoke tools).
+        self.last_frame_mean: float | None = None
+        self.black_streak: int = 0
+
+        # Projector flow state (avoid infinite retries on a black surface).
+        self._projector_backend: str = "bitblt"  # bitblt|screen_crop|fullscreen
+        self._projector_adjust_logged: bool = False
+        self._projector_switch_logged: dict[str, bool] = {}
+
 
         # Capture health counters (main will also track these, but having them here
         # makes the backend self-describing and testable).
@@ -169,6 +186,10 @@ class DXGICapture:
             self._warn_every_s = max(0.0, float((os.getenv("CAPTURE_WARN_EVERY_S", "1.0") or "1.0").strip() or "1.0"))
         except Exception:
             self._warn_every_s = 1.0
+
+        # Observability: rate-limit failover logs to avoid spamming at capture FPS.
+        self._failover_log_last_ts: float = 0.0
+        self._failover_log_last_sig: str = ""
 
     def _warn(self, key: str, msg: str) -> None:
         """Print a warning message at most once per `CAPTURE_WARN_EVERY_S` per key."""
@@ -213,6 +234,241 @@ class DXGICapture:
         except Exception:
             pass
         return True
+
+    def _is_projector_target(self) -> bool:
+        try:
+            raw = (os.getenv("CAPTURE_TARGET", "client") or "client").strip().lower() or "client"
+        except Exception:
+            raw = "client"
+        # Supported values (explicit): client|projector
+        return raw in {"projector", "proj"}
+
+    def _projector_title_hint(self) -> str:
+        try:
+            s = (os.getenv("CAPTURE_PROJECTOR_TITLE", self._cfg_projector_title) or self._cfg_projector_title).strip()
+            return s if s else str(self._cfg_projector_title or "").strip()
+        except Exception:
+            return str(self._cfg_projector_title or "").strip()
+
+    def _find_projector_window(self) -> tuple[int, str, Optional[int]]:
+        """Return (hwnd, title, monitor_index) for the projector window (best-effort)."""
+
+        title_hint = self._projector_title_hint()
+        if not title_hint:
+            return 0, "", None
+
+        try:
+            pat = self._compile_regex(title_hint)
+        except Exception:
+            pat = None
+
+        for hwnd0, t0, _pid0 in (self._list_visible_windows() or []):
+            tt = str(t0 or "")
+            if not tt:
+                continue
+            ok = False
+            try:
+                if pat is not None:
+                    ok = pat.search(tt) is not None
+                else:
+                    ok = title_hint.lower() in tt.lower()
+            except Exception:
+                ok = False
+            if not ok:
+                continue
+
+            try:
+                mi = self.find_window_monitor(int(hwnd0))
+            except Exception:
+                mi = None
+            return int(hwnd0), tt, (int(mi) if mi is not None else None)
+
+        return 0, "", None
+
+    def resolve_forced_monitor(self, *, found_monitor: Optional[int], target: str) -> None:
+        """Resolve forced monitor policies (projector-specific auto-adjust).
+
+        - Keeps the existing out-of-range validation (handled elsewhere).
+        - New: if target==projector and strict pin is enabled but the projector
+          lives on another monitor index (MSS indices), auto-adjust the forced
+          monitor to the projector's monitor.
+        """
+
+        try:
+            tgt = str(target or "").strip().lower()
+        except Exception:
+            tgt = ""
+
+        if tgt != "projector":
+            return
+        if found_monitor is None:
+            return
+        try:
+            fm = getattr(self, "force_monitor", None)
+            if fm is None:
+                return
+            fm_i = int(fm)
+            found_i = int(found_monitor)
+        except Exception:
+            return
+
+        try:
+            if fm_i == found_i:
+                return
+        except Exception:
+            return
+
+        # Only adjust for the projector flow; never for client capture.
+        try:
+            self.force_monitor = int(found_i)
+        except Exception:
+            return
+
+        if not bool(getattr(self, "_projector_adjust_logged", False)):
+            try:
+                print(
+                    "ℹ️ forced_monitor ajustado al monitor del proyector: "
+                    f"{int(fm_i)}->{int(found_i)} (indices internos MSS)."
+                )
+            except Exception:
+                pass
+            try:
+                self._projector_adjust_logged = True
+            except Exception:
+                pass
+
+    def _log_projector_switch_once(self, key: str, msg: str) -> None:
+        try:
+            if bool(self._projector_switch_logged.get(str(key), False)):
+                return
+            self._projector_switch_logged[str(key)] = True
+            print(str(msg))
+        except Exception:
+            pass
+
+    def _capture_projector(self) -> Optional[np.ndarray]:
+        """Capture the OBS projector window.
+
+        Primary target selection is by projector title (independent from Tibia client).
+        Backend policy: try BitBlt first, then screen-crop, then fullscreen.
+        Avoid infinite loops on black frames by switching backend at most twice.
+        """
+
+        hwnd_p, title_p, mon_p = self._find_projector_window()
+        if hwnd_p:
+            self.client_hwnd = int(hwnd_p)
+            self.client_title = str(title_p or "")
+            self.target_found = True
+            self.target_reason = "projector"
+            self.capture_target = "projector"
+            try:
+                if mon_p is None:
+                    mon_p = self.find_window_monitor(int(hwnd_p))
+            except Exception:
+                pass
+
+            # Auto-adjust forced monitor if strict pin is enabled but indices differ.
+            try:
+                if bool(self.strict_force_monitor):
+                    self.resolve_forced_monitor(found_monitor=mon_p, target="projector")
+            except Exception:
+                pass
+
+            try:
+                l, t, r, b = win32gui.GetWindowRect(int(hwnd_p))
+                self.capture_bounds = (int(l), int(t), int(r), int(b))
+            except Exception:
+                pass
+
+            try:
+                self.capture_monitor_index = int(mon_p) if mon_p is not None else None
+            except Exception:
+                self.capture_monitor_index = None
+        else:
+            # Projector not found yet.
+            self.target_found = False
+            self.target_reason = "projector_not_found"
+            self.capture_target = "projector"
+            self.capture_state = "projector_not_found"
+            return None
+
+        # Backends: stick to the chosen backend until we see repeated black frames.
+        backend = str(getattr(self, "_projector_backend", "bitblt") or "bitblt")
+        frame: Optional[np.ndarray] = None
+
+        if backend == "bitblt":
+            try:
+                frame = self.capture_window(hwnd=int(hwnd_p))
+            except Exception:
+                frame = None
+        elif backend == "screen_crop":
+            try:
+                if self.capture_bounds is not None:
+                    l, t, r, b = self.capture_bounds
+                    frame = self.capture_screen_crop(bounds=(int(l), int(t), int(r), int(b)))
+            except Exception:
+                frame = None
+        else:
+            # fullscreen
+            try:
+                pref = None
+                if self.capture_monitor_index is not None:
+                    pref = int(self.capture_monitor_index)
+                elif self.force_monitor is not None:
+                    pref = int(self.force_monitor)
+                frame = self.capture_fullscreen(preferred_monitor=pref)
+            except Exception:
+                frame = None
+
+        ok = False
+        try:
+            if frame is not None:
+                ok = bool(self.validate_capture(frame, min_width=80, min_height=80))
+        except Exception:
+            ok = False
+
+        if ok and frame is not None:
+            # Stable projector state.
+            mon_s = None
+            try:
+                mon_s = int(self.capture_monitor_index) if self.capture_monitor_index is not None else None
+            except Exception:
+                mon_s = None
+            self.capture_state = f"projector@mon{int(mon_s)}" if mon_s is not None else "projector"
+            self.capture_backend = f"projector_{backend}"
+            return frame
+
+        # Black / invalid capture: switch backend after a short streak.
+        try:
+            streak = int(getattr(self, "black_streak", 0) or 0)
+        except Exception:
+            streak = 0
+
+        # Switch thresholds are conservative to avoid thrashing.
+        if backend == "bitblt" and streak >= 3:
+            self._projector_backend = "screen_crop"
+            try:
+                self.black_streak = 0
+            except Exception:
+                pass
+            self._log_projector_switch_once(
+                "switch_bitblt_to_screen_crop",
+                "⚠️  projector: BitBlt inválido/negro; cambiando a screen_crop",
+            )
+        elif backend == "screen_crop" and streak >= 3:
+            self._projector_backend = "fullscreen"
+            try:
+                self.black_streak = 0
+            except Exception:
+                pass
+            self._log_projector_switch_once(
+                "switch_screen_crop_to_fullscreen",
+                "⚠️  projector: screen_crop inválido/negro; cambiando a fullscreen",
+            )
+
+        self.capture_backend = f"projector_{backend}"
+        self.capture_state = "projector_retry"
+        return None
 
     def _is_obs_like_title(self, title: str) -> bool:
         t = str(title or "")
@@ -739,6 +995,92 @@ class DXGICapture:
 
     def capture(self) -> Optional[np.ndarray]:
         frame: Optional[np.ndarray] = None
+
+        # --- Startup diagnostics (ONE-SHOT) ---
+        # 1) List detected monitors (MSS indices) once.
+        # 2) Validate forced monitor pin once; if out of range, auto-disable strict pin.
+        try:
+            if not bool(getattr(self, "_startup_monitors_logged", False)):
+                with mss() as sct:
+                    mons = list(getattr(sct, "monitors", []) or [])
+                    n = int(len(mons))
+
+                    def _device_name_for_rect(rect: tuple[int, int, int, int]) -> str:
+                        try:
+                            for hmon, _hdc, _rc in win32api.EnumDisplayMonitors():
+                                info = win32api.GetMonitorInfo(hmon)
+                                mon_rc = info.get("Monitor") if isinstance(info, dict) else None
+                                dev = info.get("Device") if isinstance(info, dict) else None
+                                if isinstance(mon_rc, (list, tuple)) and len(mon_rc) == 4:
+                                    if tuple(int(x) for x in mon_rc) == tuple(int(x) for x in rect):
+                                        return str(dev or "").strip()
+                        except Exception:
+                            return ""
+                        return ""
+
+                    try:
+                        print(f"🖥️  MSS monitors detectados: {n} (válidos: 0..{max(0, n - 1)})")
+                    except Exception:
+                        pass
+
+                    for i, m in enumerate(mons):
+                        try:
+                            left = int(m.get("left", 0))
+                            top = int(m.get("top", 0))
+                            width = int(m.get("width", 0))
+                            height = int(m.get("height", 0))
+                            rect = (left, top, left + width, top + height)
+                            dev = _device_name_for_rect(rect)
+                            name_s = f" name={dev}" if dev else ""
+                            print(
+                                f"  - idx={i} {width}x{height} bounds=({left},{top},{left + width},{top + height}){name_s}"
+                            )
+                        except Exception:
+                            continue
+
+                setattr(self, "_startup_monitors_logged", True)
+        except Exception:
+            # Never block capture for diagnostics.
+            try:
+                setattr(self, "_startup_monitors_logged", True)
+            except Exception:
+                pass
+
+        try:
+            if not bool(getattr(self, "_startup_forced_monitor_validated", False)):
+                forced = getattr(self, "force_monitor", None)
+                if forced is not None:
+                    try:
+                        forced_i = int(forced)
+                    except Exception:
+                        forced_i = None
+                    if forced_i is not None:
+                        with mss() as sct:
+                            n = int(len(list(getattr(sct, "monitors", []) or [])))
+                        if forced_i < 0 or forced_i >= n:
+                            try:
+                                print(
+                                    "⛔ forced_monitor fuera de rango: "
+                                    f"{forced_i} (monitores válidos: 0..{max(0, n - 1)}). "
+                                    "Se desactiva strict pin automáticamente."
+                                )
+                            except Exception:
+                                pass
+                            try:
+                                self.strict_force_monitor = False
+                            except Exception:
+                                pass
+                            try:
+                                self.force_monitor = None
+                            except Exception:
+                                pass
+                setattr(self, "_startup_forced_monitor_validated", True)
+        except Exception:
+            try:
+                setattr(self, "_startup_forced_monitor_validated", True)
+            except Exception:
+                pass
+
         # Always refresh capture target snapshot (best-effort) so we can monitor
         # even when the client is not foreground and/or gets recreated.
         try:
@@ -794,17 +1136,61 @@ class DXGICapture:
         except Exception:
             self.capture_monitor_index = None
 
-        # Policy option: when a monitor is forced (e.g. OBS monitor pinning),
-        # capture that monitor *first*. This avoids black captures that can
-        # happen on some systems when cropping a window on another monitor.
-        force_first = False
+        # --- Projector-first capture (CAPTURE_TARGET=projector) ---
+        # In projector mode we must NOT depend on the Tibia client title, and we
+        # must never reject the projector due to forced monitor index mismatch.
         try:
-            raw = (os.getenv("CAPTURE_FORCE_MONITOR_FIRST", "") or "").strip().lower()
-            if raw:
-                force_first = raw in {"1", "true", "yes", "y", "on"}
+            if self._is_projector_target():
+                # Refresh title hint dynamically (env can change).
+                try:
+                    self._cfg_projector_title = (
+                        os.getenv(
+                            "CAPTURE_PROJECTOR_TITLE",
+                            "Proyector en ventana (Fuente) - Tibia_Fuente",
+                        )
+                        or "Proyector en ventana (Fuente) - Tibia_Fuente"
+                    ).strip()
+                except Exception:
+                    pass
+
+                fr = self._capture_projector()
+                if fr is not None:
+                    return fr
+
+                # If the projector window isn't found, avoid starving the
+                # pipeline by falling back to fullscreen capture.
+                # If it IS found but was black/invalid, do not capture a
+                # different source here; let the projector backend switching
+                # happen in subsequent ticks.
+                if not bool(getattr(self, "target_found", False)) or str(getattr(self, "target_reason", "") or "") in {
+                    "projector_not_found",
+                }:
+                    pref = None
+                    try:
+                        if self.force_monitor is not None:
+                            pref = int(self.force_monitor)
+                    except Exception:
+                        pref = None
+                    if pref is None:
+                        try:
+                            if self.capture_monitor_index is not None:
+                                pref = int(self.capture_monitor_index)
+                        except Exception:
+                            pref = None
+                    self.capture_state = (
+                        f"projector_fallback_fullscreen@mon{int(pref)}" if pref is not None else "projector_fallback_fullscreen"
+                    )
+                    return self.capture_fullscreen(preferred_monitor=pref)
+                return None
         except Exception:
-            force_first = False
-        if self.force_monitor is not None and (force_first or bool(self.strict_force_monitor)):
+            # Continue with normal client capture pipeline.
+            pass
+
+        # When a monitor is forced (OBS pinning / FORCE_MONITOR), always try
+        # capturing that monitor first.
+        # This prevents accidental captures from a different monitor via
+        # window-crops or fullscreen heuristics.
+        if self.force_monitor is not None:
             try:
                 fm = int(self.force_monitor)
             except Exception:
@@ -830,6 +1216,31 @@ class DXGICapture:
                     except Exception:
                         failover = ""
 
+                    # One-shot / rate-limited log: makes it obvious when we
+                    # entered strict forced-monitor failover.
+                    try:
+                        title_hint_dbg = ""
+                        if failover in {"projector", "obs_projector", "window", "source"}:
+                            title_hint_dbg = str(
+                                (os.getenv("CAPTURE_PROJECTOR_TITLE", "Tibia_Fuente") or "Tibia_Fuente").strip()
+                            )
+                        sig = f"fm={fm}|failover={failover}|title={title_hint_dbg}"
+                        now = float(time.time())
+                        if (sig != str(getattr(self, "_failover_log_last_sig", "") or "")) or (
+                            now - float(getattr(self, "_failover_log_last_ts", 0.0) or 0.0)
+                        ) >= 2.0:
+                            self._failover_log_last_sig = str(sig)
+                            self._failover_log_last_ts = float(now)
+                            msg = f"⚠️  CAPTURE failover: forced_monitor={fm} strict=1 mode={failover or 'none'}"
+                            if title_hint_dbg:
+                                msg = f"{msg} title='{title_hint_dbg}'"
+                            try:
+                                print(msg)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
                     if failover in {"scan", "scan_monitors", "monitors"}:
                         try:
                             fr = self.capture_fullscreen(preferred_monitor=None)
@@ -849,10 +1260,25 @@ class DXGICapture:
                         except Exception:
                             title_hint = "Tibia_Fuente"
 
+                        # Safety policy: when we're in strict forced-monitor mode,
+                        # only accept a projector window that lives on the forced
+                        # monitor. This prevents accidentally capturing a window
+                        # on another monitor (which the user explicitly wants to
+                        # avoid in dual-monitor OBS setups).
+                        allow_other_monitors = False
+                        try:
+                            raw = (os.getenv("CAPTURE_PROJECTOR_ALLOW_OTHER_MONITORS", "0") or "0").strip().lower()
+                            allow_other_monitors = raw in {"1", "true", "yes", "y", "on"}
+                        except Exception:
+                            allow_other_monitors = False
+                        enforce_projector_on_forced = bool(self.strict_force_monitor) and (fm is not None) and (not allow_other_monitors)
+
                         try:
                             # Find a visible window matching the hint (substring/regex).
                             hwnd_p = 0
                             title_p = ""
+                            mon_p = None
+                            wrong_mon_seen = None
                             try:
                                 pat = self._compile_regex(title_hint)
                             except Exception:
@@ -871,8 +1297,18 @@ class DXGICapture:
                                 except Exception:
                                     ok = False
                                 if ok:
+                                    # If we're pinned to a specific monitor, only
+                                    # accept projector windows on that monitor.
+                                    try:
+                                        mi0 = self.find_window_monitor(int(hwnd0))
+                                    except Exception:
+                                        mi0 = None
+                                    if enforce_projector_on_forced and (mi0 is not None) and (int(mi0) != int(fm)):
+                                        wrong_mon_seen = int(mi0)
+                                        continue
                                     hwnd_p = int(hwnd0)
                                     title_p = tt
+                                    mon_p = mi0
                                     break
 
                             if hwnd_p:
@@ -883,7 +1319,9 @@ class DXGICapture:
                                 self.target_reason = "projector_failover"
                                 self.capture_target = "obs_projector"
                                 try:
-                                    self.capture_monitor_index = self.find_window_monitor(int(hwnd_p))
+                                    self.capture_monitor_index = (
+                                        int(mon_p) if mon_p is not None else self.find_window_monitor(int(hwnd_p))
+                                    )
                                 except Exception:
                                     pass
                                 try:
@@ -911,6 +1349,30 @@ class DXGICapture:
                                             return sc
                                 except Exception:
                                     pass
+                            else:
+                                # Helpful state: projector title exists but is
+                                # on a different monitor than the forced one.
+                                if enforce_projector_on_forced and wrong_mon_seen is not None:
+                                    try:
+                                        self.capture_state = f"projector_wrong_monitor@mon{int(wrong_mon_seen)}"
+                                    except Exception:
+                                        self.capture_state = "projector_wrong_monitor"
+                                    try:
+                                        self.target_reason = "projector_wrong_monitor"
+                                    except Exception:
+                                        pass
+                                    try:
+                                        self._warn(
+                                            "projector_wrong_monitor",
+                                            (
+                                                "⚠️  CAPTURE projector encontrado en monitor incorrecto: "
+                                                f"forced_monitor={int(fm)} strict=1 found_monitor={int(wrong_mon_seen)} "
+                                                f"title='{str(title_hint or '').strip()}' "
+                                                "| mueve el proyector al monitor forzado o setea CAPTURE_PROJECTOR_ALLOW_OTHER_MONITORS=1"
+                                            ),
+                                        )
+                                    except Exception:
+                                        pass
                         except Exception:
                             pass
 
@@ -970,27 +1432,16 @@ class DXGICapture:
             # Fall back to monitor/fullscreen capture.
             pass
 
-        # Prefer forced monitor when provided, but fall back to scanning all monitors.
-        if self.force_monitor is not None:
-            if self._verbose:
-                print(f"Forzando captura en monitor {self.force_monitor}")
-            frame = self.capture_specific_monitor(self.force_monitor)
-            if frame is not None:
-                self.capture_monitor_index = int(self.force_monitor)
-                self.capture_state = f"monitor_forced@mon{int(self.force_monitor)}"
-                return frame
-            if self.strict_force_monitor:
-                # No hacer fallback a otros monitores: evita que tools (ROI/minimap) capturen otra pantalla.
-                if self._verbose:
-                    print("Monitor forzado falló (modo estricto); devolviendo None")
-                self.capture_state = "monitor_forced_failed"
-                self.capture_monitor_index = int(self.force_monitor)
-                return None
-            if self._verbose:
-                print("Monitor forzado falló; usando búsqueda en todos los monitores")
-
-        # Prefer the inferred window monitor (if available) for fullscreen capture.
-        pref = self.capture_monitor_index
+        # Prefer forced monitor (if set) for fullscreen capture, otherwise
+        # use the inferred window monitor.
+        pref = None
+        try:
+            if self.force_monitor is not None:
+                pref = int(self.force_monitor)
+            else:
+                pref = self.capture_monitor_index
+        except Exception:
+            pref = self.capture_monitor_index
         self.capture_state = f"fullscreen@mon{int(pref)}" if pref is not None else "fullscreen"
         return self.capture_fullscreen(preferred_monitor=pref)
 
@@ -1150,8 +1601,94 @@ class DXGICapture:
 
         # Verificar que no es una imagen completamente negra
         if np.all(frame == 0):
+            try:
+                self.last_frame_mean = 0.0
+            except Exception:
+                pass
+            try:
+                self.black_streak = int(getattr(self, "black_streak", 0) or 0) + 1
+            except Exception:
+                pass
             self._warn("black_frame", "Warning: Captura completamente negra detectada")
             return False
+
+        # Verificar si el frame es prácticamente negro en promedio.
+        # Esto es un heuristic muy efectivo para el caso típico de "capturé el
+        # monitor equivocado" (pantalla negra con mínimos píxeles no-cero).
+        # Se usa un umbral conservador por defecto y es configurable.
+        try:
+            try:
+                mean_thr = float((os.getenv("CAPTURE_BLACK_MEAN_THR", "5.0") or "5.0").strip() or "5.0")
+            except Exception:
+                mean_thr = 5.0
+            mean_thr = float(max(0.0, min(255.0, mean_thr)))
+            if mean_thr > 0.0:
+                try:
+                    mean_val = float(frame.mean())
+                except Exception:
+                    mean_val = 255.0
+
+                try:
+                    self.last_frame_mean = float(mean_val)
+                except Exception:
+                    pass
+
+                if mean_val < mean_thr:
+                    try:
+                        self.black_streak = int(getattr(self, "black_streak", 0) or 0) + 1
+                    except Exception:
+                        pass
+                    self._warn(
+                        "black_mean",
+                        f"Warning: Captura mayoritariamente negra (mean={mean_val:.2f} thr={mean_thr:.2f})",
+                    )
+                    return False
+        except Exception:
+            pass
+
+        # Verificar si la imagen está mayoritariamente negra (típico de ventana
+        # minimizada/oculta o captura del monitor equivocado en setups multi-monitor).
+        # Esto ayuda a disparar failover (projector/scan) en modo strict.
+        try:
+            try:
+                ratio_thr = float((os.getenv("CAPTURE_MOSTLY_BLACK_RATIO", "0.985") or "0.985").strip() or "0.985")
+            except Exception:
+                ratio_thr = 0.985
+            ratio_thr = min(1.0, max(0.0, float(ratio_thr)))
+
+            try:
+                luma_thr = int(float((os.getenv("CAPTURE_MOSTLY_BLACK_LUMA", "8") or "8").strip() or "8"))
+            except Exception:
+                luma_thr = 8
+            luma_thr = int(min(255, max(0, luma_thr)))
+
+            try:
+                stride = int(float((os.getenv("CAPTURE_MOSTLY_BLACK_STRIDE", "4") or "4").strip() or "4"))
+            except Exception:
+                stride = 4
+            stride = int(max(1, min(16, stride)))
+
+            # Sample the frame to keep it cheap.
+            sample = frame[::stride, ::stride]
+            if sample is not None and sample.size:
+                try:
+                    gray = cv2.cvtColor(sample, cv2.COLOR_BGR2GRAY) if len(sample.shape) == 3 else sample
+                    black_ratio = float(np.mean(gray <= luma_thr))
+                except Exception:
+                    black_ratio = 0.0
+
+                if ratio_thr < 1.0 and black_ratio >= ratio_thr:
+                    try:
+                        self.black_streak = int(getattr(self, "black_streak", 0) or 0) + 1
+                    except Exception:
+                        pass
+                    self._warn(
+                        "mostly_black_frame",
+                        f"Warning: Captura mayoritariamente negra detectada (black_ratio={black_ratio:.3f} thr={ratio_thr:.3f})",
+                    )
+                    return False
+        except Exception:
+            pass
 
         # Verificar que no es una imagen uniforme (todos los píxeles iguales)
         if np.all(frame == frame[0, 0]):
@@ -1171,4 +1708,9 @@ class DXGICapture:
             self._warn("low_resolution", f"Warning: Resolución demasiado baja: {frame.shape}")
             return False
 
+        # If we reached here, the frame is considered valid.
+        try:
+            self.black_streak = 0
+        except Exception:
+            pass
         return True

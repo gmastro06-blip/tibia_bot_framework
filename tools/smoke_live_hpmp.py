@@ -8,6 +8,55 @@ import time
 from pathlib import Path
 
 
+def list_mss_monitors() -> list[dict]:
+    """Lista monitores según MSS (idx 0..n-1)."""
+
+    try:
+        from mss import mss
+
+        with mss() as sct:
+            return list(getattr(sct, "monitors", []) or [])
+    except Exception:
+        return []
+
+
+def print_mss_monitors_table(*, selected: int | None = None) -> None:
+    mons = list_mss_monitors()
+    n = len(mons)
+    print(f"🖥️  MSS monitors detectados: {n} (válidos: 0..{max(0, n - 1)})")
+    for i, m in enumerate(mons):
+        try:
+            left = int(m.get("left", 0))
+            top = int(m.get("top", 0))
+            width = int(m.get("width", 0))
+            height = int(m.get("height", 0))
+            mark = "*" if (selected is not None and int(selected) == int(i)) else " "
+            print(f" {mark} idx={i} {width}x{height} bounds=({left},{top},{left + width},{top + height})")
+        except Exception:
+            continue
+
+
+def _short_title(t: str, n: int = 42) -> str:
+    s = str(t or "").strip().replace("\n", " ")
+    if len(s) <= n:
+        return s
+    return s[: n - 3] + "..."
+
+
+def format_capture_status_line(
+    *,
+    backend: str,
+    window_title: str,
+    monitor_idx: int | None,
+    mean: float | None,
+    black_streak: int | None,
+) -> str:
+    m_s = "?" if monitor_idx is None else str(int(monitor_idx))
+    mean_s = "?" if mean is None else f"{float(mean):.2f}"
+    bs_s = "?" if black_streak is None else str(int(black_streak))
+    return f"backend={backend} title='{_short_title(window_title)}' mon={m_s} mean={mean_s} black_streak={bs_s}"
+
+
 def _add_src_to_syspath() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     src_dir = repo_root / "src"
@@ -30,7 +79,12 @@ def _load_roi_config(resolution: tuple[int, int]) -> tuple[dict, list[int]]:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Live smoke test: read HP/MP real + simulate other states.")
-    p.add_argument("--monitor", type=int, default=int(os.getenv("FORCE_MONITOR", "2") or 2))
+    p.add_argument(
+        "--monitor",
+        type=int,
+        default=None,
+        help="Índice MSS del monitor (0..n-1). Si se omite, usa FORCE_MONITOR si está seteado.",
+    )
     p.add_argument("--seconds", type=float, default=15.0)
     p.add_argument("--fps", type=float, default=10.0)
     p.add_argument("--paralyzed", action="store_true")
@@ -50,7 +104,21 @@ def main() -> int:
 
     args = _parse_args()
 
-    cap = DXGICapture(force_monitor=args.monitor)
+    forced_env = (os.getenv("FORCE_MONITOR", "") or "").strip()
+    monitor_idx = args.monitor
+    if monitor_idx is None and forced_env:
+        try:
+            monitor_idx = int(float(forced_env))
+        except Exception:
+            monitor_idx = None
+
+    # Tabla de monitores MSS (ONE-SHOT).
+    try:
+        print_mss_monitors_table(selected=monitor_idx)
+    except Exception:
+        pass
+
+    cap = DXGICapture(force_monitor=monitor_idx)
     builder = GameStateBuilder()
 
     sim = SimulationConfig(
@@ -69,7 +137,7 @@ def main() -> int:
     resolution = None
 
     last_print = 0.0
-    print(f"▶ Smoke live HP/MP. monitor={args.monitor} seconds={args.seconds} fps={args.fps}")
+    print(f"▶ Smoke live HP/MP. monitor(MSS)={monitor_idx} seconds={args.seconds} fps={args.fps}")
     print(f"   simulated: paralyzed={sim.paralyzed} haste={sim.haste_active} utamo={sim.utamo_active} hungry={sim.hungry}")
 
     while time.time() < t_end:
@@ -96,6 +164,38 @@ def main() -> int:
             mp = f"{sig.mp_current}/{sig.mp_max}" if sig.mp_current is not None and sig.mp_max is not None else "?"
             hp_pct = f"{sig.hp_pct:.1f}%" if sig.hp_pct is not None else "?"
             mp_pct = f"{sig.mp_pct:.1f}%" if sig.mp_pct is not None else "?"
+
+            try:
+                backend = str(getattr(cap, "capture_backend", "") or "")
+            except Exception:
+                backend = ""
+            if not backend:
+                try:
+                    backend = str(getattr(cap, "capture_state", "") or "")
+                except Exception:
+                    backend = ""
+            if not backend:
+                backend = "?"
+
+            try:
+                title = str(getattr(cap, "client_title", "") or "")
+            except Exception:
+                title = ""
+            try:
+                mon = getattr(cap, "capture_monitor_index", None)
+                mon_i = int(mon) if mon is not None else None
+            except Exception:
+                mon_i = None
+            try:
+                mean_v = getattr(cap, "last_frame_mean", None)
+                mean_f = float(mean_v) if mean_v is not None else None
+            except Exception:
+                mean_f = None
+            try:
+                bs = int(getattr(cap, "black_streak", 0) or 0)
+            except Exception:
+                bs = 0
+
             flags = []
             if sig.paralyzed:
                 flags.append("paralyzed")
@@ -106,7 +206,14 @@ def main() -> int:
             if sig.hungry:
                 flags.append("hungry")
             fstr = ",".join(flags) if flags else "-"
-            print(f"HP {hp} ({hp_pct}) | MP {mp} ({mp_pct}) | flags={fstr}")
+            cap_s = format_capture_status_line(
+                backend=backend,
+                window_title=title,
+                monitor_idx=mon_i,
+                mean=mean_f,
+                black_streak=bs,
+            )
+            print(f"{cap_s} | HP {hp} ({hp_pct}) | MP {mp} ({mp_pct}) | flags={fstr}")
 
         elapsed = time.time() - t0
         to_sleep = max(0.0, period - elapsed)
